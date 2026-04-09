@@ -1,5 +1,5 @@
-const version = process.env.CLAUDE_CODE_LOCAL_VERSION ?? '999.0.0-local';
-const packageUrl = process.env.CLAUDE_CODE_LOCAL_PACKAGE_URL ?? 'claude-code-local';
+const version = process.env.CLAUDE_CODE_LOCAL_VERSION ?? '0.1.0';
+const packageUrl = process.env.CLAUDE_CODE_LOCAL_PACKAGE_URL ?? 'silly-code';
 const buildTime = process.env.CLAUDE_CODE_LOCAL_BUILD_TIME ?? new Date().toISOString();
 
 process.env.CLAUDE_CODE_LOCAL_SKIP_REMOTE_PREFETCH ??= '1';

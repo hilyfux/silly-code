@@ -53,7 +53,7 @@ function translateMessages(
       for (const b of toolResults) {
         const text = typeof b.content === 'string' ? b.content
           : Array.isArray(b.content) ? b.content.filter(c => c.type === 'text').map(c => c.text!).join('\n') : ''
-        out.push({ role: 'tool', tool_call_id: b.tool_use_id!, content: text || '(empty)' })
+        out.push({ role: 'tool', tool_call_id: b.tool_use_id || `tool_${Date.now()}`, content: text || '(empty)' })
       }
       if (other.length > 0) {
         const parts = other.map(b => {
@@ -224,8 +224,8 @@ export function createCopilotFetch(): (input: RequestInfo | URL, init?: RequestI
     } catch { anthropicBody = {} }
 
     const model = anthropicBody.model as string || 'claude-sonnet-4'
-    const chatMessages = translateMessages(anthropicBody.system as string | undefined, (anthropicBody.messages || []) as AnthropicMessage[])
-    const chatBody: Record<string, unknown> = { model, messages: chatMessages, stream: true }
+    const chatMessages = translateMessages(anthropicBody.system as string | Array<{type: string; text?: string}> | undefined, (anthropicBody.messages || []) as AnthropicMessage[])
+    const chatBody: Record<string, unknown> = { model, messages: chatMessages, stream: true, max_tokens: anthropicBody.max_tokens || 64000 }
     const anthropicTools = (anthropicBody.tools || []) as AnthropicTool[]
     if (anthropicTools.length > 0) { chatBody.tools = translateTools(anthropicTools); chatBody.tool_choice = 'auto' }
     if (anthropicBody.temperature !== undefined) chatBody.temperature = anthropicBody.temperature

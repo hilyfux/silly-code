@@ -14,6 +14,7 @@ import {
   getCodexOAuthTokens,
   isClaudeAISubscriber,
   isCodexSubscriber,
+  isCopilotSubscriber,
   refreshAndGetAwsCredentials,
   refreshGcpCredentialsIfNeeded,
 } from 'src/utils/auth.js'

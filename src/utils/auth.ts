@@ -1641,9 +1641,12 @@ export function isCopilotSubscriber(): boolean {
   if (getAPIProvider() !== 'copilot') {
     return false
   }
+  // Check if copilot token file exists (avoid circular import with dynamic check)
   try {
-    const { loadCopilotTokens } = require('../services/oauth/copilot-client.js')
-    return loadCopilotTokens() !== null
+    const { existsSync } = require('fs')
+    const { join } = require('path')
+    const dataDir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '', '.silly-code')
+    return existsSync(join(dataDir, 'copilot-oauth.json'))
   } catch {
     return false
   }

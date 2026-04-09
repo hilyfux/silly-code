@@ -4,6 +4,9 @@ const buildTime = process.env.CLAUDE_CODE_LOCAL_BUILD_TIME ?? new Date().toISOSt
 
 process.env.CLAUDE_CODE_LOCAL_SKIP_REMOTE_PREFETCH ??= '1';
 
+// Silly Code: treat as ant user to unlock all internal features
+process.env.USER_TYPE ??= 'ant';
+
 Object.assign(globalThis, {
   MACRO: {
     VERSION: version,
@@ -15,6 +18,10 @@ Object.assign(globalThis, {
     ISSUES_EXPLAINER: '',
   },
 });
+
+// Feature flags are unlocked via --feature=FLAG args in bin/silly*.sh
+// See bin/silly-common.sh for the full list
+
 // Switch to the current workspace
 if (process.env.CALLER_DIR) {
   process.chdir(process.env.CALLER_DIR);

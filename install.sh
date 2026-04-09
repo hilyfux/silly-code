@@ -1,179 +1,98 @@
-#!/usr/bin/env bash
+#!/bin/bash
+# silly-code installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
 set -euo pipefail
 
-# free-code installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/paoloanzn/free-code/main/install.sh | bash
+G='\033[0;32m' Y='\033[0;33m' C='\033[0;36m' R='\033[0;31m' B='\033[1m' N='\033[0m'
+info()  { echo -e "${C}[silly]${N} $*"; }
+ok()    { echo -e "${G}[silly]${N} $*"; }
+warn()  { echo -e "${Y}[silly]${N} $*"; }
+err()   { echo -e "${R}[silly]${N} $*" >&2; exit 1; }
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-DIM='\033[2m'
-RESET='\033[0m'
+INSTALL_DIR="${SILLY_CODE_HOME:-$HOME/.local/share/silly-code}"
+BIN_DIR="$HOME/.local/bin"
+REPO="https://github.com/hilyfux/silly-code.git"
 
-REPO="https://github.com/paoloanzn/free-code.git"
-INSTALL_DIR="$HOME/free-code"
-BUN_MIN_VERSION="1.3.11"
+echo ""
+echo -e "  ${B}silly-code${N} installer"
+echo ""
 
-info()  { printf "${CYAN}[*]${RESET} %s\n" "$*"; }
-ok()    { printf "${GREEN}[+]${RESET} %s\n" "$*"; }
-warn()  { printf "${YELLOW}[!]${RESET} %s\n" "$*"; }
-fail()  { printf "${RED}[x]${RESET} %s\n" "$*"; exit 1; }
+# ── Prerequisites ────────────────────────────────────────────
+command -v git >/dev/null 2>&1 || err "git is required. Install it first."
 
-header() {
-  echo ""
-  printf "${BOLD}${CYAN}"
-  cat << 'ART'
-   ___                            _
-  / _|_ __ ___  ___        ___ __| | ___
- | |_| '__/ _ \/ _ \_____ / __/ _` |/ _ \
- |  _| | |  __/  __/_____| (_| (_| |  __/
- |_| |_|  \___|\___|      \___\__,_|\___|
-
-ART
-  printf "${RESET}"
-  printf "${DIM}  The free build of Claude Code${RESET}\n"
-  echo ""
-}
-
-# -------------------------------------------------------------------
-# System checks
-# -------------------------------------------------------------------
-
-check_os() {
-  case "$(uname -s)" in
-    Darwin) OS="macos" ;;
-    Linux)  OS="linux" ;;
-    *)      fail "Unsupported OS: $(uname -s). macOS or Linux required." ;;
-  esac
-  ok "OS: $(uname -s) $(uname -m)"
-}
-
-check_git() {
-  if ! command -v git &>/dev/null; then
-    fail "git is not installed. Install it first:
-    macOS:  xcode-select --install
-    Linux:  sudo apt install git  (or your distro's equivalent)"
-  fi
-  ok "git: $(git --version | head -1)"
-}
-
-# Compare semver: returns 0 if $1 >= $2
-version_gte() {
-  [ "$(printf '%s\n' "$1" "$2" | sort -V | head -1)" = "$2" ]
-}
-
-check_bun() {
-  if command -v bun &>/dev/null; then
-    local ver
-    ver="$(bun --version 2>/dev/null || echo "0.0.0")"
-    if version_gte "$ver" "$BUN_MIN_VERSION"; then
-      ok "bun: v${ver}"
-      return
-    fi
-    warn "bun v${ver} found but v${BUN_MIN_VERSION}+ required. Upgrading..."
-  else
-    info "bun not found. Installing..."
-  fi
-  install_bun
-}
-
-install_bun() {
+if ! command -v bun >/dev/null 2>&1; then
+  info "Installing Bun..."
   curl -fsSL https://bun.sh/install | bash
-  # Source the updated profile so bun is on PATH for this session
-  export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
-  export PATH="$BUN_INSTALL/bin:$PATH"
-  if ! command -v bun &>/dev/null; then
-    fail "bun installation succeeded but binary not found on PATH.
-    Add this to your shell profile and restart:
-      export PATH=\"\$HOME/.bun/bin:\$PATH\""
-  fi
-  ok "bun: v$(bun --version) (just installed)"
-}
+  export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+  command -v bun >/dev/null 2>&1 || err "Bun installation failed."
+  ok "Bun installed: $(bun --version)"
+else
+  ok "Bun: $(bun --version)"
+fi
 
-# -------------------------------------------------------------------
-# Clone & build
-# -------------------------------------------------------------------
-
-clone_repo() {
-  if [ -d "$INSTALL_DIR" ]; then
-    warn "$INSTALL_DIR already exists"
-    if [ -d "$INSTALL_DIR/.git" ]; then
-      info "Pulling latest changes..."
-      git -C "$INSTALL_DIR" pull --ff-only origin main 2>/dev/null || {
-        warn "Pull failed, continuing with existing copy"
-      }
-    fi
-  else
-    info "Cloning repository..."
+# ── Clone or update ──────────────────────────────────────────
+if [ -d "$INSTALL_DIR/.git" ]; then
+  info "Updating..."
+  cd "$INSTALL_DIR"
+  git pull --ff-only origin main 2>/dev/null || {
+    warn "Pull failed, re-cloning..."
+    cd / && rm -rf "$INSTALL_DIR"
     git clone --depth 1 "$REPO" "$INSTALL_DIR"
+  }
+else
+  info "Cloning silly-code..."
+  rm -rf "$INSTALL_DIR"
+  git clone --depth 1 "$REPO" "$INSTALL_DIR"
+fi
+cd "$INSTALL_DIR"
+ok "Source: $INSTALL_DIR"
+
+# ── Dependencies ─────────────────────────────────────────────
+info "Installing dependencies..."
+bun install --frozen-lockfile 2>/dev/null || bun install
+ok "Dependencies installed"
+
+# ── .env ─────────────────────────────────────────────────────
+[ ! -f .env ] && cp .env.example .env 2>/dev/null || true
+
+# ── Install commands ─────────────────────────────────────────
+mkdir -p "$BIN_DIR"
+for cmd in silly sillyt sillyx sillye; do
+  cat > "$BIN_DIR/$cmd" << WRAPPER
+#!/bin/bash
+exec "$INSTALL_DIR/bin/$cmd" "\$@"
+WRAPPER
+  chmod +x "$BIN_DIR/$cmd"
+done
+ok "Commands: $BIN_DIR/{silly,sillyt,sillyx,sillye}"
+
+# ── PATH check ───────────────────────────────────────────────
+if ! echo "$PATH" | tr ':' '\n' | grep -q "^$BIN_DIR$"; then
+  SHELL_RC=""
+  [ -f "$HOME/.zshrc" ] && SHELL_RC="$HOME/.zshrc"
+  [ -f "$HOME/.bashrc" ] && SHELL_RC="$HOME/.bashrc"
+  if [ -n "$SHELL_RC" ]; then
+    echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$SHELL_RC"
+    ok "Added $BIN_DIR to PATH in $SHELL_RC"
+    warn "Run: source $SHELL_RC  (or restart terminal)"
+  else
+    warn "Add to your shell profile: export PATH=\"$BIN_DIR:\$PATH\""
   fi
-  ok "Source: $INSTALL_DIR"
-}
+fi
 
-install_deps() {
-  info "Installing dependencies..."
-  cd "$INSTALL_DIR"
-  bun install --frozen-lockfile 2>/dev/null || bun install
-  ok "Dependencies installed"
-}
-
-build_binary() {
-  info "Building free-code (all experimental features enabled)..."
-  cd "$INSTALL_DIR"
-  bun run build:dev:full
-  ok "Binary built: $INSTALL_DIR/cli-dev"
-}
-
-link_binary() {
-  local link_dir="$HOME/.local/bin"
-  mkdir -p "$link_dir"
-
-  ln -sf "$INSTALL_DIR/cli-dev" "$link_dir/free-code"
-  ok "Symlinked: $link_dir/free-code"
-
-  if ! echo "$PATH" | tr ':' '\n' | grep -qx "$link_dir"; then
-    warn "$link_dir is not on your PATH"
-    echo ""
-    printf "${YELLOW}  Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):${RESET}\n"
-    printf "${BOLD}    export PATH=\"\$HOME/.local/bin:\$PATH\"${RESET}\n"
-    echo ""
-  fi
-}
-
-# -------------------------------------------------------------------
-# Main
-# -------------------------------------------------------------------
-
-header
-info "Starting installation..."
+# ── Verify ───────────────────────────────────────────────────
 echo ""
-
-check_os
-check_git
-check_bun
+ok "Installation complete!"
 echo ""
-
-clone_repo
-install_deps
-build_binary
-link_binary
-
+echo -e "  ${B}Get started:${N}"
+echo "    silly login copilot   # GitHub Copilot"
+echo "    silly login codex     # ChatGPT Pro / Codex"
+echo "    silly login claude    # Claude Pro/Max"
 echo ""
-printf "${GREEN}${BOLD}  Installation complete!${RESET}\n"
+echo "    sillyt                # Launch with Copilot"
+echo "    sillyx                # Launch with Codex"
+echo "    sillye                # Launch with Claude"
 echo ""
-printf "  ${BOLD}Run it:${RESET}\n"
-printf "    ${CYAN}free-code${RESET}                          # interactive REPL\n"
-printf "    ${CYAN}free-code -p \"your prompt\"${RESET}          # one-shot mode\n"
-echo ""
-printf "  ${BOLD}Set your API key:${RESET}\n"
-printf "    ${CYAN}export ANTHROPIC_API_KEY=\"sk-ant-...\"${RESET}\n"
-echo ""
-printf "  ${BOLD}Or log in with Claude.ai:${RESET}\n"
-printf "    ${CYAN}free-code /login${RESET}\n"
-echo ""
-printf "  ${DIM}Source: $INSTALL_DIR${RESET}\n"
-printf "  ${DIM}Binary: $INSTALL_DIR/cli-dev${RESET}\n"
-printf "  ${DIM}Link:   ~/.local/bin/free-code${RESET}\n"
+echo -e "  ${B}Update:${N}  curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
+echo -e "  ${B}Uninstall:${N} rm -rf $INSTALL_DIR $BIN_DIR/silly $BIN_DIR/sillyt $BIN_DIR/sillyx $BIN_DIR/sillye"
 echo ""

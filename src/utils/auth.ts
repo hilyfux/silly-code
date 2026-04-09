@@ -1637,6 +1637,18 @@ export function isCodexSubscriber(): boolean {
   return !!tokens?.accessToken
 }
 
+export function isCopilotSubscriber(): boolean {
+  if (getAPIProvider() !== 'copilot') {
+    return false
+  }
+  try {
+    const { loadCopilotTokens } = require('../services/oauth/copilot-client.js')
+    return loadCopilotTokens() !== null
+  } catch {
+    return false
+  }
+}
+
 /**
  * Check if the current OAuth token has the user:profile scope.
  *

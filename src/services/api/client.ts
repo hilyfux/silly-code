@@ -36,6 +36,7 @@ import {
   isEnvTruthy,
 } from '../../utils/envUtils.js'
 import { createCodexFetch } from './codex-fetch-adapter.js'
+import { createCopilotFetch } from './copilot-fetch-adapter.js'
 
 /**
  * Environment variables for different client types:
@@ -318,6 +319,18 @@ export async function getAnthropicClient({
       }
       return new Anthropic(clientConfig)
     }
+  }
+
+  // ── Copilot provider via fetch adapter ────────────────────────────
+  if (isCopilotSubscriber()) {
+    const copilotFetch = createCopilotFetch()
+    const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
+      apiKey: 'copilot-placeholder', // SDK requires a key but the fetch adapter handles auth
+      ...ARGS,
+      fetch: copilotFetch as unknown as typeof globalThis.fetch,
+      ...(isDebugToStdErr() && { logger: createStderrLogger() }),
+    }
+    return new Anthropic(clientConfig)
   }
 
   // Determine authentication method based on available tokens

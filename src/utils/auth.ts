@@ -1338,6 +1338,21 @@ export function saveCodexOAuthTokens(tokens: CodexTokens): void {
  * Returns null if no Codex tokens are stored.
  */
 export function getCodexOAuthTokens(): CodexTokens | null {
+  // Silly Code: check our own token file first
+  try {
+    const { existsSync, readFileSync } = require('fs')
+    const { join } = require('path')
+    const dataDir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '', '.silly-code')
+    const tokenPath = join(dataDir, 'codex-oauth.json')
+    if (existsSync(tokenPath)) {
+      const data = JSON.parse(readFileSync(tokenPath, 'utf8'))
+      if (data.accessToken && data.refreshToken && data.expiresAt && data.accountId) {
+        return data
+      }
+    }
+  } catch {}
+
+  // Fallback: original GlobalConfig path
   const cfg = getGlobalConfig()
   const stored = cfg.codexOAuth
   if (

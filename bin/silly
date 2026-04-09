@@ -41,8 +41,18 @@ case "${1:-}" in
       codex)
         info "Logging in to Codex (OpenAI)..."
         bun --preload ./preload.ts -e "
-          import { loginCodex } from './src/services/oauth/codex-client.js';
-          await loginCodex();
+          import { runCodexOAuthFlow } from './src/services/oauth/codex-client.js';
+          import { writeFileSync, mkdirSync } from 'fs';
+          import { join } from 'path';
+          const tokens = await runCodexOAuthFlow(async (url) => {
+            console.log('\n  Open this URL to sign in:\n');
+            console.log('  ' + url + '\n');
+            console.log('  Waiting for browser callback...');
+          });
+          const dataDir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '', '.silly-code');
+          mkdirSync(dataDir, { recursive: true });
+          writeFileSync(join(dataDir, 'codex-oauth.json'), JSON.stringify(tokens, null, 2), { mode: 0o600 });
+          console.log('\n  Codex login successful!\n');
         "
         ;;
       copilot)

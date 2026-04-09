@@ -6,9 +6,13 @@ import { isEnvDefinedFalsy } from '../utils/envUtils.js'
 import { getAPIProvider } from '../utils/model/providers.js'
 import { getWorkload } from '../utils/workloadContext.js'
 
-const DEFAULT_PREFIX = `You are Claude Code, Anthropic's official CLI for Claude.`
-const AGENT_SDK_CLAUDE_CODE_PRESET_PREFIX = `You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK.`
-const AGENT_SDK_PREFIX = `You are a Claude agent, built on Anthropic's Claude Agent SDK.`
+const PROVIDER_NAME = (() => {
+  const p = process.env.CLAUDE_CODE_USE_COPILOT ? 'Copilot' : process.env.CLAUDE_CODE_USE_OPENAI ? 'Codex' : 'Claude'
+  return p
+})()
+const DEFAULT_PREFIX = `You are Silly Code, an open-source multi-provider AI coding assistant (currently connected via ${PROVIDER_NAME}).`
+const AGENT_SDK_CLAUDE_CODE_PRESET_PREFIX = `You are Silly Code, an open-source AI coding assistant, running within the Claude Agent SDK (connected via ${PROVIDER_NAME}).`
+const AGENT_SDK_PREFIX = `You are a Silly Code agent, built on Anthropic's Claude Agent SDK.`
 
 const CLI_SYSPROMPT_PREFIX_VALUES = [
   DEFAULT_PREFIX,

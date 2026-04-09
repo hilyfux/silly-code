@@ -1,68 +1,14 @@
 # silly-common.sh — shared config for all silly-code launchers
 # Source this file, don't execute it directly.
 
-# All 88 feature flags unlocked (54 compile cleanly, rest are no-ops)
+# Feature flags: DISABLED in source mode (v2.1.87 snapshot)
+# Many flags reference modules from newer versions (108 "missing modules").
+# Enable flags only after the corresponding module stubs/implementations exist.
+# For now, we rely on the base functionality which is already full-featured.
 SILLY_FEATURES=(
+  # Safe flags verified to work:
   --feature=VOICE_MODE
-  --feature=ULTRAPLAN
-  --feature=ULTRATHINK
-  --feature=KAIROS
-  --feature=KAIROS_BRIEF
-  --feature=KAIROS_CHANNELS
-  --feature=KAIROS_DREAM
-  --feature=KAIROS_GITHUB_WEBHOOKS
-  --feature=KAIROS_PUSH_NOTIFICATION
-  --feature=COORDINATOR_MODE
-  --feature=BUDDY
-  --feature=BRIDGE_MODE
-  --feature=TOKEN_BUDGET
-  --feature=AGENT_TRIGGERS
-  --feature=AGENT_TRIGGERS_REMOTE
-  --feature=AGENT_MEMORY_SNAPSHOT
-  --feature=BG_SESSIONS
-  --feature=DAEMON
-  --feature=EXTRACT_MEMORIES
-  --feature=TEAMMEM
-  --feature=CACHED_MICROCOMPACT
-  --feature=COMPACTION_REMINDERS
-  --feature=PROMPT_CACHE_BREAK_DETECTION
-  --feature=VERIFICATION_AGENT
-  --feature=BUILTIN_EXPLORE_PLAN_AGENTS
-  --feature=AWAY_SUMMARY
-  --feature=HISTORY_PICKER
-  --feature=HOOK_PROMPTS
-  --feature=LODESTONE
-  --feature=MESSAGE_ACTIONS
-  --feature=NEW_INIT
-  --feature=QUICK_SEARCH
-  --feature=SHOT_STATS
-  --feature=CONTEXT_COLLAPSE
-  --feature=REACTIVE_COMPACT
-  --feature=HISTORY_SNIP
-  --feature=PROACTIVE
-  --feature=TRANSCRIPT_CLASSIFIER
-  --feature=CONNECTOR_TEXT
-  --feature=BASH_CLASSIFIER
-  --feature=FILE_PERSISTENCE
-  --feature=FORK_SUBAGENT
-  --feature=MONITOR_TOOL
-  --feature=SSH_REMOTE
-  --feature=DIRECT_CONNECT
-  --feature=TEMPLATES
-  --feature=TERMINAL_PANEL
-  --feature=WEB_BROWSER_TOOL
-  --feature=MCP_RICH_OUTPUT
-  --feature=MCP_SKILLS
-  --feature=NATIVE_CLIPBOARD_IMAGE
-  --feature=WORKFLOW_SCRIPTS
-  --feature=EXPERIMENTAL_SKILL_SEARCH
-  --feature=SKILL_IMPROVEMENT
-  --feature=REVIEW_ARTIFACT
-  --feature=BUILDING_CLAUDE_APPS
-  --feature=COMMIT_ATTRIBUTION
-  --feature=AUTO_THEME
-  --feature=TREE_SITTER_BASH
-  --feature=UNATTENDED_RETRY
-  --feature=TORCH
-  --feature=UDS_INBOX
 )
+
+# To enable all flags, build with: bun run build:dev:full
+# This compiles a binary with dead-code elimination that removes missing modules.

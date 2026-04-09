@@ -1756,3 +1756,8 @@ export function setPromptId(id: string | null): void {
   STATE.promptId = id
 }
 
+
+// Silly Code: stub bridge functions (requires @ant/ internal packages)
+export function isReplBridgeActive(): boolean { return false }
+export function getReplBridgeHandle(): null { return null }
+

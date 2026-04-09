@@ -4,8 +4,9 @@ const buildTime = process.env.CLAUDE_CODE_LOCAL_BUILD_TIME ?? new Date().toISOSt
 
 process.env.CLAUDE_CODE_LOCAL_SKIP_REMOTE_PREFETCH ??= '1';
 
-// Silly Code: treat as ant user to unlock all internal features
-process.env.USER_TYPE ??= 'ant';
+// Silly Code: do NOT set USER_TYPE=ant — it enables 353 internal code paths
+// that depend on @ant/ private packages. Instead, we unlock features selectively
+// via --feature flags and subscription tier overrides.
 
 Object.assign(globalThis, {
   MACRO: {

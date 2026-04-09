@@ -1,0 +1,10 @@
+node_modules/
+dist/
+cli
+cli-dev
+.env
+*.log
+.silly-code/
+.playwright/
+.playwright-mcp/
+.claude/skills/knowledge-graph/data/

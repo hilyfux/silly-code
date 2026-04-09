@@ -63,8 +63,8 @@ case "${1:-}" in
         "
         ;;
       claude)
-        info "Logging in to Claude (claude.ai)..."
-        bun --env-file=.env ./src/entrypoints/cli.tsx --login
+        info "Launching Silly Code — use /login inside the TUI to sign in to claude.ai"
+        exec bun --env-file=.env ./src/entrypoints/cli.tsx
         ;;
       "")
         echo "Usage: silly login <provider>"

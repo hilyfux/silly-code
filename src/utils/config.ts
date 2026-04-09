@@ -1718,7 +1718,8 @@ export function saveCurrentProjectConfig(
 }
 
 export function isAutoUpdaterDisabled(): boolean {
-  return getAutoUpdaterDisabledReason() !== null
+  // Silly Code: auto-updater permanently disabled — we manage our own releases
+  return true
 }
 
 /**

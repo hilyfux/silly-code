@@ -19,15 +19,14 @@ import { getCodexOAuthTokens } from '../../utils/auth.js'
 
 // ── Available Codex models ──────────────────────────────────────────
 export const CODEX_MODELS = [
-  { id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex', description: 'Frontier agentic coding model' },
-  { id: 'gpt-5.1-codex', label: 'GPT-5.1 Codex', description: 'Codex coding model' },
-  { id: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini', description: 'Fast Codex model' },
-  { id: 'gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max', description: 'Max Codex model' },
-  { id: 'gpt-5.4', label: 'GPT-5.4', description: 'Latest GPT' },
-  { id: 'gpt-5.2', label: 'GPT-5.2', description: 'GPT-5.2' },
+  { id: 'gpt-5.4', label: 'GPT-5.4', description: 'Flagship frontier model' },
+  { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', description: 'Fast, efficient mini model' },
+  { id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex', description: 'Industry-leading coding model' },
+  { id: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark', description: 'Real-time coding iteration' },
+  { id: 'gpt-5.2', label: 'GPT-5.2', description: 'Previous general-purpose model' },
 ] as const
 
-export const DEFAULT_CODEX_MODEL = 'gpt-5.2-codex'
+export const DEFAULT_CODEX_MODEL = 'gpt-5.4'
 
 /**
  * Maps Claude model names to corresponding Codex model names.
@@ -38,9 +37,9 @@ export function mapClaudeModelToCodex(claudeModel: string | null): string {
   if (!claudeModel) return DEFAULT_CODEX_MODEL
   if (isCodexModel(claudeModel)) return claudeModel
   const lower = claudeModel.toLowerCase()
-  if (lower.includes('opus')) return 'gpt-5.1-codex-max'
-  if (lower.includes('haiku')) return 'gpt-5.1-codex-mini'
-  if (lower.includes('sonnet')) return 'gpt-5.2-codex'
+  if (lower.includes('opus')) return 'gpt-5.4'
+  if (lower.includes('haiku')) return 'gpt-5.4-mini'
+  if (lower.includes('sonnet')) return 'gpt-5.3-codex'
   return DEFAULT_CODEX_MODEL
 }
 

@@ -116,6 +116,13 @@ export function getContextWindowForModel(
   if (getSonnet1mExpTreatmentEnabled(model)) {
     return 1_000_000
   }
+
+  // silly-code: all 1M-capable models get 1M by default on firstParty
+  // (upstream requires betas header or GrowthBook flag, we unlock it)
+  if (modelSupports1M(model)) {
+    return 1_000_000
+  }
+
   if (process.env.USER_TYPE === 'ant') {
     const antModel = resolveAntModel(model)
     if (antModel?.contextWindow) {

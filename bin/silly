@@ -40,14 +40,14 @@ case "${1:-}" in
     case "$PROVIDER" in
       codex)
         info "Logging in to Codex (OpenAI)..."
-        bun run --preload ./preload.ts -e "
+        bun --preload ./preload.ts -e "
           import { loginCodex } from './src/services/oauth/codex-client.js';
           await loginCodex();
         "
         ;;
       copilot)
         info "Logging in to Copilot (GitHub)..."
-        bun run --preload ./preload.ts -e "
+        bun --preload ./preload.ts -e "
           import { loginCopilot } from './src/services/oauth/copilot-client.js';
           await loginCopilot();
         "

@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+DATA_DIR="${SILLY_CODE_DATA:-$HOME/.silly-code}"
+mkdir -p "$DATA_DIR"
+
+G='\033[0;32m' Y='\033[0;33m' C='\033[0;36m' R='\033[0;31m' B='\033[1m' N='\033[0m'
+info()  { echo -e "${C}[silly]${N} $*"; }
+ok()    { echo -e "${G}[silly]${N} $*"; }
+warn()  { echo -e "${Y}[silly]${N} $*"; }
+err()   { echo -e "${R}[silly]${N} $*" >&2; }
+
+check_provider() {
+  local name="$1" token_file="$2"
+  if [ -f "$DATA_DIR/$token_file" ]; then
+    ok "$name: logged in"
+    return 0
+  else
+    warn "$name: not logged in"
+    return 1
+  fi
+}
+
+case "${1:-}" in
+  status)
+    echo ""
+    echo -e "  ${B}silly-code${N} — Multi-Provider AI Coding Assistant"
+    echo ""
+    check_provider "Codex   (sillyx)" "codex-oauth.json" || true
+    check_provider "Copilot (sillyt)" "copilot-oauth.json" || true
+    check_provider "Claude  (sillye)" "claude-oauth.json" || true
+    echo ""
+    exit 0
+    ;;
+  login)
+    PROVIDER="${2:-}"
+    case "$PROVIDER" in
+      codex)
+        info "Logging in to Codex (OpenAI)..."
+        bun run --preload ./preload.ts -e "
+          import { loginCodex } from './src/services/oauth/codex-client.js';
+          await loginCodex();
+        "
+        ;;
+      copilot)
+        info "Logging in to Copilot (GitHub)..."
+        bun run --preload ./preload.ts -e "
+          import { loginCopilot } from './src/services/oauth/copilot-client.js';
+          await loginCopilot();
+        "
+        ;;
+      claude)
+        info "Logging in to Claude (claude.ai)..."
+        bun --env-file=.env ./src/entrypoints/cli.tsx --login
+        ;;
+      "")
+        echo "Usage: silly login <provider>"
+        echo "Providers: codex, copilot, claude"
+        ;;
+      *)
+        err "Unknown provider: $PROVIDER"
+        exit 1
+        ;;
+    esac
+    exit 0
+    ;;
+  logout)
+    PROVIDER="${2:-}"
+    case "$PROVIDER" in
+      codex)   rm -f "$DATA_DIR/codex-oauth.json";   ok "Codex tokens removed" ;;
+      copilot) rm -f "$DATA_DIR/copilot-oauth.json"; ok "Copilot tokens removed" ;;
+      claude)  rm -f "$DATA_DIR/claude-oauth.json";  ok "Claude tokens removed" ;;
+      "") err "Usage: silly logout <codex|copilot|claude>"; exit 1 ;;
+      *) err "Unknown provider: $PROVIDER"; exit 1 ;;
+    esac
+    exit 0
+    ;;
+  models)
+    echo ""
+    echo -e "  ${B}Available Models${N}"
+    echo ""
+    echo "  Codex (sillyx):"
+    echo "    gpt-5.4              1M context (272k practical)"
+    echo "    gpt-5.4-mini         Fast mini model"
+    echo "    gpt-5.3-codex        Industry-leading coding"
+    echo ""
+    echo "  Copilot (sillyt):"
+    echo "    claude-opus-4-6      128k context (Copilot cap)"
+    echo "    claude-sonnet-4      200k context"
+    echo "    o3                   200k context"
+    echo ""
+    echo "  Claude (sillye):"
+    echo "    claude-opus-4-6      1M context"
+    echo "    claude-sonnet-4-6    1M context"
+    echo "    claude-haiku-4-5     200k context"
+    echo ""
+    exit 0
+    ;;
+  doctor)
+    MISSING=false
+    command -v bun >/dev/null 2>&1 && ok "Bun: $(bun --version)" || { err "Bun: not found"; MISSING=true; }
+    command -v git >/dev/null 2>&1 && ok "Git: $(git --version | head -1)" || warn "Git: not found (optional)"
+    [ -f "$ROOT_DIR/src/entrypoints/cli.tsx" ] && ok "Source: found" || { err "Source: missing"; MISSING=true; }
+    [ "$MISSING" = true ] && exit 1
+    ok "All prerequisites met"
+    exit 0
+    ;;
+  help|--help|-h)
+    echo ""
+    echo -e "  ${B}silly-code${N} — Multi-Provider AI Coding Assistant"
+    echo ""
+    echo "  Management:"
+    echo "    silly status          Show provider auth status"
+    echo "    silly login <prov>    Login to a provider"
+    echo "    silly logout <prov>   Remove stored tokens"
+    echo "    silly models          List available models"
+    echo "    silly doctor          Check prerequisites"
+    echo ""
+    echo "  Launch:"
+    echo "    sillyx                Start with Codex"
+    echo "    sillyt                Start with Copilot"
+    echo "    sillye                Start with Claude"
+    echo ""
+    exit 0
+    ;;
+  "")
+    echo ""
+    echo -e "  ${B}silly-code${N} — Multi-Provider AI Coding Assistant"
+    echo ""
+    check_provider "Codex   (sillyx)" "codex-oauth.json" || true
+    check_provider "Copilot (sillyt)" "copilot-oauth.json" || true
+    check_provider "Claude  (sillye)" "claude-oauth.json" || true
+    echo ""
+    echo "  Get started:"
+    echo "    silly login codex     Login to ChatGPT Pro / Codex"
+    echo "    silly login copilot   Login to GitHub Copilot"
+    echo "    silly login claude    Login to Claude Pro/Max"
+    echo ""
+    echo "  Then launch: sillyx / sillyt / sillye"
+    echo ""
+    exit 0
+    ;;
+  *)
+    err "Unknown command: $1"
+    echo "Run 'silly help' for usage."
+    exit 1
+    ;;
+esac

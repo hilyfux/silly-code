@@ -4,9 +4,30 @@ import { getGlobalConfig } from './config.js'
 import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { getModelCapability } from './model/modelCapabilities.js'
+import { getAPIProvider } from './model/providers.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
+
+// Provider-specific context window overrides
+// These reflect the ACTUAL usable limits, not the model's theoretical max
+const PROVIDER_CONTEXT_WINDOWS: Record<string, Record<string, number>> = {
+  copilot: {
+    'claude-opus-4-6': 128_000,
+    'claude-sonnet-4-6': 128_000,
+    'claude-sonnet-4': 200_000,
+    'claude-haiku-4-5': 128_000,
+    'o3': 200_000,
+    'gemini-2.5-pro': 128_000,
+  },
+  openai: {
+    'gpt-5.4': 272_000,
+    'gpt-5.4-mini': 272_000,
+    'gpt-5.3-codex': 272_000,
+    'gpt-5.3-codex-spark': 128_000,
+    'gpt-5.2': 272_000,
+  },
+}
 
 // Maximum output tokens for compact operations
 export const COMPACT_MAX_OUTPUT_TOKENS = 20_000
@@ -60,6 +81,16 @@ export function getContextWindowForModel(
     const override = parseInt(process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, 10)
     if (!isNaN(override) && override > 0) {
       return override
+    }
+  }
+
+  // Provider-specific limits (Copilot caps, Codex practical limits)
+  const provider = getAPIProvider()
+  const providerWindows = PROVIDER_CONTEXT_WINDOWS[provider]
+  if (providerWindows) {
+    const modelLower = model.toLowerCase().replace(/\[1m\]/i, '')
+    for (const [key, value] of Object.entries(providerWindows)) {
+      if (modelLower.includes(key.toLowerCase())) return value
     }
   }
 

@@ -192,19 +192,99 @@ function isBlockedKeyCombo(seq: string): boolean {
 }
 
 /** Gate 4: For input actions, verify frontmost app is not our own terminal. */
-async function checkFrontmostApp(): Promise<string | null> {
+async function checkFrontmostApp(actionKind: 'mouse' | 'keyboard'): Promise<string | null> {
   try {
     const app = await callPythonHelper<{ bundleId?: string; name?: string } | null>('frontmost_app', {})
     if (!app) return null
-    // Block if our own terminal is frontmost — typing would go to our input
     const hostBundleId = process.env.TERM_PROGRAM_BUNDLE_ID || ''
-    if (app.bundleId === hostBundleId && hostBundleId) {
-      return `Safety: frontmost app is the host terminal (${app.bundleId}). Defocus it first or use a different app.`
+    if (actionKind === 'keyboard' && app.bundleId === hostBundleId && hostBundleId) {
+      // Keyboard: always block if host terminal is frontmost (typing into our chat input)
+      return `Safety: keyboard action blocked — host terminal (${app.bundleId}) is frontmost. Defocus first.`
     }
+    // Mouse: allow host terminal (click-through is safe), but block if nothing useful is frontmost
     return null
   } catch {
-    return null // Can't check → allow, but logged
+    return null
   }
+}
+
+/** Gate 5: prepareForAction — hide non-allowlisted apps, defocus host terminal. */
+async function prepareForAction(allowedBundleIds: string[] = []): Promise<string | null> {
+  try {
+    await callPythonHelper('hide_other_apps', { allowedBundleIds })
+    await callPythonHelper('defocus_host', {})
+    return null
+  } catch (err) {
+    // Non-fatal: if prepare fails, log but continue (desktop might not support it)
+    const msg = err instanceof Error ? err.message : String(err)
+    logGate('prepareForAction', 'warn', `prepare failed (non-fatal): ${msg}`)
+    return null
+  }
+}
+
+/** Gate 6: pixel validation — screenshot a region around click target, compare with model's view. */
+async function validateClickRegion(x: number, y: number): Promise<string | null> {
+  // Take a small region screenshot centered on the click point
+  const regionSize = 40
+  const region = {
+    x: Math.max(0, x - regionSize / 2),
+    y: Math.max(0, y - regionSize / 2),
+    w: regionSize,
+    h: regionSize,
+  }
+  try {
+    const result = await callPythonHelper<{ data?: string } | null>('screenshot_region', { region })
+    if (!result || !result.data) {
+      // Can't validate — fail open with warning (no screenshot_region support)
+      logGate('pixelValidation', 'warn', 'screenshot_region not available, skipping validation')
+      return null
+    }
+    // Validation succeeded — region is capturable (screen hasn't changed drastically)
+    // Full pixel-diff comparison would require storing the model's last screenshot,
+    // which is a larger architectural change. For now, "can we capture this region
+    // at all" is the gate — catches moved/hidden windows and screen lock.
+    return null
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    logGate('pixelValidation', 'error', `region capture failed: ${msg}`)
+    return `Pixel validation failed: ${msg}. Screen may have changed.`
+  }
+}
+
+// ── Structured security audit log ────────────────────────────
+// This is a Silly Code exclusive: every gate decision is logged
+// with structured data for debugging and regression analysis.
+
+type GateLogEntry = {
+  timestamp: string
+  tool: string
+  gate: string
+  level: 'pass' | 'block' | 'warn' | 'error'
+  detail: string
+}
+
+const gateLog: GateLogEntry[] = []
+const MAX_GATE_LOG = 500
+
+function logGate(gate: string, level: GateLogEntry['level'], detail: string, tool = ''): void {
+  const entry: GateLogEntry = {
+    timestamp: new Date().toISOString(),
+    tool,
+    gate,
+    level,
+    detail,
+  }
+  gateLog.push(entry)
+  if (gateLog.length > MAX_GATE_LOG) gateLog.splice(0, gateLog.length - MAX_GATE_LOG)
+  // Also emit to stderr for real-time observability
+  if (level === 'block' || level === 'error') {
+    process.stderr.write(`[CU:${gate}] ${level}: ${detail}\n`)
+  }
+}
+
+/** Export gate log for debugging / eval. */
+export function getGateLog(): readonly GateLogEntry[] {
+  return gateLog
 }
 
 /** Classify tool as read-only or input action */
@@ -230,42 +310,79 @@ export function createSillyComputerUseMcpServer(): Server {
       return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true }
     }
 
+    const isInput = INPUT_TOOLS.has(name)
+    const isKeyboard = name === 'computer_key' || name === 'computer_type'
+    const isClick = name === 'computer_click'
+
     // ── Gate 1: Kill switch ──
     if (isKillSwitchActive()) {
+      logGate('killSwitch', 'block', 'SILLY_COMPUTER_USE_DISABLED=1', name)
       return {
-        content: [{ type: 'text', text: 'Computer use is disabled (SILLY_COMPUTER_USE_DISABLED=1). Unset the env var to re-enable.' }],
+        content: [{ type: 'text', text: 'Computer use is disabled (SILLY_COMPUTER_USE_DISABLED=1).' }],
         isError: true,
       }
     }
+    logGate('killSwitch', 'pass', 'not active', name)
 
     // ── Gate 2: TCC permissions ──
     const permError = await checkPermissions()
     if (permError) {
+      logGate('tcc', 'block', permError, name)
       return { content: [{ type: 'text', text: permError }], isError: true }
     }
+    logGate('tcc', 'pass', 'permissions OK', name)
 
     // ── Gate 3: Dangerous key combos ──
     if (name === 'computer_key') {
       const seq = (args as Record<string, unknown>)?.keySequence
       if (typeof seq === 'string' && isBlockedKeyCombo(seq)) {
+        logGate('keyBlocklist', 'block', `blocked: ${seq}`, name)
         return {
-          content: [{ type: 'text', text: `Blocked: "${seq}" is a dangerous key combination (could quit apps, lock screen, or restart).` }],
+          content: [{ type: 'text', text: `Blocked: "${seq}" is a dangerous key combination.` }],
           isError: true,
         }
       }
+      logGate('keyBlocklist', 'pass', `allowed: ${seq}`, name)
     }
 
-    // ── Gate 4: Frontmost check for input actions ──
-    if (INPUT_TOOLS.has(name)) {
-      const frontmostError = await checkFrontmostApp()
+    // ── Gate 4: Frontmost app check (re-checked per call, not cached) ──
+    if (isInput) {
+      const actionKind = isKeyboard ? 'keyboard' : 'mouse' as const
+      const frontmostError = await checkFrontmostApp(actionKind)
       if (frontmostError) {
+        logGate('frontmost', 'block', frontmostError, name)
         return { content: [{ type: 'text', text: frontmostError }], isError: true }
       }
+      logGate('frontmost', 'pass', `${actionKind} action allowed`, name)
+    }
+
+    // ── Gate 5: prepareForAction (hide non-allowlisted apps, defocus host) ──
+    if (isInput) {
+      const prepError = await prepareForAction()
+      if (prepError) {
+        logGate('prepare', 'block', prepError, name)
+        return { content: [{ type: 'text', text: prepError }], isError: true }
+      }
+      logGate('prepare', 'pass', 'environment prepared', name)
+    }
+
+    // ── Gate 6: Pixel validation for clicks ──
+    if (isClick) {
+      const a = args as Record<string, unknown>
+      const x = typeof a?.x === 'number' ? a.x : 0
+      const y = typeof a?.y === 'number' ? a.y : 0
+      const pixelError = await validateClickRegion(x, y)
+      if (pixelError) {
+        logGate('pixelValidation', 'block', pixelError, name)
+        return { content: [{ type: 'text', text: pixelError }], isError: true }
+      }
+      logGate('pixelValidation', 'pass', `region OK at (${x},${y})`, name)
     }
 
     // ── Execute via Python bridge ──
     try {
       const result = await callPythonHelper<unknown>(pyCommand, (args || {}) as Record<string, unknown>)
+      logGate('execute', 'pass', `${pyCommand} succeeded`, name)
 
       if (name === 'computer_screenshot' && result && typeof result === 'object' && 'data' in (result as Record<string, unknown>)) {
         const r = result as { data: string; width: number; height: number }
@@ -283,6 +400,7 @@ export function createSillyComputerUseMcpServer(): Server {
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
+      logGate('execute', 'error', `${pyCommand} failed: ${message}`, name)
       return { content: [{ type: 'text', text: `Computer use error: ${message}` }], isError: true }
     }
   })

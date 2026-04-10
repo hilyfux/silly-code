@@ -648,6 +648,31 @@ def main() -> int:
             write_clipboard(str(payload.get("text") or ""))
             json_output({"ok": True, "result": True})
             return 0
+        if command == "hide_other_apps":
+            # Hide all apps except the allowlist + Finder
+            allowed = set(payload.get("allowedBundleIds") or [])
+            allowed.add("com.apple.finder")
+            for app_info in NSWorkspace.sharedWorkspace().runningApplications():
+                bid = app_info.bundleIdentifier()
+                if bid and bid not in allowed and app_info.isActive():
+                    app_info.hide()
+            json_output({"ok": True, "result": True})
+            return 0
+        if command == "defocus_host":
+            # Activate Finder to defocus the host terminal
+            run_osascript('tell application "Finder" to activate')
+            time.sleep(0.15)
+            json_output({"ok": True, "result": True})
+            return 0
+        if command == "screenshot_region":
+            # Capture a small region for pixel validation
+            region = payload.get("region")  # {x, y, w, h}
+            if not region:
+                error_output("region is required", code="bad_input")
+                return 2
+            result = capture_region(region)
+            json_output({"ok": True, "result": result})
+            return 0
         error_output(f"Unknown command: {command}", code="bad_command")
         return 2
     except Exception as exc:

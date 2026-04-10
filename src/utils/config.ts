@@ -1718,8 +1718,10 @@ export function saveCurrentProjectConfig(
 }
 
 export function isAutoUpdaterDisabled(): boolean {
-  // Silly Code: auto-updater permanently disabled — we manage our own releases
-  return true
+  // Re-enabled: silly-code auto-updater checks our own GitHub repo via git pull.
+  // Original logic restored — respects user config and env vars.
+  const reason = getAutoUpdaterDisabledReason()
+  return reason !== null
 }
 
 /**

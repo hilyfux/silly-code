@@ -194,6 +194,98 @@ case "${1:-}" in
     echo ""
     exit 0
     ;;
+  update)
+    echo ""
+    echo -e "  ${B}silly-code update${N}"
+    echo ""
+
+    # Read deps.json for version info
+    DEPS_JSON="$ROOT_DIR/deps.json"
+    if [ ! -f "$DEPS_JSON" ]; then
+      err "deps.json not found at $ROOT_DIR"
+      exit 1
+    fi
+
+    UPDATE_MODE="${2:-check}"
+
+    # ── Check dependencies ──
+    info "Checking dependencies..."
+
+    # Bun
+    WANT_BUN=$(python3 -c "import json; print(json.load(open('$DEPS_JSON'))['deps']['bun']['version'])")
+    if command -v bun >/dev/null 2>&1; then
+      CUR_BUN=$(bun --version 2>/dev/null || echo "0.0.0")
+      ok "Bun: $CUR_BUN (want >= $WANT_BUN)"
+    else
+      warn "Bun: not installed (required >= $WANT_BUN)"
+    fi
+
+    # ripgrep
+    WANT_RG=$(python3 -c "import json; print(json.load(open('$DEPS_JSON'))['deps']['ripgrep']['version'])")
+    if command -v rg >/dev/null 2>&1; then
+      CUR_RG=$(rg --version | head -1 | awk '{print $2}')
+      ok "ripgrep: $CUR_RG (want >= $WANT_RG)"
+    else
+      warn "ripgrep: not installed (want >= $WANT_RG)"
+    fi
+
+    # Git
+    if command -v git >/dev/null 2>&1; then
+      ok "Git: $(git --version | awk '{print $3}')"
+    else
+      warn "Git: not installed"
+    fi
+
+    # ── Check self-update (silly-code repo) ──
+    echo ""
+    info "Checking for silly-code updates..."
+    LOCAL_COMMIT=$(cd "$ROOT_DIR" && git rev-parse HEAD 2>/dev/null || echo "unknown")
+    LOCAL_SHORT=$(cd "$ROOT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+    REMOTE_COMMIT=$(curl -fsSL -H "Accept: application/vnd.github.v3+json" \
+      "https://api.github.com/repos/hilyfux/silly-code/commits/main" 2>/dev/null \
+      | python3 -c "import json,sys; print(json.load(sys.stdin).get('sha','unknown'))" 2>/dev/null \
+      || echo "unknown")
+
+    if [ "$REMOTE_COMMIT" = "unknown" ]; then
+      warn "Could not check remote (offline or rate limited)"
+    elif [ "$LOCAL_COMMIT" = "$REMOTE_COMMIT" ]; then
+      ok "silly-code: up to date ($LOCAL_SHORT)"
+    else
+      REMOTE_SHORT="${REMOTE_COMMIT:0:7}"
+      warn "silly-code: update available (local $LOCAL_SHORT → remote $REMOTE_SHORT)"
+      if [ "$UPDATE_MODE" = "apply" ]; then
+        info "Pulling latest..."
+        cd "$ROOT_DIR"
+        if git pull --ff-only origin main 2>/dev/null; then
+          ok "Updated to $(git rev-parse --short HEAD)"
+          info "Installing dependencies..."
+          bun install --frozen-lockfile 2>/dev/null || bun install
+          ok "Dependencies updated"
+        else
+          warn "Pull failed — run 'silly update apply' again or reinstall"
+        fi
+      else
+        echo ""
+        echo "  Run 'silly update apply' to update"
+      fi
+    fi
+
+    # ── npm deps freshness ──
+    echo ""
+    if [ -f "$ROOT_DIR/bun.lock" ]; then
+      ok "Lock file: bun.lock present"
+    else
+      warn "Lock file: missing (run bun install)"
+    fi
+
+    # Save check timestamp
+    mkdir -p "$DATA_DIR"
+    echo "{\"lastChecked\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$DATA_DIR/deps-state.json"
+
+    echo ""
+    exit 0
+    ;;
   uninstall)
     echo ""
     if [ -f "$ROOT_DIR/uninstall.sh" ]; then
@@ -214,6 +306,8 @@ case "${1:-}" in
     echo "    silly logout <prov>   Remove stored tokens"
     echo "    silly models          List available models"
     echo "    silly doctor          Check prerequisites"
+    echo "    silly update          Check for updates"
+    echo "    silly update apply    Apply available updates"
     echo "    silly uninstall       Remove silly-code completely"
     echo ""
     echo "  Launch:"

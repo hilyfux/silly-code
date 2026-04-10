@@ -31,9 +31,16 @@ else
 fi
 
 # ── ripgrep (required for file search) ───────────────────────
+# Version is read from deps.json if available (post-clone), else fallback to hardcoded
+_read_rg_version() {
+  if [ -f "$INSTALL_DIR/deps.json" ]; then
+    python3 -c "import json; print(json.load(open('$INSTALL_DIR/deps.json'))['deps']['ripgrep']['version'])" 2>/dev/null
+  fi
+}
 if ! command -v rg >/dev/null 2>&1; then
-  info "Installing ripgrep to $BIN_DIR..."
-  RG_VERSION="14.1.1"
+  RG_VERSION=$(_read_rg_version)
+  RG_VERSION="${RG_VERSION:-14.1.1}"
+  info "Installing ripgrep ${RG_VERSION} to $BIN_DIR..."
   case "$(uname -s)-$(uname -m)" in
     Darwin-arm64) RG_ARCH="aarch64-apple-darwin" ;;
     Darwin-x86_64) RG_ARCH="x86_64-apple-darwin" ;;
@@ -175,6 +182,12 @@ echo "    sillyt                # Copilot"
 echo "    sillyx                # Codex"
 echo "    sillye                # Claude"
 echo ""
-echo -e "  ${B}Update:${N}    curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
-echo -e "  ${B}Uninstall:${N} curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/uninstall.sh | bash"
+# ── Save dep check state ────────────────────────────────────
+DATA_DIR="${SILLY_CODE_DATA:-$HOME/.silly-code}"
+mkdir -p "$DATA_DIR"
+echo "{\"lastChecked\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$DATA_DIR/deps-state.json"
+
+echo -e "  ${B}Update:${N}    silly update          # check deps + self-update"
+echo -e "  ${B}Reinstall:${N} curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
+echo -e "  ${B}Uninstall:${N} silly uninstall"
 echo ""

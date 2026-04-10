@@ -30,6 +30,99 @@ import { jsonParse } from './slowOperations.js'
 const GCS_BUCKET_URL =
   'https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases'
 
+// ── Silly Code: git-based update infrastructure ─────────────
+const SILLY_REPO = 'hilyfux/silly-code'
+const SILLY_GITHUB_API = `https://api.github.com/repos/${SILLY_REPO}`
+
+/**
+ * Check if this is a silly-code git-based installation (not npm/native).
+ */
+function isSillyGitInstall(): boolean {
+  try {
+    const { existsSync } = require('fs')
+    const { join } = require('path')
+    // If there's a .git directory in our install root, it's a git-based install
+    const root = process.env.SILLY_CODE_HOME || join(homedir(), '.local', 'share', 'silly-code')
+    return existsSync(join(root, '.git'))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get the latest version from our GitHub repo.
+ * Returns a version string derived from the latest tag or commit.
+ */
+async function getSillyLatestVersion(): Promise<string | null> {
+  try {
+    // Try tags first (for release versions)
+    const tagsResp = await axios.get(`${SILLY_GITHUB_API}/tags?per_page=1`, {
+      timeout: 5000,
+      headers: { Accept: 'application/vnd.github.v3+json' },
+    })
+    const tags = tagsResp.data as Array<{ name: string }>
+    if (tags.length > 0 && tags[0]!.name) {
+      const tagName = tags[0]!.name.replace(/^v/, '')
+      return tagName
+    }
+
+    // Fallback: use latest commit short SHA as version indicator
+    const commitResp = await axios.get(`${SILLY_GITHUB_API}/commits/main`, {
+      timeout: 5000,
+      headers: { Accept: 'application/vnd.github.v3+json' },
+    })
+    const sha = (commitResp.data as { sha: string }).sha
+    return `0.0.0+${sha.slice(0, 7)}`
+  } catch (error) {
+    logForDebugging(`Failed to check silly-code updates: ${error}`)
+    return null
+  }
+}
+
+/**
+ * Update silly-code via git pull + bun install.
+ */
+async function installSillyGitUpdate(): Promise<InstallStatus> {
+  if (!(await acquireLock())) {
+    return 'in_progress'
+  }
+
+  try {
+    const root = process.env.SILLY_CODE_HOME || join(homedir(), '.local', 'share', 'silly-code')
+
+    // git pull --ff-only
+    const pullResult = await execFileNoThrowWithCwd(
+      'git', ['pull', '--ff-only', 'origin', 'main'],
+      { cwd: root, timeout: 30000 },
+    )
+    if (pullResult.code !== 0) {
+      logForDebugging(`git pull failed: ${pullResult.stderr}`)
+      return 'install_failed'
+    }
+
+    // bun install
+    const installResult = await execFileNoThrowWithCwd(
+      'bun', ['install', '--frozen-lockfile'],
+      { cwd: root, timeout: 60000 },
+    )
+    if (installResult.code !== 0) {
+      // Fallback to non-frozen
+      const retryResult = await execFileNoThrowWithCwd(
+        'bun', ['install'],
+        { cwd: root, timeout: 60000 },
+      )
+      if (retryResult.code !== 0) {
+        logForDebugging(`bun install failed: ${retryResult.stderr}`)
+        return 'install_failed'
+      }
+    }
+
+    return 'success'
+  } finally {
+    await releaseLock()
+  }
+}
+
 class AutoUpdaterError extends ClaudeError {}
 
 export type InstallStatus =
@@ -319,6 +412,11 @@ export async function checkGlobalInstallPermissions(): Promise<{
 export async function getLatestVersion(
   channel: ReleaseChannel,
 ): Promise<string | null> {
+  // Silly Code: route to our own GitHub repo for git-based installs
+  if (isSillyGitInstall()) {
+    return getSillyLatestVersion()
+  }
+
   const npmTag = channel === 'stable' ? 'stable' : 'latest'
 
   // Run from home directory to avoid reading project-level .npmrc
@@ -384,6 +482,11 @@ export async function getNpmDistTags(): Promise<NpmDistTags> {
 export async function getLatestVersionFromGcs(
   channel: ReleaseChannel,
 ): Promise<string | null> {
+  // Silly Code: route to GitHub for git-based installs
+  if (isSillyGitInstall()) {
+    return getSillyLatestVersion()
+  }
+
   try {
     const response = await axios.get(`${GCS_BUCKET_URL}/${channel}`, {
       timeout: 5000,
@@ -456,6 +559,11 @@ export async function getVersionHistory(limit: number): Promise<string[]> {
 export async function installGlobalPackage(
   specificVersion?: string | null,
 ): Promise<InstallStatus> {
+  // Silly Code: use git pull for git-based installs
+  if (isSillyGitInstall()) {
+    return installSillyGitUpdate()
+  }
+
   if (!(await acquireLock())) {
     logError(
       new AutoUpdaterError('Another process is currently installing an update'),

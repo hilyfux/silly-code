@@ -1,0 +1,68 @@
+{
+  "$schema": "deps-manifest-v1",
+  "description": "All external binary/tool dependencies for silly-code. Single source of truth.",
+  "selfUpdate": {
+    "repo": "https://github.com/hilyfux/silly-code.git",
+    "branch": "main",
+    "checkUrl": "https://api.github.com/repos/hilyfux/silly-code/commits/main",
+    "checkInterval": 86400
+  },
+  "deps": {
+    "bun": {
+      "version": "1.3.11",
+      "versionConstraint": ">=1.3.11",
+      "installUrl": "https://bun.sh/install",
+      "versionCmd": "bun --version",
+      "required": true,
+      "description": "JavaScript runtime"
+    },
+    "ripgrep": {
+      "version": "14.1.1",
+      "versionConstraint": ">=14.1.1",
+      "versionCmd": "rg --version | head -1 | awk '{print $2}'",
+      "required": true,
+      "description": "Fast file content search",
+      "platforms": {
+        "darwin-arm64": {
+          "url": "https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/ripgrep-${VERSION}-aarch64-apple-darwin.tar.gz",
+          "binary": "rg",
+          "extractPath": "ripgrep-${VERSION}-aarch64-apple-darwin/rg",
+          "sha256": ""
+        },
+        "darwin-x64": {
+          "url": "https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/ripgrep-${VERSION}-x86_64-apple-darwin.tar.gz",
+          "binary": "rg",
+          "extractPath": "ripgrep-${VERSION}-x86_64-apple-darwin/rg",
+          "sha256": ""
+        },
+        "linux-x64": {
+          "url": "https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/ripgrep-${VERSION}-x86_64-unknown-linux-musl.tar.gz",
+          "binary": "rg",
+          "extractPath": "ripgrep-${VERSION}-x86_64-unknown-linux-musl/rg",
+          "sha256": ""
+        },
+        "linux-arm64": {
+          "url": "https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/ripgrep-${VERSION}-aarch64-unknown-linux-gnu.tar.gz",
+          "binary": "rg",
+          "extractPath": "ripgrep-${VERSION}-aarch64-unknown-linux-gnu/rg",
+          "sha256": ""
+        }
+      }
+    },
+    "git": {
+      "version": "2.0.0",
+      "versionConstraint": ">=2.0.0",
+      "versionCmd": "git --version | awk '{print $3}'",
+      "required": true,
+      "description": "Version control (system-provided)",
+      "systemProvided": true
+    }
+  },
+  "npm": {
+    "lockfile": "bun.lock",
+    "installCmd": "bun install --frozen-lockfile",
+    "fallbackCmd": "bun install"
+  },
+  "lastChecked": null,
+  "checkInterval": 86400
+}

@@ -72,6 +72,8 @@ SILLY_FEATURES=(
   --feature=WEB_BROWSER_TOOL
   --feature=PROACTIVE
   --feature=EXPERIMENTAL_SKILL_SEARCH
+  --feature=KAIROS
+  --feature=COORDINATOR_MODE
   # Other
   --feature=TEAMMEM
 )

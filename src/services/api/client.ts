@@ -101,12 +101,15 @@ export async function getAnthropicClient({
   model,
   fetchOverride,
   source,
+  providerOverride,
 }: {
   apiKey?: string
   maxRetries: number
   model?: string
   fetchOverride?: ClientOptions['fetch']
   source?: string
+  /** Override provider selection without env mutation. Used by fallback engine. */
+  providerOverride?: 'firstParty' | 'openai' | 'copilot'
 }): Promise<Anthropic> {
   const containerId = process.env.CLAUDE_CODE_CONTAINER_ID
   const remoteSessionId = process.env.CLAUDE_CODE_REMOTE_SESSION_ID
@@ -307,8 +310,12 @@ export async function getAnthropicClient({
     return new AnthropicVertex(vertexArgs) as unknown as Anthropic
   }
 
+  // ── Provider override: bypass env-var detection for cross-provider fallback ──
+  const useCodex = providerOverride === 'openai' || (!providerOverride && isCodexSubscriber())
+  const useCopilot = providerOverride === 'copilot' || (!providerOverride && !useCodex && isCopilotSubscriber())
+
   // ── Codex (OpenAI) provider via fetch adapter ─────────────────────
-  if (isCodexSubscriber()) {
+  if (useCodex) {
     const codexTokens = getCodexOAuthTokens()
     if (codexTokens?.accessToken) {
       const codexFetch = createCodexFetch(codexTokens.accessToken)
@@ -323,7 +330,7 @@ export async function getAnthropicClient({
   }
 
   // ── Copilot provider via fetch adapter ────────────────────────────
-  if (isCopilotSubscriber()) {
+  if (useCopilot) {
     const copilotFetch = createCopilotFetch()
     const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
       apiKey: 'copilot-placeholder', // SDK requires a key but the fetch adapter handles auth

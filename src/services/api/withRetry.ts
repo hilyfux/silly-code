@@ -161,8 +161,14 @@ export class FallbackTriggeredError extends Error {
   constructor(
     public readonly originalModel: string,
     public readonly fallbackModel: string,
+    /** Provider override for cross-provider fallback. undefined = same provider. */
+    public readonly providerOverride?: 'firstParty' | 'openai' | 'copilot',
   ) {
-    super(`Model fallback triggered: ${originalModel} -> ${fallbackModel}`)
+    super(
+      providerOverride
+        ? `Cross-provider fallback: ${originalModel} → ${fallbackModel} (provider: ${providerOverride})`
+        : `Model fallback triggered: ${originalModel} -> ${fallbackModel}`,
+    )
     this.name = 'FallbackTriggeredError'
   }
 }
@@ -348,6 +354,44 @@ export async function* withRetry<T>(
               options.model,
               options.fallbackModel,
             )
+          }
+
+          // Cross-provider fallback: if no same-provider fallback model,
+          // try a different provider entirely. Only fires when:
+          // 1. No same-provider fallback model was specified
+          // 2. We've exhausted 529 retries
+          // 3. decideFallback says a cross-provider switch is available and safe
+          if (!options.fallbackModel) {
+            try {
+              const { decideFallback } = await import('../provider/fallback.js')
+              const decision = decideFallback({
+                requestId: `retry-${Date.now()}`,
+                error: `529 overloaded after ${consecutive529Errors} retries`,
+                currentProvider: (getAPIProviderForStatsig() || 'claude') as any,
+                requestState: 'in_flight_no_output', // withRetry fires before first token
+                requiredCapabilities: ['streaming', 'tool_use'],
+                attemptsSoFar: consecutive529Errors,
+              })
+              if (decision.shouldRetry && decision.nextProvider && decision.event.outcome === 'fallback') {
+                const providerMap: Record<string, 'firstParty' | 'openai' | 'copilot'> = {
+                  claude: 'firstParty',
+                  codex: 'openai',
+                  copilot: 'copilot',
+                }
+                const override = providerMap[decision.nextProvider]
+                if (override) {
+                  logForDebugging(`[Fallback] Cross-provider: → ${decision.nextProvider} (${override})`)
+                  throw new FallbackTriggeredError(
+                    options.model,
+                    options.model, // same model name, different provider
+                    override,
+                  )
+                }
+              }
+            } catch (fallbackErr) {
+              if (fallbackErr instanceof FallbackTriggeredError) throw fallbackErr
+              // decideFallback itself failed — continue to normal error path
+            }
           }
 
           if (

@@ -704,6 +704,8 @@ export type Options = {
   // so the model can pace itself. `remaining` is computed by the caller
   // (query.ts decrements across the agentic loop).
   taskBudget?: { total: number; remaining?: number }
+  /** Set by cross-provider fallback. Bypasses env-var provider detection. */
+  providerOverride?: 'firstParty' | 'openai' | 'copilot'
 }
 
 export async function queryModelWithoutStreaming({
@@ -1782,6 +1784,7 @@ async function* queryModel(
           model: options.model,
           fetchOverride: options.fetchOverride,
           source: options.querySource,
+          providerOverride: options.providerOverride,
         }),
       async (anthropic, attempt, context) => {
         attemptNumber = attempt

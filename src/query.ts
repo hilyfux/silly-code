@@ -891,10 +891,18 @@ async function* queryLoop(
             }
           }
         } catch (innerError) {
-          if (innerError instanceof FallbackTriggeredError && fallbackModel) {
-            // Fallback was triggered - switch model and retry
-            currentModel = fallbackModel
+          if (innerError instanceof FallbackTriggeredError && (fallbackModel || innerError.providerOverride)) {
+            // Fallback was triggered - switch model and/or provider and retry
+            currentModel = innerError.fallbackModel || fallbackModel || currentModel
             attemptWithFallback = true
+
+            // Cross-provider fallback: store override so getAnthropicClient uses it
+            if (innerError.providerOverride) {
+              toolUseContext.options.providerOverride = innerError.providerOverride
+              logForDebugging(
+                `[Fallback] Cross-provider fallback to ${innerError.providerOverride} for model ${currentModel}`,
+              )
+            }
 
             // Clear assistant messages since we'll retry the entire request
             yield* yieldMissingToolResultBlocks(

@@ -76,11 +76,52 @@ export function logsHandler(sessionId: string): void {
   process.stdout.write(content)
 }
 
-export function attachHandler(_sessionId: string): void {
-  console.error(
-    'attach is not supported in source mode (requires compiled binary IPC).',
-  )
-  process.exit(1)
+export async function attachHandler(sessionId: string): Promise<void> {
+  const meta = readSessionMeta(sessionId)
+  if (!meta) {
+    console.error(`Session not found: ${sessionId}`)
+    process.exit(1)
+  }
+
+  // Try UDS connection first
+  const { listAllLiveSessions, sendToUdsSocket } = await import('../utils/udsClient.js')
+  const liveSessions = await listAllLiveSessions()
+  const target = liveSessions.find(s => s.sessionId === sessionId && s.alive)
+
+  if (!target) {
+    console.error(`Session ${sessionId} is not running or has no UDS socket.`)
+    console.error('Use "silly ps" to see active sessions.')
+    process.exit(1)
+  }
+
+  console.log(`Attaching to session ${sessionId} (pid ${target.pid})...`)
+  console.log('Type messages and press Enter to send. Ctrl+C to detach.\n')
+
+  // Stream: forward stdin to remote session
+  const readline = await import('readline')
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: '> ' })
+  rl.prompt()
+  rl.on('line', async (line: string) => {
+    try {
+      const msg = JSON.stringify({
+        type: 'message',
+        from: `attach-${process.pid}`,
+        to: sessionId,
+        id: `${Date.now()}`,
+        payload: { text: line },
+        timestamp: Date.now(),
+      })
+      await sendToUdsSocket(target.socketPath, msg)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Send failed: ${msg}`)
+    }
+    rl.prompt()
+  })
+  rl.on('close', () => {
+    console.log('\nDetached.')
+    process.exit(0)
+  })
 }
 
 export function killHandler(sessionId: string): void {

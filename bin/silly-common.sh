@@ -74,6 +74,8 @@ SILLY_FEATURES=(
   --feature=EXPERIMENTAL_SKILL_SEARCH
   --feature=KAIROS
   --feature=COORDINATOR_MODE
+  --feature=UDS_INBOX
+  --feature=TERMINAL_PANEL
   # Other
   --feature=TEAMMEM
 )

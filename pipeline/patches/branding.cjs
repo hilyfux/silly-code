@@ -36,6 +36,12 @@ module.exports = function applyBranding({ patch, patchAll }) {
     ''
   )
 
+  // Patch 06b: TUI header title — "Claude Code v..." → "Silly Code v..."
+  patch('06b-header-title',
+    'title:`Claude Code v$',
+    'title:`Silly Code v$'
+  )
+
   // Patch 07: Mascot color — warm red → vibrant teal/green (silly & cute)
   // RGB theme colors (light/dark/dimmed/high-contrast)
   patchAll('07-mascot-color',

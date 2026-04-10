@@ -68,6 +68,9 @@ SILLY_FEATURES=(
   --feature=MONITOR_TOOL
   --feature=WORKFLOW_SCRIPTS
   --feature=TEMPLATES
+  --feature=DAEMON
+  --feature=WEB_BROWSER_TOOL
+  --feature=PROACTIVE
   # Other
   --feature=TEAMMEM
 )

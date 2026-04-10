@@ -8,6 +8,12 @@ ok()    { echo -e "${G}[silly]${N} $*"; }
 warn()  { echo -e "${Y}[silly]${N} $*"; }
 err()   { echo -e "${R}[silly]${N} $*" >&2; }
 
+# ── PATH: ensure common binary locations are reachable ──────
+# Homebrew (macOS Intel + Apple Silicon), Linuxbrew, user local bin
+for P in /opt/homebrew/bin /usr/local/bin /home/linuxbrew/.linuxbrew/bin "$HOME/.local/bin"; do
+  case ":$PATH:" in *":$P:"*) ;; *) [ -d "$P" ] && export PATH="$P:$PATH" ;; esac
+done
+
 # ── Feature flags: DISABLED in source mode (v2.1.87 snapshot)
 # Many flags reference modules from newer versions (108 "missing modules").
 # Enable flags only after the corresponding module stubs/implementations exist.

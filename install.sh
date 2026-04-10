@@ -30,6 +30,23 @@ else
   ok "Bun: $(bun --version)"
 fi
 
+# ── ripgrep (required for file search) ───────────────────────
+if ! command -v rg >/dev/null 2>&1; then
+  info "Installing ripgrep..."
+  if command -v brew >/dev/null 2>&1; then
+    brew install ripgrep 2>/dev/null
+  elif command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get install -y ripgrep 2>/dev/null || true
+  elif command -v pacman >/dev/null 2>&1; then
+    sudo pacman -S --noconfirm ripgrep 2>/dev/null || true
+  else
+    warn "Could not auto-install ripgrep. Install it manually: https://github.com/BurntSushi/ripgrep#installation"
+  fi
+  command -v rg >/dev/null 2>&1 && ok "ripgrep: $(rg --version | head -1)" || warn "ripgrep not found — file search will be slow"
+else
+  ok "ripgrep: $(rg --version | head -1)"
+fi
+
 # ── Clone or update ──────────────────────────────────────────
 if [ -d "$INSTALL_DIR/.git" ]; then
   info "Updating..."

@@ -123,11 +123,75 @@ case "${1:-}" in
     ;;
   doctor)
     MISSING=false
+    echo ""
+    echo -e "  ${B}silly-code doctor${N}"
+    echo ""
+
+    # Version / commit
+    VERSION=$(cd "$ROOT_DIR" && git describe --tags --always 2>/dev/null || echo "unknown")
+    COMMIT=$(cd "$ROOT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    ok "Version: $VERSION (commit $COMMIT)"
+    ok "Platform: $(uname -s) $(uname -m)"
+
+    # Runtime
+    MISSING=false
     command -v bun >/dev/null 2>&1 && ok "Bun: $(bun --version)" || { err "Bun: not found"; MISSING=true; }
     command -v git >/dev/null 2>&1 && ok "Git: $(git --version | head -1)" || warn "Git: not found (optional)"
+    command -v rg >/dev/null 2>&1 && ok "ripgrep: $(rg --version | head -1)" || warn "ripgrep: not found (file search will be slow)"
     [ -f "$ROOT_DIR/src/entrypoints/cli.tsx" ] && ok "Source: found" || { err "Source: missing"; MISSING=true; }
-    [ "$MISSING" = true ] && exit 1
-    ok "All prerequisites met"
+
+    # Provider auth
+    echo ""
+    check_provider "Codex   (sillyx)" "codex-oauth.json" || true
+    check_provider "Copilot (sillyt)" "copilot-oauth.json" || true
+    check_claude || true
+
+    # Defaults
+    echo ""
+    source "$ROOT_DIR/bin/silly-common.sh" 2>/dev/null
+    ok "Stable flags: ${#SILLY_FEATURES[@]}"
+    if [[ "${SILLY_EXPERIMENTAL:-0}" == "1" ]]; then
+      warn "Experimental mode: ON"
+    else
+      ok "Experimental mode: off (set SILLY_EXPERIMENTAL=1 to enable)"
+    fi
+    ok "Permission mode: bypassPermissions (default)"
+
+    # AutoDream / memory
+    MEMDIR="$HOME/.claude/projects"
+    if [ -d "$MEMDIR" ]; then
+      MCOUNT=$(find "$MEMDIR" -name "*.md" -path "*/memory/*" 2>/dev/null | wc -l | tr -d ' ')
+      ok "Memory files: $MCOUNT across projects"
+    else
+      info "Memory: no projects yet"
+    fi
+    ok "AutoDream: enabled (24h + 5 sessions gate)"
+
+    # Computer use
+    echo ""
+    if [ "$(uname -s)" = "Darwin" ]; then
+      [ -f "$ROOT_DIR/runtime/mac_helper.py" ] && ok "Computer use: available (macOS)" || warn "Computer use: mac_helper.py missing"
+    else
+      info "Computer use: not available (macOS only)"
+    fi
+
+    # Fallback
+    AUTHED=0
+    [ -f "$DATA_DIR/codex-oauth.json" ] && AUTHED=$((AUTHED+1))
+    [ -f "$DATA_DIR/copilot-oauth.json" ] && AUTHED=$((AUTHED+1))
+    [ -f "$HOME/.claude/.credentials.json" ] && AUTHED=$((AUTHED+1))
+    if [ "$AUTHED" -ge 2 ]; then
+      ok "Provider fallback: active ($AUTHED providers)"
+    elif [ "$AUTHED" -eq 1 ]; then
+      info "Provider fallback: unavailable (only 1 provider authenticated)"
+    else
+      warn "Provider fallback: no providers authenticated"
+    fi
+
+    echo ""
+    [ "$MISSING" = true ] && { err "Some checks failed. Fix the issues above."; exit 1; }
+    ok "Ready for use."
+    echo ""
     exit 0
     ;;
   uninstall)

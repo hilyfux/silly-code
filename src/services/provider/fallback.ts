@@ -195,6 +195,20 @@ function recordEvent(event: FallbackEvent): void {
   fallbackEvents.push(event)
   if (fallbackEvents.length > MAX_EVENTS) fallbackEvents.splice(0, fallbackEvents.length - MAX_EVENTS)
   logForDebugging(`[Fallback] ${event.outcome}: ${event.reason} (${event.originalProvider} → ${event.selectedProvider ?? 'none'})`)
+
+  // Capture debug report on fail_closed for dogfooding diagnostics
+  if (event.outcome === 'fail_closed' || event.outcome === 'capability_mismatch') {
+    try {
+      const { captureDebugReport } = require('../../utils/debugReport.js')
+      captureDebugReport({
+        error: event.reason,
+        provider: event.originalProvider,
+        fallbackChain: event.fallbackChain,
+        requestState: event.requestState,
+        context: { outcome: event.outcome, retryCount: event.retryCount },
+      })
+    } catch {} // debug report is best-effort
+  }
 }
 
 export function getFallbackEvents(): readonly FallbackEvent[] {

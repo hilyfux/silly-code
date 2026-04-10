@@ -27,10 +27,10 @@ sillye    # Claude backend
 ## Management
 
 ```bash
-./bin/silly status          # Show all provider auth status
-./bin/silly models          # List available models per provider
-./bin/silly doctor          # Check prerequisites
-./bin/silly logout <prov>   # Remove stored tokens
+silly status          # Show all provider auth status
+silly models          # List available models per provider
+silly doctor          # Check prerequisites
+silly logout <prov>   # Remove stored tokens
 ```
 
 ## Models & Context Windows

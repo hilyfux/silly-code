@@ -86,8 +86,8 @@ ok "Installation complete!"
 echo ""
 
 # ── Interactive login ────────────────────────────────────────
-# Skip if stdin is not a terminal (piped install without -s)
-if [ -t 0 ]; then
+# Read from /dev/tty so it works even when piped (curl | bash)
+if [ -e /dev/tty ]; then
   echo -e "  ${B}Which provider do you want to use?${N}"
   echo ""
   echo "    1) GitHub Copilot     (GitHub Copilot subscription)"
@@ -96,12 +96,12 @@ if [ -t 0 ]; then
   echo "    s) Skip for now"
   echo ""
   printf "  Choose [1/2/3/s]: "
-  read -r CHOICE
+  read -r CHOICE < /dev/tty
   echo ""
   case "$CHOICE" in
-    1) "$INSTALL_DIR/bin/silly" login copilot ;;
-    2) "$INSTALL_DIR/bin/silly" login codex ;;
-    3) "$INSTALL_DIR/bin/silly" login claude ;;
+    1) "$INSTALL_DIR/bin/silly" login copilot < /dev/tty ;;
+    2) "$INSTALL_DIR/bin/silly" login codex < /dev/tty ;;
+    3) "$INSTALL_DIR/bin/silly" login claude < /dev/tty ;;
     *) info "Skipped. Run 'silly login <provider>' anytime." ;;
   esac
   echo ""

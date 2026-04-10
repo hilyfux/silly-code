@@ -77,3 +77,31 @@ pipeline/build/cli-patched.js     (patched JS)
     ↓  bun build --compile
 pipeline/build/silly              (75MB standalone binary)
 ```
+
+## 2026-04-10: getAnthropicClient Located
+
+### Discovery 7: Client Factory Function
+- **Offset**: ~3,440,000 in cli.js
+- **Entry pattern**: `N("[API:auth] OAuth token check starting"),await WA()`
+- **Provider variable**: `P=BX(_)` where `BX()` is the model-aware provider resolver
+- **Branch structure**: `if(P==="bedrock")...if(P==="foundry")...if(P==="anthropicAws")...if(P==="mantle")...` then firstParty fallthrough
+- **Injection point**: Before `if(P==="bedrock")` — insert `if(P==="openai"){...}if(P==="copilot"){...}`
+- **Client config variable**: `M` (contains defaultHeaders, maxRetries, timeout, fetchOptions)
+- **Constructor pattern**: `new D(k)` or `new D(Z)` where D is dynamically imported SDK class
+
+### Discovery 8: Key Variable Mapping (getAnthropicClient scope)
+| Source (v2.1.87) | Minified | Purpose |
+|---|---|---|
+| `isClaudeAISubscriber()` | `m7()` | Check OAuth auth |
+| `getAPIProvider()` | `dq()` | Get raw provider string |
+| `BX(model)` | `BX(_)` | Model-aware provider resolution |
+| `isDebugToStdErr()` | `US()` | Debug logging check |
+| `createStderrLogger()` | `pV6()` | Logger factory |
+| `getProxyFetchOptions()` | `F16()` | Proxy/fetch config |
+| `isFirstPartyAnthropicBaseUrl()` | `lH()` | Base URL check |
+| `getAnthropicApiKey()` | (in `Q7()` or similar) | API key retrieval |
+
+### Probe Strategy for Codex Injection
+1. Inject `console.error("[SILLY-PROBE] P=",P)` after `P=BX(_)` to confirm provider detection
+2. If P==="openai" fires, inject full fetch adapter
+3. The adapter must: create codex fetch → return `new (constructor)({...M, apiKey:"codex-ph", fetch: codexFetch})`

@@ -1,6 +1,6 @@
 # silly-code
 
-Multi-provider AI coding assistant. Full Claude Code capabilities, zero telemetry, three provider backends.
+Multi-provider AI assistant. Coding is the entry point — not the ceiling. Zero telemetry, three provider backends, full-domain capability.
 
 ```
 sillyx    → OpenAI Codex (ChatGPT Pro)

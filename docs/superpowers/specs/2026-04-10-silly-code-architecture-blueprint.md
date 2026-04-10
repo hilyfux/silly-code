@@ -2,9 +2,13 @@
 
 ## Vision
 
-Silly Code is not a fork. It is the next-generation multi-provider AI coding assistant that happens to share DNA with Claude Code. The goal is clear: **surpass Claude Code** in every dimension that matters to developers.
+Silly Code is not a fork, and it is not just a coding assistant. It is a **full-domain AI assistant** that uses coding as its entry point — the first vertical — but is architecturally designed for any knowledge work: research, writing, data analysis, design, operations, project management.
 
-Claude Code is locked to one provider, one subscription tier, and one company's telemetry pipeline. Silly Code is open, multi-provider, zero-telemetry, and community-driven. That's not a limitation to work around — it's the strategic advantage to build on.
+Claude Code locked itself into "coding assistant." That's their ceiling. It's our floor.
+
+The underlying engine — multi-provider intelligence, 40+ tools, agent orchestration, MCP protocol, plugin system, memory — is domain-agnostic. Code is where developers start. But the same tool system that reads files and runs tests can browse the web, analyze data, manage projects, and automate workflows. The same agent system that spawns code reviewers can spawn researchers, writers, and analysts.
+
+**Strategic equation:** Multi-provider + zero-telemetry + open architecture + domain-agnostic = the general-purpose AI assistant that doesn't exist yet.
 
 ## Strategic Differentiation
 
@@ -12,7 +16,10 @@ Claude Code is locked to one provider, one subscription tier, and one company's 
 
 | Dimension | Claude Code | Silly Code | Advantage |
 |-----------|:-----------:|:----------:|-----------|
+| Scope | Coding only | **Full-domain** (coding as entry point) | Not limited to one vertical |
 | Provider support | 1 (Claude) | 3 (Claude + Codex + Copilot) | Users choose the best model for each task |
+| Smart routing | None | Task-aware provider selection | Right model for right task |
+| Cost visibility | Overall only | Per-provider breakdown | Users see where money goes |
 | Telemetry | Full (OTel, Sentry, GrowthBook) | Zero | Privacy-first |
 | Feature locks | Tier-gated (Free/Pro/Max) | All unlocked | No artificial limits |
 | Auth model | API key or Claude subscription only | Any subscription OAuth | Lower barrier to entry |
@@ -31,13 +38,16 @@ Claude Code is locked to one provider, one subscription tier, and one company's 
 
 | Capability | Claude Code doesn't have it | Our approach |
 |------------|:-------------------------:|--------------|
-| Provider routing | - | Smart routing: pick best model per task |
+| Full-domain assistant | Coding only | Domain-agnostic engine, vertical skill packs |
+| Provider routing | None | Smart routing: pick best model per task |
 | Offline mode | - | Local model fallback (Ollama/llama.cpp) |
 | Cost optimization | - | Track spend per provider, suggest cheaper alternatives |
 | Community plugins | - | Open plugin marketplace |
 | Multi-model chains | - | Use Claude for reasoning, GPT for code, Copilot for completion |
+| Domain skill packs | - | Research, writing, data analysis, design skill bundles |
 | Session sharing | - | Export/import sessions across machines |
 | Team mode | - | Shared context across team members |
+| Workflow automation | - | User-defined workflows for any domain task |
 
 ## System Architecture
 
@@ -369,11 +379,20 @@ Merge to main → push
 - [ ] Background agent (daemon mode with real workers)
 - [ ] Proactive code analysis
 
-### Phase 5: Platform
+### Phase 5: Domain Expansion
+- [ ] Research skill pack (literature review, citation, synthesis)
+- [ ] Writing skill pack (drafting, editing, translation)
+- [ ] Data skill pack (analysis, visualization, reporting)
+- [ ] Design skill pack (wireframes, prototyping via MCP)
+- [ ] Ops skill pack (deployment, monitoring, incident response)
+- [ ] Domain-agnostic system prompt that adapts to context
+
+### Phase 6: Platform
 - [ ] Web UI (claude.ai/code equivalent)
 - [ ] Mobile companion
 - [ ] CI/CD integration
 - [ ] Enterprise features (SSO, audit log)
+- [ ] Marketplace for community skill packs
 
 ## Success Metrics
 

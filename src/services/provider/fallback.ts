@@ -83,6 +83,21 @@ export function providerSupportsCapabilities(
   return required.every(r => caps.has(r))
 }
 
+// ── Model compatibility ──────────────────────────────────────
+
+/** Default model per provider for cross-provider fallback.
+ *  When falling back, we can't send claude-opus-4-6 to Codex.
+ *  Instead we map to the target provider's equivalent tier. */
+const PROVIDER_DEFAULT_MODELS: Record<ProviderId, string> = {
+  claude: 'claude-sonnet-4-6',
+  codex: 'gpt-5.4',
+  copilot: 'claude-sonnet-4',
+}
+
+export function getFallbackModel(targetProvider: ProviderId): string {
+  return PROVIDER_DEFAULT_MODELS[targetProvider]
+}
+
 // ── Auth check ───────────────────────────────────────────────
 
 const AUTH_FILES: Record<ProviderId, string> = {

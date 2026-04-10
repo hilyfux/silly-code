@@ -18,67 +18,73 @@ done
 # Many flags reference modules from newer versions (108 "missing modules").
 # Enable flags only after the corresponding module stubs/implementations exist.
 # For now, we rely on the base functionality which is already full-featured.
+# ── Stable core flags (tested, safe for daily use) ──────────
 SILLY_FEATURES=(
-  # ── All 54 verified-safe feature flags (FEATURES.md audit 2026-03-31) ──
-  # Interaction / UI
+  # UI / interaction
   --feature=AWAY_SUMMARY
   --feature=HISTORY_PICKER
   --feature=HOOK_PROMPTS
   --feature=KAIROS_BRIEF
-  --feature=KAIROS_CHANNELS
-  --feature=LODESTONE
   --feature=MESSAGE_ACTIONS
   --feature=NEW_INIT
   --feature=QUICK_SEARCH
-  --feature=SHOT_STATS
   --feature=TOKEN_BUDGET
   --feature=ULTRAPLAN
   --feature=ULTRATHINK
   --feature=VOICE_MODE
-  # Agent / Memory / Planning
-  --feature=AGENT_MEMORY_SNAPSHOT
-  --feature=AGENT_TRIGGERS
-  --feature=AGENT_TRIGGERS_REMOTE
-  --feature=BUILTIN_EXPLORE_PLAN_AGENTS
+  # Agent / memory
   --feature=EXTRACT_MEMORIES
+  --feature=BUILTIN_EXPLORE_PLAN_AGENTS
   --feature=VERIFICATION_AGENT
-  # Build / Compile intelligence
+  # Code intelligence
   --feature=BASH_CLASSIFIER
   --feature=CACHED_MICROCOMPACT
   --feature=COMPACTION_REMINDERS
   --feature=CONNECTOR_TEXT
-  --feature=NATIVE_CLIPBOARD_IMAGE
-  --feature=POWERSHELL_AUTO_MODE
   --feature=PROMPT_CACHE_BREAK_DETECTION
   --feature=TREE_SITTER_BASH
-  --feature=TREE_SITTER_BASH_SHADOW
   --feature=UNATTENDED_RETRY
-  # Remote / Bridge
-  --feature=BRIDGE_MODE
-  --feature=CCR_AUTO_CONNECT
-  --feature=CCR_MIRROR
-  --feature=CCR_REMOTE_SETUP
   # MCP
   --feature=MCP_RICH_OUTPUT
-  # Auto mode / classifier
+  # Auto mode
   --feature=TRANSCRIPT_CLASSIFIER
-  # Newly implemented modules
+  # Sessions
   --feature=BG_SESSIONS
-  --feature=FORK_SUBAGENT
-  --feature=MONITOR_TOOL
   --feature=WORKFLOW_SCRIPTS
   --feature=TEMPLATES
-  --feature=DAEMON
-  --feature=WEB_BROWSER_TOOL
-  --feature=PROACTIVE
   --feature=EXPERIMENTAL_SKILL_SEARCH
-  --feature=KAIROS
-  --feature=COORDINATOR_MODE
-  --feature=UDS_INBOX
-  --feature=TERMINAL_PANEL
-  # Other
-  --feature=TEAMMEM
 )
+
+# ── Experimental flags (opt-in via SILLY_EXPERIMENTAL=1) ────
+# These are implemented but not yet validated in real daily use.
+# Enable all with: export SILLY_EXPERIMENTAL=1
+if [[ "${SILLY_EXPERIMENTAL:-0}" == "1" ]]; then
+  SILLY_FEATURES+=(
+    --feature=KAIROS              # Full assistant mode (stub impl)
+    --feature=KAIROS_CHANNELS     # Channel notifications
+    --feature=COORDINATOR_MODE    # Multi-agent orchestration
+    --feature=PROACTIVE           # Proactive suggestions
+    --feature=DAEMON              # Background daemon
+    --feature=UDS_INBOX           # Cross-session IPC
+    --feature=TERMINAL_PANEL      # Terminal capture panels
+    --feature=FORK_SUBAGENT       # Session fork
+    --feature=MONITOR_TOOL        # Process monitoring
+    --feature=WEB_BROWSER_TOOL    # Web page fetching
+    --feature=AGENT_MEMORY_SNAPSHOT
+    --feature=AGENT_TRIGGERS
+    --feature=AGENT_TRIGGERS_REMOTE
+    --feature=BRIDGE_MODE
+    --feature=CCR_AUTO_CONNECT
+    --feature=CCR_MIRROR
+    --feature=CCR_REMOTE_SETUP
+    --feature=LODESTONE
+    --feature=SHOT_STATS
+    --feature=TEAMMEM
+    --feature=NATIVE_CLIPBOARD_IMAGE
+    --feature=POWERSHELL_AUTO_MODE
+    --feature=TREE_SITTER_BASH_SHADOW
+  )
+fi
 
 # ── Default permission mode ─────────────────────────────────
 # bypassPermissions by default — no confirmation prompts.

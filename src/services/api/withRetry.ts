@@ -380,10 +380,13 @@ export async function* withRetry<T>(
                 }
                 const override = providerMap[decision.nextProvider]
                 if (override) {
-                  logForDebugging(`[Fallback] Cross-provider: → ${decision.nextProvider} (${override})`)
+                  // Map model to target provider's compatible model
+                  const { getFallbackModel } = await import('../provider/fallback.js')
+                  const targetModel = getFallbackModel(decision.nextProvider)
+                  logForDebugging(`[Fallback] Cross-provider: → ${decision.nextProvider} (${override}), model: ${targetModel}`)
                   throw new FallbackTriggeredError(
                     options.model,
-                    options.model, // same model name, different provider
+                    targetModel,
                     override,
                   )
                 }

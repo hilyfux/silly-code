@@ -1,9 +1,15 @@
 node_modules/
 pipeline/build/
-pipeline/upstream/package/vendor/
-pipeline/upstream/package/cli.js
+pipeline/upstream/
+pipeline/.upgrade-tmp/
+pipeline/varmap-*.json
 *.tgz
 .env
 dist/
 cli
 cli-dev
+.DS_Store
+.claude/
+.knowledge-graph/
+.mcp.json
+.playwright/

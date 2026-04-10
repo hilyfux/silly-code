@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * silly-code patch pipeline
+ * silly-code patch pipeline (modular)
  *
- * Takes upstream Claude Code cli.js and applies silly-code patches.
- * Each patch is a named, verifiable transformation.
+ * Orchestrator that loads patch modules and applies them in order.
+ * Each module owns a domain: branding, providers, equality, privacy, platform.
  *
- * Usage: node pipeline/patch.js [input] [output]
+ * Usage: node pipeline/patch.cjs [input] [output]
  *   input:  path to upstream cli.js (default: pipeline/upstream/package/cli.js)
  *   output: path to patched cli.js (default: pipeline/build/cli-patched.js)
  */
@@ -21,6 +21,8 @@ fs.mkdirSync(path.dirname(OUTPUT), { recursive: true })
 
 let src = fs.readFileSync(INPUT, 'utf8')
 const results = []
+
+// ── Patch helpers (shared by all modules) ────────────────────
 
 function patch(name, find, replace) {
   if (typeof find === 'string') {
@@ -50,44 +52,20 @@ function patchAll(name, find, replace) {
   results.push({ name, status: 'OK', count })
 }
 
-// ── Patch 01: Branding — VERSION ─────────────────────────────
-patchAll('01-version',
-  'VERSION:"2.1.100"',
-  'VERSION:"2.1.100-silly"'
-)
+// ── Load and apply patch modules in order ────────────────────
 
-// ── Patch 02: Branding — PACKAGE_URL ─────────────────────────
-patchAll('02-package-url',
-  'PACKAGE_URL:"@anthropic-ai/claude-code"',
-  'PACKAGE_URL:"silly-code"'
-)
+const helpers = { patch, patchAll }
+const modules = [
+  require('./patches/branding.cjs'),
+  require('./patches/providers.cjs'),
+  require('./patches/equality.cjs'),
+  require('./patches/privacy.cjs'),
+  require('./patches/platform.cjs'),
+]
 
-// ── Patch 03: Branding — FEEDBACK_CHANNEL ────────────────────
-patchAll('03-feedback',
-  'FEEDBACK_CHANNEL:"https://github.com/anthropics/claude-code/issues"',
-  'FEEDBACK_CHANNEL:"https://github.com/hilyfux/silly-code/issues"'
-)
-
-// ── Patch 04: Branding — README_URL ──────────────────────────
-patchAll('04-readme-url',
-  'README_URL:"https://code.claude.com/docs/en/overview"',
-  'README_URL:"https://github.com/hilyfux/silly-code"'
-)
-
-// ── Patch 05: Branding — ISSUES_EXPLAINER ────────────────────
-patchAll('05-issues',
-  'ISSUES_EXPLAINER:"report the issue at https://github.com/anthropics/claude-code/issues"',
-  'ISSUES_EXPLAINER:"report the issue at https://github.com/hilyfux/silly-code/issues"'
-)
-
-// ── Patch 10: Provider — inject openai + copilot ─────────────
-patch('10-provider-detection',
-  'return B6(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"',
-  'return B6(process.env.CLAUDE_CODE_USE_OPENAI)?"openai":B6(process.env.CLAUDE_CODE_USE_COPILOT)?"copilot":B6(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"'
-)
-
-// ── Patch 20: Permission — default bypass ────────────────────
-// (placeholder — will be implemented after probe verification)
+for (const mod of modules) {
+  mod(helpers)
+}
 
 // ── Write output ─────────────────────────────────────────────
 fs.writeFileSync(OUTPUT, src)

@@ -1,0 +1,120 @@
+{
+  "meta": {
+    "description": "silly-code v2 binary module network — data layer representation",
+    "version": "2.1.100",
+    "updated": "2026-04-10",
+    "source": "Reverse engineered from cli.js (13.5MB minified JS from npm pack @anthropic-ai/claude-code)"
+  },
+
+  "pipeline": {
+    "input": "npm pack @anthropic-ai/claude-code → package/cli.js (13.5MB)",
+    "patcher": "pipeline/patch.cjs",
+    "output_js": "pipeline/build/cli-patched.js",
+    "compiler": "bun build --compile",
+    "output_binary": "pipeline/build/silly (75MB)"
+  },
+
+  "variable_map": {
+    "comment": "Source name (v2.1.87) → Minified name (v2.1.100). Changes each version!",
+    "isEnvTruthy": "B6",
+    "getAPIProvider": "dq",
+    "getAPIProviderForStatsig": "Zr",
+    "isClaudeAISubscriber": "m7",
+    "isDebugToStdErr": "US",
+    "createStderrLogger": "pV6",
+    "getProxyFetchOptions": "F16",
+    "isFirstPartyAnthropicBaseUrl": "lH",
+    "modelAwareProviderResolver": "BX",
+    "mantleOverrideCheck": "u08"
+  },
+
+  "functions": {
+    "getAPIProvider": {
+      "minified_name": "dq",
+      "offset_approx": 2287347,
+      "landmark": "return B6(process.env.CLAUDE_CODE_USE_BEDROCK)?\"bedrock\"",
+      "provider_chain": [
+        { "env": "CLAUDE_CODE_USE_OPENAI",   "returns": "openai",      "status": "INJECTED",  "patch_id": "10" },
+        { "env": "CLAUDE_CODE_USE_COPILOT",  "returns": "copilot",     "status": "INJECTED",  "patch_id": "10" },
+        { "env": "CLAUDE_CODE_USE_BEDROCK",  "returns": "bedrock",     "status": "ORIGINAL" },
+        { "env": "CLAUDE_CODE_USE_FOUNDRY",  "returns": "foundry",     "status": "ORIGINAL" },
+        { "check": "anthropicAws",           "returns": "anthropicAws","status": "ORIGINAL" },
+        { "check": "mantle via u08()",       "returns": "mantle",      "status": "ORIGINAL" },
+        { "env": "CLAUDE_CODE_USE_VERTEX",   "returns": "vertex",      "status": "ORIGINAL" },
+        { "default": true,                   "returns": "firstParty",  "status": "ORIGINAL" }
+      ]
+    },
+
+    "getAnthropicClient": {
+      "minified_name": "anonymous (near N('[API:auth] OAuth token check starting'))",
+      "offset_approx": 3440000,
+      "landmark": "\"[API:auth] OAuth token check starting\"",
+      "entry_pattern": "N(\"[API:auth] OAuth token check starting\"),await WA()",
+      "provider_variable": "P",
+      "resolver_call": "P=BX(_)",
+      "config_variable": "M",
+      "config_contains": ["defaultHeaders", "maxRetries", "timeout", "fetchOptions"],
+      "constructor_pattern": "new D(k) or new D(Z) where D = dynamically imported Anthropic SDK",
+      "branches": [
+        { "condition": "P===\"openai\"",     "action": "CODEX_FETCH_ADAPTER",   "status": "TODO",     "patch_id": "11" },
+        { "condition": "P===\"copilot\"",    "action": "COPILOT_FETCH_ADAPTER", "status": "TODO",     "patch_id": "12" },
+        { "condition": "P===\"bedrock\"",    "action": "new AnthropicBedrock()", "status": "ORIGINAL" },
+        { "condition": "P===\"foundry\"",    "action": "new AnthropicFoundry()", "status": "ORIGINAL" },
+        { "condition": "P===\"anthropicAws\"","action": "AWS variant",           "status": "ORIGINAL" },
+        { "condition": "P===\"mantle\"",     "action": "Mantle variant",         "status": "ORIGINAL" },
+        { "condition": "P===\"vertex\"",     "action": "new AnthropicVertex()",  "status": "ORIGINAL" },
+        { "condition": "default",            "action": "new Anthropic(M)",       "status": "ORIGINAL" }
+      ]
+    },
+
+    "getAPIProviderForStatsig": {
+      "minified_name": "Zr",
+      "description": "Wraps dq() for analytics/statsig reporting",
+      "adjacent_to": "getAPIProvider"
+    }
+  },
+
+  "patches": {
+    "applied": [
+      { "id": "01", "name": "version",          "method": "replaceAll", "count": 127, "status": "DONE",
+        "from": "VERSION:\"2.1.100\"", "to": "VERSION:\"2.1.100-silly\"" },
+      { "id": "02", "name": "package-url",       "method": "replaceAll", "count": 127, "status": "DONE",
+        "from": "PACKAGE_URL:\"@anthropic-ai/claude-code\"", "to": "PACKAGE_URL:\"silly-code\"" },
+      { "id": "03", "name": "feedback",          "method": "replaceAll", "count": 127, "status": "DONE",
+        "from": "FEEDBACK_CHANNEL:\"https://github.com/anthropics/claude-code/issues\"",
+        "to":   "FEEDBACK_CHANNEL:\"https://github.com/hilyfux/silly-code/issues\"" },
+      { "id": "04", "name": "readme-url",        "method": "replaceAll", "count": 127, "status": "DONE",
+        "from": "README_URL:\"https://code.claude.com/docs/en/overview\"",
+        "to":   "README_URL:\"https://github.com/hilyfux/silly-code\"" },
+      { "id": "05", "name": "issues",            "method": "replaceAll", "count": 127, "status": "DONE",
+        "from": "ISSUES_EXPLAINER:\"report the issue at https://github.com/anthropics/claude-code/issues\"",
+        "to":   "ISSUES_EXPLAINER:\"report the issue at https://github.com/hilyfux/silly-code/issues\"" },
+      { "id": "10", "name": "provider-detection","method": "replace",    "count": 1,   "status": "DONE",
+        "landmark": "return B6(process.env.CLAUDE_CODE_USE_BEDROCK)?\"bedrock\"",
+        "note": "Prepend openai+copilot checks before bedrock" }
+    ],
+    "pending": [
+      { "id": "11", "name": "codex-fetch-adapter",  "target": "getAnthropicClient if(P===\"openai\")",  "status": "TODO",
+        "note": "Inject adapter: read ~/.silly-code/codex-oauth.json → translate Anthropic→OpenAI Responses API" },
+      { "id": "12", "name": "copilot-fetch-adapter","target": "getAnthropicClient if(P===\"copilot\")", "status": "TODO",
+        "note": "Inject adapter: read ~/.silly-code/copilot-oauth.json → translate Anthropic→OpenAI Chat API" },
+      { "id": "20", "name": "telemetry-disable",    "target": "is1PEventLoggingEnabled()",              "status": "TODO",
+        "note": "Replace body with return false" },
+      { "id": "21", "name": "feature-flags",        "target": "GrowthBook getFeatureValue defaults",    "status": "TODO",
+        "note": "Override defaults to unlock experimental features" },
+      { "id": "22", "name": "auto-updater",         "target": "GCS URL + npm registry strings",         "status": "TODO",
+        "note": "Redirect to silly-code release channel" },
+      { "id": "23", "name": "policy-limits",        "target": "rate limit enforcement",                 "status": "TODO",
+        "note": "Bypass or increase limits" }
+    ]
+  },
+
+  "inferences": {
+    "comment": "Speculative — not yet verified",
+    "binary_structure": "Bun compiled from minified JS, contains WASM runtime + bytecode",
+    "model_catalog": "Likely near getAPIProvider or in a separate MODELS constant block",
+    "statsig_client": "Zr() feeds into a statsig SDK call — telemetry disable at Zr or its callee",
+    "feature_flags": "GrowthBook SDK likely initialized near app startup, findable via 'growthbook' string",
+    "rate_limiter": "Likely enforced in the fetch layer, near M config variable in getAnthropicClient"
+  }
+}

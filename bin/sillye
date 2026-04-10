@@ -11,6 +11,15 @@ source "$ROOT_DIR/bin/silly-common.sh"
 export SILLY_CODE_DATA="${SILLY_CODE_DATA:-$HOME/.silly-code}"
 mkdir -p "$SILLY_CODE_DATA"
 
+if [ ! -f "$SILLY_CODE_DATA/claude-oauth.json" ]; then
+  echo ""
+  echo "  sillye — Claude"
+  echo ""
+  info "Not logged in. Launching TUI for login..."
+  echo ""
+  # Claude login happens inside the TUI via /login command
+fi
+
 # Model defaults
 export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-opus-4-6}"
 export ANTHROPIC_SMALL_FAST_MODEL="${ANTHROPIC_SMALL_FAST_MODEL:-claude-haiku-4-5}"

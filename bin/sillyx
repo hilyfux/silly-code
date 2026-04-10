@@ -12,6 +12,20 @@ export CLAUDE_CODE_USE_OPENAI=1
 export SILLY_CODE_DATA="${SILLY_CODE_DATA:-$HOME/.silly-code}"
 mkdir -p "$SILLY_CODE_DATA"
 
+if [ ! -f "$SILLY_CODE_DATA/codex-oauth.json" ]; then
+  echo ""
+  echo "  sillyx — OpenAI Codex"
+  echo ""
+  info "Not logged in. Starting login now..."
+  echo ""
+  "$ROOT_DIR/bin/silly" login codex
+  if [ ! -f "$SILLY_CODE_DATA/codex-oauth.json" ]; then
+    echo ""
+    warn "Login was cancelled. Run 'sillyx' again when ready."
+    exit 1
+  fi
+fi
+
 # Model defaults
 export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-gpt-5.4}"
 export ANTHROPIC_SMALL_FAST_MODEL="${ANTHROPIC_SMALL_FAST_MODEL:-gpt-5.4-mini}"

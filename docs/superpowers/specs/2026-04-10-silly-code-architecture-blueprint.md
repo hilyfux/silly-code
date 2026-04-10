@@ -379,13 +379,15 @@ Merge to main → push
 - [ ] Background agent (daemon mode with real workers)
 - [ ] Proactive code analysis
 
-### Phase 5: Domain Expansion
-- [ ] Research skill pack (literature review, citation, synthesis)
-- [ ] Writing skill pack (drafting, editing, translation)
-- [ ] Data skill pack (analysis, visualization, reporting)
-- [ ] Design skill pack (wireframes, prototyping via MCP)
-- [ ] Ops skill pack (deployment, monitoring, incident response)
-- [ ] Domain-agnostic system prompt that adapts to context
+### Phase 5: Computer Use — the real differentiator
+- [ ] Screen capture + OCR (understand what's on screen)
+- [ ] Mouse/keyboard automation (click, type, scroll, drag)
+- [ ] Browser automation (navigate, fill forms, extract data)
+- [ ] App control (launch, switch, interact with native apps)
+- [ ] File manager operations (drag-drop, organize, batch rename)
+- [ ] System automation (settings, preferences, notifications)
+- [ ] Multi-step task chains (e.g. "download CSV from email, open in Excel, make chart, paste into Slides")
+- [ ] Self-correcting loops (take action → screenshot → verify → retry if wrong)
 
 ### Phase 6: Platform
 - [ ] Web UI (claude.ai/code equivalent)

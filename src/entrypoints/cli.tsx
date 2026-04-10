@@ -93,12 +93,13 @@ async function main(): Promise<void> {
     } = await import('../utils/claudeInChrome/chromeNativeHost.js');
     await runChromeNativeHost();
     return;
-  } else if (feature('CHICAGO_MCP') && process.argv[2] === '--computer-use-mcp') {
+  } else if (process.argv[2] === '--computer-use-mcp') {
     profileCheckpoint('cli_computer_use_mcp_path');
+    // Use Silly Code's own Python bridge MCP server — no @ant/ dependency needed
     const {
-      runComputerUseMcpServer
-    } = await import('../utils/computerUse/mcpServer.js');
-    await runComputerUseMcpServer();
+      runSillyComputerUseMcpServer
+    } = await import('../utils/computerUse/sillyMcpServer.js');
+    await runSillyComputerUseMcpServer();
     return;
   }
 

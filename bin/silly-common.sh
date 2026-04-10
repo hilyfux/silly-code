@@ -19,8 +19,49 @@ done
 # Enable flags only after the corresponding module stubs/implementations exist.
 # For now, we rely on the base functionality which is already full-featured.
 SILLY_FEATURES=(
-  # Safe flags verified to work:
+  # ── All 54 verified-safe feature flags (FEATURES.md audit 2026-03-31) ──
+  # Interaction / UI
+  --feature=AWAY_SUMMARY
+  --feature=HISTORY_PICKER
+  --feature=HOOK_PROMPTS
+  --feature=KAIROS_BRIEF
+  --feature=KAIROS_CHANNELS
+  --feature=LODESTONE
+  --feature=MESSAGE_ACTIONS
+  --feature=NEW_INIT
+  --feature=QUICK_SEARCH
+  --feature=SHOT_STATS
+  --feature=TOKEN_BUDGET
+  --feature=ULTRAPLAN
+  --feature=ULTRATHINK
   --feature=VOICE_MODE
+  # Agent / Memory / Planning
+  --feature=AGENT_MEMORY_SNAPSHOT
+  --feature=AGENT_TRIGGERS
+  --feature=AGENT_TRIGGERS_REMOTE
+  --feature=BUILTIN_EXPLORE_PLAN_AGENTS
+  --feature=EXTRACT_MEMORIES
+  --feature=VERIFICATION_AGENT
+  # Build / Compile intelligence
+  --feature=BASH_CLASSIFIER
+  --feature=CACHED_MICROCOMPACT
+  --feature=COMPACTION_REMINDERS
+  --feature=CONNECTOR_TEXT
+  --feature=NATIVE_CLIPBOARD_IMAGE
+  --feature=POWERSHELL_AUTO_MODE
+  --feature=PROMPT_CACHE_BREAK_DETECTION
+  --feature=TREE_SITTER_BASH
+  --feature=TREE_SITTER_BASH_SHADOW
+  --feature=UNATTENDED_RETRY
+  # Remote / Bridge
+  --feature=BRIDGE_MODE
+  --feature=CCR_AUTO_CONNECT
+  --feature=CCR_MIRROR
+  --feature=CCR_REMOTE_SETUP
+  # MCP
+  --feature=MCP_RICH_OUTPUT
+  # Other
+  --feature=TEAMMEM
 )
 
 # ── Default permission mode ─────────────────────────────────

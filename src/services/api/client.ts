@@ -431,6 +431,42 @@ function buildFetch(
     } catch {
       // never let logging crash the fetch
     }
-    return inner(input, { ...init, headers, body })
+    // ── Silly Code: health tracking + cost estimation ──
+    const start = Date.now()
+    const providerId = getAPIProvider()
+    try {
+      const response = await inner(input, { ...init, headers, body })
+      // Record success for health monitoring
+      try {
+        const { recordSuccess } = await import('../provider/health.js')
+        recordSuccess(providerId, Date.now() - start)
+      } catch {}
+      // Extract usage from response for cost tracking (non-streaming)
+      try {
+        const { recordProviderCost } = await import('../provider/costTracker.js')
+        // Clone response to read usage header without consuming body
+        const usageHeader = response.headers?.get('x-usage') || response.headers?.get('anthropic-usage')
+        if (usageHeader) {
+          const usage = JSON.parse(usageHeader)
+          const { estimateCostUSD } = await import('../provider/costTracker.js')
+          recordProviderCost({
+            providerId,
+            model: source || 'unknown',
+            inputTokens: usage.input_tokens || 0,
+            outputTokens: usage.output_tokens || 0,
+            estimatedCostUSD: estimateCostUSD(source || 'unknown', usage.input_tokens || 0, usage.output_tokens || 0),
+            timestamp: Date.now(),
+          })
+        }
+      } catch {}
+      return response
+    } catch (err) {
+      // Record failure for health monitoring
+      try {
+        const { recordFailure } = await import('../provider/health.js')
+        recordFailure(providerId, err instanceof Error ? err.message : String(err))
+      } catch {}
+      throw err
+    }
   }
 }

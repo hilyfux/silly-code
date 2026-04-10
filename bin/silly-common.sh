@@ -71,6 +71,7 @@ SILLY_FEATURES=(
   --feature=DAEMON
   --feature=WEB_BROWSER_TOOL
   --feature=PROACTIVE
+  --feature=EXPERIMENTAL_SKILL_SEARCH
   # Other
   --feature=TEAMMEM
 )

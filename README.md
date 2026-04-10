@@ -79,6 +79,14 @@ Tokens stored in `~/.silly-code/` with 0600 permissions.
 - macOS or Linux (Windows via WSL)
 - At least one subscription: ChatGPT Pro, GitHub Copilot, or Claude Pro/Max
 
+## Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/uninstall.sh | bash
+```
+
+Removes source, global commands, and optionally saved tokens. Also cleans up legacy installs.
+
 ## License
 
 MIT

@@ -118,6 +118,17 @@ case "${1:-}" in
     ok "All prerequisites met"
     exit 0
     ;;
+  uninstall)
+    echo ""
+    info "Running uninstaller..."
+    echo ""
+    if [ -f "$ROOT_DIR/uninstall.sh" ]; then
+      exec bash "$ROOT_DIR/uninstall.sh"
+    else
+      curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/uninstall.sh | bash
+    fi
+    exit 0
+    ;;
   help|--help|-h)
     echo ""
     echo -e "  ${B}silly-code${N} — Multi-Provider AI Coding Assistant"
@@ -128,6 +139,7 @@ case "${1:-}" in
     echo "    silly logout <prov>   Remove stored tokens"
     echo "    silly models          List available models"
     echo "    silly doctor          Check prerequisites"
+    echo "    silly uninstall       Remove silly-code completely"
     echo ""
     echo "  Launch:"
     echo "    sillyx                Start with Codex"

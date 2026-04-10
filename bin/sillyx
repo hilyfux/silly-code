@@ -33,4 +33,5 @@ if [ ! -f "$PATCHED" ]; then
   node "$ROOT_DIR/pipeline/patch.cjs" || { err "Patch build failed"; exit 1; }
 fi
 
+cd "$CALLER_DIR"
 exec node "$PATCHED" "$@"

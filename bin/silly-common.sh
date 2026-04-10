@@ -62,6 +62,12 @@ SILLY_FEATURES=(
   --feature=MCP_RICH_OUTPUT
   # Auto mode / classifier
   --feature=TRANSCRIPT_CLASSIFIER
+  # Newly implemented modules
+  --feature=BG_SESSIONS
+  --feature=FORK_SUBAGENT
+  --feature=MONITOR_TOOL
+  --feature=WORKFLOW_SCRIPTS
+  --feature=TEMPLATES
   # Other
   --feature=TEAMMEM
 )

@@ -22,3 +22,9 @@ export async function getTurnZeroSkillDiscovery(
 ): Promise<null> {
   return null
 }
+
+export async function collectSkillDiscoveryPrefetch(
+  _pending: unknown,
+): Promise<unknown[]> {
+  return []
+}

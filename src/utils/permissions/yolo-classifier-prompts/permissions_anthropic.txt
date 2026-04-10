@@ -1,0 +1,10 @@
+Default auto mode permission rules for Anthropic internal users:
+
+Inherits all external rules plus:
+
+ALLOW additionally:
+- Bash: internal tooling commands
+- Edit/Write: configuration files in standard locations
+
+DENY additionally:
+- Bash: production deployment commands without explicit approval

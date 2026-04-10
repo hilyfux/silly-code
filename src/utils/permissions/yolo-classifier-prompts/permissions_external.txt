@@ -1,0 +1,17 @@
+Default auto mode permission rules for external (non-Anthropic) users:
+
+ALLOW by default:
+- Read: all files
+- Glob: all patterns
+- Grep: all searches
+- Bash: read-only commands (ls, cat, head, tail, wc, find, grep, git status, git log, git diff, git blame)
+- Edit: files in current project directory
+- Write: files in current project directory
+
+DENY by default:
+- Bash: destructive commands (rm -rf, git push --force, git reset --hard)
+- Bash: network commands that send data (curl -X POST, wget --post-data)
+- Bash: package installation (npm install -g, pip install, brew install)
+- Bash: system modification commands (sudo, chmod 777, chown)
+- Write/Edit: files outside project directory
+- Any command that modifies git history destructively

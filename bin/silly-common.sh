@@ -60,6 +60,8 @@ SILLY_FEATURES=(
   --feature=CCR_REMOTE_SETUP
   # MCP
   --feature=MCP_RICH_OUTPUT
+  # Auto mode / classifier
+  --feature=TRANSCRIPT_CLASSIFIER
   # Other
   --feature=TEAMMEM
 )

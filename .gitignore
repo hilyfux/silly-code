@@ -8,3 +8,4 @@ dist/
 .playwright/
 .playwright-mcp/
 .claude/skills/knowledge-graph/data/
+.knowledge-graph/

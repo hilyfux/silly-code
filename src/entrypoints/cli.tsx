@@ -3,7 +3,7 @@ import { feature } from 'bun:bundle';
 // Define MACRO global for development (normally injected by bun build --define)
 if (typeof MACRO === 'undefined') {
   (globalThis as any).MACRO = {
-    VERSION: '2.1.87-dev',
+    VERSION: '0.1.0',
     BUILD_TIME: new Date().toISOString(),
     PACKAGE_URL: 'claude-code-source-snapshot',
     FEEDBACK_CHANNEL: 'github',

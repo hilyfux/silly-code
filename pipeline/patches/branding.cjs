@@ -4,7 +4,7 @@
  * Replaces upstream Anthropic branding with silly-code identity.
  */
 
-module.exports = function applyBranding({ patchAll }) {
+module.exports = function applyBranding({ patch, patchAll }) {
   patchAll('01-version',
     'VERSION:"2.1.100"',
     'VERSION:"2.1.100-silly"'
@@ -28,5 +28,11 @@ module.exports = function applyBranding({ patchAll }) {
   patchAll('05-issues',
     'ISSUES_EXPLAINER:"report the issue at https://github.com/anthropics/claude-code/issues"',
     'ISSUES_EXPLAINER:"report the issue at https://github.com/hilyfux/silly-code/issues"'
+  )
+
+  // Suppress upstream npm-to-native-installer deprecation banner
+  patch('06-no-npm-deprecation',
+    'Claude Code has switched from npm to native installer. Run `claude install` or see https://docs.anthropic.com/en/docs/claude-code/getting-started for more options.',
+    ''
   )
 }

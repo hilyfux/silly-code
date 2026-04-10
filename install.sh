@@ -95,13 +95,29 @@ fi
 cd "$INSTALL_DIR"
 ok "Source: $INSTALL_DIR"
 
-# ── Dependencies ─────────────────────────────────────────────
-info "Installing dependencies..."
-bun install --frozen-lockfile 2>/dev/null || bun install
-ok "Dependencies installed"
+# ── Fetch upstream binary ────────────────────────────────────
+UPSTREAM_CLI="pipeline/upstream/package/cli.js"
+if [ ! -f "$UPSTREAM_CLI" ]; then
+  info "Fetching upstream Claude Code binary..."
+  mkdir -p pipeline/upstream
+  TMP_TGZ=$(mktemp)
+  npm pack @anthropic-ai/claude-code --pack-destination "$(dirname "$TMP_TGZ")" >/dev/null 2>&1 || {
+    # Fallback: try the tgz in the repo root
+    if ls anthropic-ai-claude-code-*.tgz 1>/dev/null 2>&1; then
+      TMP_TGZ=$(ls anthropic-ai-claude-code-*.tgz | head -1)
+    else
+      err "Failed to fetch upstream binary. Run: npm pack @anthropic-ai/claude-code"
+    fi
+  }
+  tar xzf "$TMP_TGZ" -C pipeline/upstream 2>/dev/null
+  [ -f "$UPSTREAM_CLI" ] && ok "Upstream binary fetched" || err "Failed to extract upstream binary"
+  rm -f "$TMP_TGZ" 2>/dev/null
+fi
 
-# ── .env ─────────────────────────────────────────────────────
-[ ! -f .env ] && cp .env.example .env 2>/dev/null || true
+# ── Patch binary ─────────────────────────────────────────────
+info "Building patched binary..."
+node pipeline/patch.cjs || err "Patch build failed"
+ok "Patched binary ready"
 
 # ── Install commands ─────────────────────────────────────────
 mkdir -p "$BIN_DIR"

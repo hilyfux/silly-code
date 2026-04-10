@@ -168,6 +168,9 @@ import {
 } from './utils/plugins/loadPluginCommands.js'
 import memoize from 'lodash-es/memoize.js'
 import { isUsing3PServices, isClaudeAISubscriber } from './utils/auth.js'
+import { meetsAvailabilityRequirement } from './commands/registry/availability.js'
+import { buildBuiltinCommands } from './commands/registry/builtin.js'
+import { loadExternalCommands } from './commands/registry/external.js'
 import { isFirstPartyAnthropicBaseUrl } from './utils/model/providers.js'
 import env from './commands/env/index.js'
 import exit from './commands/exit/index.js'
@@ -254,7 +257,8 @@ export const INTERNAL_ONLY_COMMANDS = [
 
 // Declared as a function so that we don't run this until getCommands is called,
 // since underlying functions read from config, which can't be read at module initialization time
-const COMMANDS = memoize((): Command[] => [
+const COMMANDS = memoize((): Command[] =>
+  buildBuiltinCommands([
   addDir,
   advisor,
   agents,
@@ -343,7 +347,7 @@ const COMMANDS = memoize((): Command[] => [
   ...(process.env.USER_TYPE === 'ant' && !process.env.IS_DEMO
     ? INTERNAL_ONLY_COMMANDS
     : []),
-])
+  ]),
 
 export const builtInCommandNames = memoize(
   (): Set<string> =>
@@ -406,66 +410,18 @@ const getWorkflowCommands = feature('WORKFLOW_SCRIPTS')
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 /**
- * Filters commands by their declared `availability` (auth/provider requirement).
- * Commands without `availability` are treated as universal.
- * This runs before `isEnabled()` so that provider-gated commands are hidden
- * regardless of feature-flag state.
- *
- * Not memoized — auth state can change mid-session (e.g. after /login),
- * so this must be re-evaluated on every getCommands() call.
- */
-export function meetsAvailabilityRequirement(cmd: Command): boolean {
-  if (!cmd.availability) return true
-  for (const a of cmd.availability) {
-    switch (a) {
-      case 'claude-ai':
-        if (isClaudeAISubscriber()) return true
-        break
-      case 'console':
-        // Console API key user = direct 1P API customer (not 3P, not claude.ai).
-        // Excludes 3P (Bedrock/Vertex/Foundry) who don't set ANTHROPIC_BASE_URL
-        // and gateway users who proxy through a custom base URL.
-        if (
-          !isClaudeAISubscriber() &&
-          !isUsing3PServices() &&
-          isFirstPartyAnthropicBaseUrl()
-        )
-          return true
-        break
-      default: {
-        const _exhaustive: never = a
-        void _exhaustive
-        break
-      }
-    }
-  }
-  return false
-}
-
-/**
  * Loads all command sources (skills, plugins, workflows). Memoized by cwd
  * because loading is expensive (disk I/O, dynamic imports).
  */
 const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
-  const [
-    { skillDirCommands, pluginSkills, bundledSkills, builtinPluginSkills },
-    pluginCommands,
-    workflowCommands,
-  ] = await Promise.all([
-    getSkills(cwd),
-    getPluginCommands(),
-    getWorkflowCommands ? getWorkflowCommands(cwd) : Promise.resolve([]),
-  ])
+  const externalCommands = await loadExternalCommands(
+    cwd,
+    getSkills,
+    getPluginCommands,
+    getWorkflowCommands,
+  )
 
-  return [
-    ...bundledSkills,
-    ...builtinPluginSkills,
-    ...skillDirCommands,
-    ...workflowCommands,
-    ...pluginCommands,
-    ...pluginSkills,
-    ...COMMANDS(),
-  ]
+  return [...externalCommands, ...COMMANDS()]
 })
 
 /**

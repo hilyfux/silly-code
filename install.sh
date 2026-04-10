@@ -155,20 +155,64 @@ elif { true < /dev/tty; } 2>/dev/null; then
 fi
 
 if [ "$CAN_INTERACT" = true ]; then
+  SELECTED=0
+  OPTIONS=("GitHub Copilot     (GitHub Copilot subscription)"
+           "OpenAI Codex       (ChatGPT Pro subscription)"
+           "Claude             (Claude Pro/Max subscription)"
+           "Skip for now")
+  NUM_OPTIONS=${#OPTIONS[@]}
+
+  # Draw menu
+  _draw_menu() {
+    # Move cursor up to redraw
+    [ "$1" = "redraw" ] && printf '\033[%dA' "$NUM_OPTIONS"
+    for i in $(seq 0 $((NUM_OPTIONS - 1))); do
+      if [ "$i" -eq "$SELECTED" ]; then
+        echo -e "  ${G}▸ ${OPTIONS[$i]}${N}"
+      else
+        echo -e "    ${OPTIONS[$i]}"
+      fi
+    done
+  }
+
   echo -e "  ${B}Which provider do you want to use?${N}"
+  echo -e "  ${C}(↑↓ to select, Enter to confirm)${N}"
   echo ""
-  echo "    1) GitHub Copilot     (GitHub Copilot subscription)"
-  echo "    2) OpenAI Codex       (ChatGPT Pro subscription)"
-  echo "    3) Claude             (Claude Pro/Max subscription)"
-  echo "    s) Skip for now"
+  _draw_menu first
+
+  # Read arrow keys
+  while true; do
+    # Read single keypress (supports piped stdin via /dev/tty)
+    if [ -t 0 ]; then
+      IFS= read -rsn1 KEY
+    else
+      IFS= read -rsn1 KEY < /dev/tty
+    fi
+    case "$KEY" in
+      $'\x1b')  # Escape sequence (arrow keys)
+        if [ -t 0 ]; then read -rsn2 SEQ; else read -rsn2 SEQ < /dev/tty; fi
+        case "$SEQ" in
+          '[A') # Up
+            [ "$SELECTED" -gt 0 ] && SELECTED=$((SELECTED - 1))
+            _draw_menu redraw
+            ;;
+          '[B') # Down
+            [ "$SELECTED" -lt $((NUM_OPTIONS - 1)) ] && SELECTED=$((SELECTED + 1))
+            _draw_menu redraw
+            ;;
+        esac
+        ;;
+      '')  # Enter
+        break
+        ;;
+    esac
+  done
+
   echo ""
-  printf "  Choose [1/2/3/s]: "
-  if [ -t 0 ]; then read -r CHOICE; else read -r CHOICE < /dev/tty; fi
-  echo ""
-  case "$CHOICE" in
-    1) "$INSTALL_DIR/bin/silly" login copilot ;;
-    2) "$INSTALL_DIR/bin/silly" login codex ;;
-    3) "$INSTALL_DIR/bin/silly" login claude ;;
+  case "$SELECTED" in
+    0) "$INSTALL_DIR/bin/silly" login copilot ;;
+    1) "$INSTALL_DIR/bin/silly" login codex ;;
+    2) "$INSTALL_DIR/bin/silly" login claude ;;
     *) info "Skipped. Run 'silly login <provider>' anytime." ;;
   esac
   echo ""

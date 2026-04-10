@@ -55,11 +55,12 @@ done
 # ── Auth tokens ─────────────────────────────────────────────
 DATA_DIR="$HOME/.silly-code"
 if [ -d "$DATA_DIR" ]; then
-  if [ -e /dev/tty ]; then
+  CONFIRM="n"
+  CAN_ASK=false
+  if [ -t 0 ]; then CAN_ASK=true; elif (echo >/dev/tty) 2>/dev/null; then CAN_ASK=true; fi
+  if [ "$CAN_ASK" = true ]; then
     printf "  Remove saved tokens in %s? [y/N]: " "$DATA_DIR"
-    read -r CONFIRM < /dev/tty
-  else
-    CONFIRM="n"
+    if [ -t 0 ]; then read -r CONFIRM; else read -r CONFIRM < /dev/tty; fi
   fi
   if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
     rm -rf "$DATA_DIR"

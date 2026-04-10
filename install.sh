@@ -86,8 +86,20 @@ ok "Installation complete!"
 echo ""
 
 # ── Interactive login ────────────────────────────────────────
-# Read from /dev/tty so it works even when piped (curl | bash)
-if [ -e /dev/tty ]; then
+# Read from /dev/tty so it works even when piped (curl | bash).
+# In non-interactive environments (CI, sandbox), skip gracefully.
+# Detect if we can interact with user.
+# - stdin is tty: direct run (./install.sh)
+# - /dev/tty openable: piped run in real terminal (curl | bash)
+# - neither: CI/sandbox, skip interaction
+CAN_INTERACT=false
+if [ -t 0 ]; then
+  CAN_INTERACT=true
+elif (echo >/dev/tty) 2>/dev/null; then
+  CAN_INTERACT=true
+fi
+
+if [ "$CAN_INTERACT" = true ]; then
   echo -e "  ${B}Which provider do you want to use?${N}"
   echo ""
   echo "    1) GitHub Copilot     (GitHub Copilot subscription)"
@@ -96,14 +108,17 @@ if [ -e /dev/tty ]; then
   echo "    s) Skip for now"
   echo ""
   printf "  Choose [1/2/3/s]: "
-  read -r CHOICE < /dev/tty
+  if [ -t 0 ]; then read -r CHOICE; else read -r CHOICE < /dev/tty; fi
   echo ""
   case "$CHOICE" in
-    1) "$INSTALL_DIR/bin/silly" login copilot < /dev/tty ;;
-    2) "$INSTALL_DIR/bin/silly" login codex < /dev/tty ;;
-    3) "$INSTALL_DIR/bin/silly" login claude < /dev/tty ;;
+    1) "$INSTALL_DIR/bin/silly" login copilot ;;
+    2) "$INSTALL_DIR/bin/silly" login codex ;;
+    3) "$INSTALL_DIR/bin/silly" login claude ;;
     *) info "Skipped. Run 'silly login <provider>' anytime." ;;
   esac
+  echo ""
+else
+  info "Non-interactive mode — run 'silly login <provider>' after install."
   echo ""
 fi
 

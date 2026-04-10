@@ -16,10 +16,15 @@ if [ ! -f "$SILLY_CODE_DATA/copilot-oauth.json" ]; then
   echo ""
   echo "  sillyt — GitHub Copilot"
   echo ""
-  echo "  Not logged in. Run:"
-  echo "    ./bin/silly login copilot"
+  info "Not logged in. Starting login now..."
   echo ""
-  exit 1
+  "$ROOT_DIR/bin/silly" login copilot
+  # Re-check after login
+  if [ ! -f "$SILLY_CODE_DATA/copilot-oauth.json" ]; then
+    echo ""
+    warn "Login was cancelled. Run 'sillyt' again when ready."
+    exit 1
+  fi
 fi
 
 export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-sonnet-4}"

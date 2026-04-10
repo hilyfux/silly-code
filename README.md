@@ -10,25 +10,18 @@ sillye    → Claude (claude.ai)
 
 ## Quick Start
 
+One command. Installs everything, walks you through login, ready to use.
+
 ```bash
-# Install Bun
-curl -fsSL https://bun.sh/install | bash
+curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
+```
 
-# Clone and install
-git clone https://github.com/hilyfux/silly-code.git
-cd silly-code
-bun install
-cp .env.example .env
+After install, just run:
 
-# Login to your provider
-./bin/silly login copilot   # GitHub Copilot
-./bin/silly login codex     # ChatGPT Pro / Codex
-./bin/silly login claude    # Claude Pro/Max
-
-# Launch
-./bin/sillyt                # Copilot backend
-./bin/sillyx                # Codex backend
-./bin/sillye                # Claude backend
+```bash
+sillyt    # Copilot backend
+sillyx    # Codex backend
+sillye    # Claude backend
 ```
 
 ## Management

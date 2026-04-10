@@ -84,15 +84,34 @@ fi
 echo ""
 ok "Installation complete!"
 echo ""
-echo -e "  ${B}Get started:${N}"
-echo "    silly login copilot   # GitHub Copilot"
-echo "    silly login codex     # ChatGPT Pro / Codex"
-echo "    silly login claude    # Claude Pro/Max"
+
+# ── Interactive login ────────────────────────────────────────
+# Skip if stdin is not a terminal (piped install without -s)
+if [ -t 0 ]; then
+  echo -e "  ${B}Which provider do you want to use?${N}"
+  echo ""
+  echo "    1) GitHub Copilot     (GitHub Copilot subscription)"
+  echo "    2) OpenAI Codex       (ChatGPT Pro subscription)"
+  echo "    3) Claude             (Claude Pro/Max subscription)"
+  echo "    s) Skip for now"
+  echo ""
+  printf "  Choose [1/2/3/s]: "
+  read -r CHOICE
+  echo ""
+  case "$CHOICE" in
+    1) "$INSTALL_DIR/bin/silly" login copilot ;;
+    2) "$INSTALL_DIR/bin/silly" login codex ;;
+    3) "$INSTALL_DIR/bin/silly" login claude ;;
+    *) info "Skipped. Run 'silly login <provider>' anytime." ;;
+  esac
+  echo ""
+fi
+
+echo -e "  ${B}Launch:${N}"
+echo "    sillyt                # Copilot"
+echo "    sillyx                # Codex"
+echo "    sillye                # Claude"
 echo ""
-echo "    sillyt                # Launch with Copilot"
-echo "    sillyx                # Launch with Codex"
-echo "    sillye                # Launch with Claude"
-echo ""
-echo -e "  ${B}Update:${N}  curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
+echo -e "  ${B}Update:${N}    curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
 echo -e "  ${B}Uninstall:${N} rm -rf $INSTALL_DIR $BIN_DIR/silly $BIN_DIR/sillyt $BIN_DIR/sillyx $BIN_DIR/sillye"
 echo ""

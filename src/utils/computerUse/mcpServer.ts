@@ -1,3 +1,7 @@
+// DEAD CODE: This file imports @ant/computer-use-mcp which does not exist
+// in our build. It is only reachable via feature('CHICAGO_MCP') which is
+// never enabled. The live computer use path is sillyMcpServer.ts.
+// Keeping this file for reference only — do not enable CHICAGO_MCP.
 import {
   buildComputerUseTools,
   createComputerUseMcpServer,

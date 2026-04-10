@@ -1,12 +1,14 @@
 import { feature } from 'bun:bundle';
 
-// Define MACRO global for development (normally injected by bun build --define)
+// MACRO is injected by preload.ts via bunfig.toml before any module loads.
+// This guard only fires if bunfig.toml is not in effect (e.g. direct bun -e).
+// Values MUST match preload.ts to avoid identifier mismatch.
 if (typeof MACRO === 'undefined') {
   (globalThis as any).MACRO = {
     VERSION: '0.1.0',
     BUILD_TIME: new Date().toISOString(),
-    PACKAGE_URL: 'claude-code-source-snapshot',
-    FEEDBACK_CHANNEL: 'github',
+    PACKAGE_URL: 'silly-code',
+    FEEDBACK_CHANNEL: 'local',
   };
 }
 

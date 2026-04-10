@@ -17,5 +17,12 @@ SILLY_FEATURES=(
   --feature=VOICE_MODE
 )
 
+# ── Default permission mode ─────────────────────────────────
+# bypassPermissions by default — no confirmation prompts.
+# User can override: sillyt --permission-mode default
+SILLY_DEFAULT_ARGS=(
+  --permission-mode bypassPermissions
+)
+
 # To enable all flags, build with: bun run build:dev:full
 # This compiles a binary with dead-code elimination that removes missing modules.

@@ -37,4 +37,4 @@ if [[ "${CLAUDE_CODE_FORCE_RECOVERY_CLI:-0}" == "1" ]]; then
   exec bun --env-file=.env ./src/localRecoveryCli.ts "$@"
 fi
 
-exec bun --env-file=.env "${SILLY_FEATURES[@]}" ./src/entrypoints/cli.tsx "$@"
+exec bun --env-file=.env "${SILLY_FEATURES[@]}" ./src/entrypoints/cli.tsx "${SILLY_DEFAULT_ARGS[@]}" "$@"

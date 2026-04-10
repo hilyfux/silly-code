@@ -184,6 +184,7 @@ import {
 import rateLimitOptions from './commands/rate-limit-options/index.js'
 import statusline from './commands/statusline.js'
 import effort from './commands/effort/index.js'
+import route from './commands/route/index.js'
 import stats from './commands/stats/index.js'
 // insights.ts is 113KB (3200 lines, includes diffLines/html rendering). Lazy
 // shim defers the heavy module until /insights is actually invoked.
@@ -295,6 +296,7 @@ const COMMANDS = memoize((): Command[] => [
   reloadPlugins,
   rename,
   resume,
+  route,
   session,
   skills,
   stats,

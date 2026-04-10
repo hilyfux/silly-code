@@ -53,6 +53,8 @@ SILLY_FEATURES=(
   --feature=WORKFLOW_SCRIPTS
   --feature=TEMPLATES
   --feature=EXPERIMENTAL_SKILL_SEARCH
+  # Scheduling (required for /loop)
+  --feature=AGENT_TRIGGERS
 )
 
 # ── Experimental flags (opt-in via SILLY_EXPERIMENTAL=1) ────
@@ -71,7 +73,6 @@ if [[ "${SILLY_EXPERIMENTAL:-0}" == "1" ]]; then
     --feature=MONITOR_TOOL        # Process monitoring
     --feature=WEB_BROWSER_TOOL    # Web page fetching
     --feature=AGENT_MEMORY_SNAPSHOT
-    --feature=AGENT_TRIGGERS
     --feature=AGENT_TRIGGERS_REMOTE
     --feature=BRIDGE_MODE
     --feature=CCR_AUTO_CONNECT

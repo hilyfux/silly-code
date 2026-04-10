@@ -1,47 +1,64 @@
-# CLAUDE.md
+# CLAUDE.md — silly-code
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## What this project is
+
+silly-code is a multi-provider AI coding assistant built on top of the upstream Claude Code binary via a **patch pipeline**. It adds OpenAI Codex and GitHub Copilot as alternative providers while keeping full Claude support.
+
+**This is NOT a source-code fork.** We patch the upstream compiled binary (`cli.js`), not the source.
+
+## Architecture
+
+```
+upstream @anthropic-ai/claude-code (npm pack)
+    ↓
+pipeline/patch.cjs (orchestrator)
+    ├── patches/branding.cjs    (01-07a) URLs, names, mascot color
+    ├── patches/providers.cjs   (10-15)  OpenAI + Copilot adapters
+    ├── patches/identity.cjs    (60-65)  Provider-aware system prompts
+    ├── patches/equality.cjs    (20-21)  Tier bypass
+    ├── patches/privacy.cjs     (30-39)  Telemetry blocking
+    └── patches/platform.cjs    (50-51)  Context window tuning
+    ↓
+pipeline/build/cli-patched.js (output)
+```
 
 ## Common commands
 
 ```bash
-# Install dependencies
-bun install
+# Rebuild patched binary (the main build command)
+node pipeline/patch.cjs
 
-# Standard build (./cli)
-bun run build
+# Test providers
+CLAUDE_CODE_USE_OPENAI=1 SILLY_CODE_DATA=~/.silly-code node pipeline/build/cli-patched.js -p "hello"
+CLAUDE_CODE_USE_COPILOT=1 SILLY_CODE_DATA=~/.silly-code node pipeline/build/cli-patched.js -p "hello"
+node pipeline/build/cli-patched.js -p "hello"
 
-# Dev build (./cli-dev)
-bun run build:dev
+# OAuth login
+node pipeline/login.mjs codex
+node pipeline/login.mjs copilot
 
-# Dev build with all experimental features (./cli-dev)
-bun run build:dev:full
-
-# Compiled build (./dist/cli)
-bun run compile
-
-# Run from source without compiling
-bun run dev
+# Install (end user)
+curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
 ```
 
-Run the built binary with `./cli` or `./cli-dev`. Set `ANTHROPIC_API_KEY` in the environment or use OAuth via `./cli /login`.
+## Key directories
 
-## High-level architecture
+- `pipeline/` — Patch pipeline (the core of this project)
+- `pipeline/patches/` — Domain-specific patch modules
+- `pipeline/upstream/package/` — Upstream binary (gitignored)
+- `pipeline/build/` — Patched output (gitignored)
+- `bin/` — Launcher scripts (sillyx, sillyt, sillye, silly)
+- `skills/` — Project skills (upstream-upgrade workflow)
+- `src/` — Legacy v1 source code (reference only, NOT used at runtime)
 
-- **Entry point/UI loop**: src/entrypoints/cli.tsx bootstraps the CLI, with the main interactive UI in src/screens/REPL.tsx (Ink/React).
-- **Command/tool registries**: src/commands.ts registers slash commands; src/tools.ts registers tool implementations. Implementations live in src/commands/ and src/tools/.
-- **LLM query pipeline**: src/QueryEngine.ts coordinates message flow, tool use, and model invocation.
-- **Core subsystems**:
-  - src/services/: API clients, OAuth/MCP integration, analytics stubs
-  - src/state/: app state store
-  - src/hooks/: React hooks used by UI/flows
-  - src/components/: terminal UI components (Ink)
-  - src/skills/: skill system
-  - src/plugins/: plugin system
-  - src/bridge/: IDE bridge
-  - src/voice/: voice input
-  - src/tasks/: background task management
+## Skills
 
-## Build system
+- **`/upstream-upgrade`** — Workflow for upgrading when upstream Claude Code releases a new version. Includes patch failure recovery, variable mapping methodology, and testing protocol. Read `skills/upstream-upgrade.md`.
 
-- scripts/build.ts is the build script and feature-flag bundler. Feature flags are set via build arguments (e.g., `--feature=ULTRAPLAN`) or presets like `--feature-set=dev-full` (see README for details).
+## Rules
+
+- **Never modify `pipeline/upstream/`** — it's the pristine upstream binary
+- **Patch match strings are fragile** — they depend on exact minified code; upstream updates WILL break some
+- **Test all 3 providers** after any patch change
+- **Adapter functions are string-injected** — they run in the client factory scope, can't access outer variables
+- **`src/` is reference only** — runtime uses `pipeline/build/cli-patched.js`, not source code

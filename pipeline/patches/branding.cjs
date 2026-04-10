@@ -35,4 +35,17 @@ module.exports = function applyBranding({ patch, patchAll }) {
     'Claude Code has switched from npm to native installer. Run `claude install` or see https://docs.anthropic.com/en/docs/claude-code/getting-started for more options.',
     ''
   )
+
+  // Patch 07: Mascot color — warm red → vibrant teal/green (silly & cute)
+  // RGB theme colors (light/dark/dimmed/high-contrast)
+  patchAll('07-mascot-color',
+    'clawd_body:"rgb(215,119,87)"',
+    'clawd_body:"rgb(72,209,176)"'
+  )
+
+  // ANSI fallback colors
+  patchAll('07a-mascot-ansi',
+    'clawd_body:"ansi:redBright"',
+    'clawd_body:"ansi:greenBright"'
+  )
 }

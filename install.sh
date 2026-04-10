@@ -14,7 +14,12 @@ BIN_DIR="$HOME/.local/bin"
 REPO="https://github.com/hilyfux/silly-code.git"
 
 echo ""
-echo -e "  ${B}silly-code${N} installer"
+echo -e "  ${C}     ╭──────╮${N}"
+echo -e "  ${C}     │${G} ◕  ◕ ${C}│${N}"
+echo -e "  ${C}     │${G}  ▽   ${C}│${N}"
+echo -e "  ${C}     ╰─┬──┬─╯${N}"
+echo -e "  ${C}       │  │${N}    ${B}silly-code${N} installer"
+echo -e "  ${C}      ╱    ╲${N}"
 echo ""
 
 # ── Prerequisites ────────────────────────────────────────────
@@ -238,9 +243,9 @@ else
 fi
 
 echo -e "  ${B}Launch:${N}"
-echo "    sillyt                # Copilot"
-echo "    sillyx                # Codex"
-echo "    sillye                # Claude"
+echo -e "    ${G}sillyt${N}                # GitHub Copilot (GPT)"
+echo -e "    ${G}sillyx${N}                # OpenAI Codex (GPT)"
+echo -e "    ${G}sillye${N}                # Claude (Anthropic)"
 echo ""
 # ── Save dep check state ────────────────────────────────────
 DATA_DIR="${SILLY_CODE_DATA:-$HOME/.silly-code}"

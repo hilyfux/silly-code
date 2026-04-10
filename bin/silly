@@ -24,6 +24,18 @@ check_provider() {
   fi
 }
 
+check_claude() {
+  # Claude stores tokens in ~/.claude/.credentials.json (managed by TUI)
+  local cred="$HOME/.claude/.credentials.json"
+  if [ -f "$cred" ] || [ -f "$DATA_DIR/claude-oauth.json" ]; then
+    ok "Claude  (sillye): logged in"
+    return 0
+  else
+    warn "Claude  (sillye): not logged in"
+    return 1
+  fi
+}
+
 case "${1:-}" in
   status)
     echo ""
@@ -31,7 +43,7 @@ case "${1:-}" in
     echo ""
     check_provider "Codex   (sillyx)" "codex-oauth.json" || true
     check_provider "Copilot (sillyt)" "copilot-oauth.json" || true
-    check_provider "Claude  (sillye)" "claude-oauth.json" || true
+    check_claude || true
     echo ""
     exit 0
     ;;
@@ -120,14 +132,13 @@ case "${1:-}" in
     ;;
   uninstall)
     echo ""
-    info "Running uninstaller..."
-    echo ""
     if [ -f "$ROOT_DIR/uninstall.sh" ]; then
       exec bash "$ROOT_DIR/uninstall.sh"
     else
-      curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/uninstall.sh | bash
+      err "uninstall.sh not found. Re-install first or run:"
+      echo "  curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/uninstall.sh | bash"
+      exit 1
     fi
-    exit 0
     ;;
   help|--help|-h)
     echo ""
@@ -154,7 +165,7 @@ case "${1:-}" in
     echo ""
     check_provider "Codex   (sillyx)" "codex-oauth.json" || true
     check_provider "Copilot (sillyt)" "copilot-oauth.json" || true
-    check_provider "Claude  (sillye)" "claude-oauth.json" || true
+    check_claude || true
     echo ""
     echo "  Get started:"
     echo "    silly login codex     Login to ChatGPT Pro / Codex"

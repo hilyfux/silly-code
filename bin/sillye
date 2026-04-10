@@ -11,13 +11,15 @@ source "$ROOT_DIR/bin/silly-common.sh"
 export SILLY_CODE_DATA="${SILLY_CODE_DATA:-$HOME/.silly-code}"
 mkdir -p "$SILLY_CODE_DATA"
 
-if [ ! -f "$SILLY_CODE_DATA/claude-oauth.json" ]; then
+if [ ! -f "$SILLY_CODE_DATA/claude-oauth.json" ] && [ ! -f "$HOME/.claude/.credentials.json" ]; then
   echo ""
   echo "  sillye — Claude"
   echo ""
-  info "Not logged in. Launching TUI for login..."
+  info "Not logged in. The TUI will open — type /login to sign in."
   echo ""
-  # Claude login happens inside the TUI via /login command
+  # Claude login happens inside the TUI via /login command.
+  # Unlike Codex/Copilot, there's no standalone CLI login flow,
+  # so we proceed directly to the TUI.
 fi
 
 # Model defaults
@@ -28,7 +30,7 @@ export ANTHROPIC_SMALL_FAST_MODEL="${ANTHROPIC_SMALL_FAST_MODEL:-claude-haiku-4-
 export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 
 if [[ "${CLAUDE_CODE_FORCE_RECOVERY_CLI:-0}" == "1" ]]; then
-  exec bun --env-file=.env ./src/localRecoveryCli.ts "$@"
+  exec bun --env-file=.env ./src/localRecoveryCli.ts ${SILLY_DEFAULT_ARGS[@]+"${SILLY_DEFAULT_ARGS[@]}"} "$@"
 fi
 
-exec bun --env-file=.env "${SILLY_FEATURES[@]}" ./src/entrypoints/cli.tsx "${SILLY_DEFAULT_ARGS[@]}" "$@"
+exec bun --env-file=.env ${SILLY_FEATURES[@]+"${SILLY_FEATURES[@]}"} ./src/entrypoints/cli.tsx ${SILLY_DEFAULT_ARGS[@]+"${SILLY_DEFAULT_ARGS[@]}"} "$@"

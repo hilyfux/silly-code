@@ -32,17 +32,29 @@ fi
 
 # ── ripgrep (required for file search) ───────────────────────
 if ! command -v rg >/dev/null 2>&1; then
-  info "Installing ripgrep..."
-  if command -v brew >/dev/null 2>&1; then
-    brew install ripgrep 2>/dev/null
-  elif command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get install -y ripgrep 2>/dev/null || true
-  elif command -v pacman >/dev/null 2>&1; then
-    sudo pacman -S --noconfirm ripgrep 2>/dev/null || true
+  info "Installing ripgrep to $BIN_DIR..."
+  RG_VERSION="14.1.1"
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) RG_ARCH="aarch64-apple-darwin" ;;
+    Darwin-x86_64) RG_ARCH="x86_64-apple-darwin" ;;
+    Linux-x86_64) RG_ARCH="x86_64-unknown-linux-musl" ;;
+    Linux-aarch64) RG_ARCH="aarch64-unknown-linux-gnu" ;;
+    *) RG_ARCH="" ;;
+  esac
+  if [ -n "$RG_ARCH" ]; then
+    RG_URL="https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-${RG_ARCH}.tar.gz"
+    mkdir -p "$BIN_DIR"
+    if curl -fsSL "$RG_URL" | tar xz -C /tmp "ripgrep-${RG_VERSION}-${RG_ARCH}/rg" 2>/dev/null; then
+      mv "/tmp/ripgrep-${RG_VERSION}-${RG_ARCH}/rg" "$BIN_DIR/rg"
+      chmod +x "$BIN_DIR/rg"
+      rm -rf "/tmp/ripgrep-${RG_VERSION}-${RG_ARCH}"
+      ok "ripgrep ${RG_VERSION} installed to $BIN_DIR/rg"
+    else
+      warn "Failed to download ripgrep. Install manually: https://github.com/BurntSushi/ripgrep#installation"
+    fi
   else
-    warn "Could not auto-install ripgrep. Install it manually: https://github.com/BurntSushi/ripgrep#installation"
+    warn "Unknown platform $(uname -s)-$(uname -m). Install ripgrep manually."
   fi
-  command -v rg >/dev/null 2>&1 && ok "ripgrep: $(rg --version | head -1)" || warn "ripgrep not found — file search will be slow"
 else
   ok "ripgrep: $(rg --version | head -1)"
 fi
@@ -52,13 +64,25 @@ if [ -d "$INSTALL_DIR/.git" ]; then
   info "Updating..."
   cd "$INSTALL_DIR"
   git pull --ff-only origin main 2>/dev/null || {
-    warn "Pull failed, re-cloning..."
-    cd / && rm -rf "$INSTALL_DIR"
-    git clone --depth 1 "$REPO" "$INSTALL_DIR"
+    warn "Pull failed (local changes or conflict). Doing a clean re-install..."
+    cd /
+    if [ -f "$INSTALL_DIR/bin/silly" ]; then
+      rm -rf "$INSTALL_DIR"
+      git clone --depth 1 "$REPO" "$INSTALL_DIR"
+    else
+      err "$INSTALL_DIR exists but is not a silly-code install. Remove it manually."
+    fi
   }
 else
   info "Cloning silly-code..."
-  rm -rf "$INSTALL_DIR"
+  if [ -d "$INSTALL_DIR" ]; then
+    # Safety: only remove if it looks like a previous silly-code install or is empty
+    if [ -f "$INSTALL_DIR/package.json" ] || [ -f "$INSTALL_DIR/bin/silly" ] || [ -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+      rm -rf "$INSTALL_DIR"
+    else
+      err "$INSTALL_DIR exists and is not a silly-code install. Remove it manually or set SILLY_CODE_HOME to a different path."
+    fi
+  fi
   git clone --depth 1 "$REPO" "$INSTALL_DIR"
 fi
 cd "$INSTALL_DIR"
@@ -86,8 +110,15 @@ ok "Commands: $BIN_DIR/{silly,sillyt,sillyx,sillye}"
 # ── PATH check ───────────────────────────────────────────────
 if ! echo "$PATH" | tr ':' '\n' | grep -q "^$BIN_DIR$"; then
   SHELL_RC=""
-  [ -f "$HOME/.zshrc" ] && SHELL_RC="$HOME/.zshrc"
-  [ -f "$HOME/.bashrc" ] && SHELL_RC="$HOME/.bashrc"
+  case "${SHELL:-}" in
+    */zsh)  [ -f "$HOME/.zshrc" ]  && SHELL_RC="$HOME/.zshrc" ;;
+    */bash) [ -f "$HOME/.bashrc" ] && SHELL_RC="$HOME/.bashrc" ;;
+  esac
+  # Fallback: try both if $SHELL didn't match
+  if [ -z "$SHELL_RC" ]; then
+    [ -f "$HOME/.zshrc" ]  && SHELL_RC="$HOME/.zshrc"
+    [ -z "$SHELL_RC" ] && [ -f "$HOME/.bashrc" ] && SHELL_RC="$HOME/.bashrc"
+  fi
   if [ -n "$SHELL_RC" ]; then
     echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$SHELL_RC"
     ok "Added $BIN_DIR to PATH in $SHELL_RC"
@@ -112,7 +143,7 @@ echo ""
 CAN_INTERACT=false
 if [ -t 0 ]; then
   CAN_INTERACT=true
-elif (echo >/dev/tty) 2>/dev/null; then
+elif { true < /dev/tty; } 2>/dev/null; then
   CAN_INTERACT=true
 fi
 

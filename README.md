@@ -28,9 +28,11 @@ sillye    # Claude backend
 
 ```bash
 silly status          # Show all provider auth status
+silly login <prov>    # Login to a provider (codex/copilot/claude)
+silly logout <prov>   # Remove stored tokens
 silly models          # List available models per provider
 silly doctor          # Check prerequisites
-silly logout <prov>   # Remove stored tokens
+silly uninstall       # Remove silly-code completely
 ```
 
 ## Models & Context Windows
@@ -76,6 +78,7 @@ Tokens stored in `~/.silly-code/` with 0600 permissions.
 ## Requirements
 
 - [Bun](https://bun.sh) >= 1.3.11
+- [ripgrep](https://github.com/BurntSushi/ripgrep) (auto-installed by installer)
 - macOS or Linux (Windows via WSL)
 - At least one subscription: ChatGPT Pro, GitHub Copilot, or Claude Pro/Max
 

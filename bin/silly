@@ -51,32 +51,19 @@ case "${1:-}" in
     PROVIDER="${2:-}"
     case "$PROVIDER" in
       codex)
-        info "Logging in to Codex (OpenAI)..."
-        bun --preload ./preload.ts -e "
-          import { runCodexOAuthFlow } from './src/services/oauth/codex-client.js';
-          import { writeFileSync, mkdirSync } from 'fs';
-          import { join } from 'path';
-          const tokens = await runCodexOAuthFlow(async (url) => {
-            console.log('\n  Open this URL to sign in:\n');
-            console.log('  ' + url + '\n');
-            console.log('  Waiting for browser callback...');
-          });
-          const dataDir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '', '.silly-code');
-          mkdirSync(dataDir, { recursive: true });
-          writeFileSync(join(dataDir, 'codex-oauth.json'), JSON.stringify(tokens, null, 2), { mode: 0o600 });
-          console.log('\n  Codex login successful!\n');
-        "
+        node "$ROOT_DIR/pipeline/login.mjs" codex
         ;;
       copilot)
-        info "Logging in to Copilot (GitHub)..."
-        bun --preload ./preload.ts -e "
-          import { loginCopilot } from './src/services/oauth/copilot-client.js';
-          await loginCopilot();
-        "
+        node "$ROOT_DIR/pipeline/login.mjs" copilot
         ;;
       claude)
         info "Launching Silly Code — use /login inside the TUI to sign in to claude.ai"
-        exec bun --env-file=.env ./src/entrypoints/cli.tsx
+        PATCHED="$ROOT_DIR/pipeline/build/cli-patched.js"
+        if [ ! -f "$PATCHED" ]; then
+          info "Building patched binary (first run)..."
+          node "$ROOT_DIR/pipeline/patch.cjs" || { err "Patch build failed"; exit 1; }
+        fi
+        exec node "$PATCHED"
         ;;
       "")
         echo "Usage: silly login <provider>"
@@ -135,10 +122,11 @@ case "${1:-}" in
 
     # Runtime
     MISSING=false
-    command -v bun >/dev/null 2>&1 && ok "Bun: $(bun --version)" || { err "Bun: not found"; MISSING=true; }
+    command -v node >/dev/null 2>&1 && ok "Node: $(node --version)" || { err "Node: not found"; MISSING=true; }
     command -v git >/dev/null 2>&1 && ok "Git: $(git --version | head -1)" || warn "Git: not found (optional)"
     command -v rg >/dev/null 2>&1 && ok "ripgrep: $(rg --version | head -1)" || warn "ripgrep: not found (file search will be slow)"
-    [ -f "$ROOT_DIR/src/entrypoints/cli.tsx" ] && ok "Source: found" || { err "Source: missing"; MISSING=true; }
+    PATCHED="$ROOT_DIR/pipeline/build/cli-patched.js"
+    [ -f "$PATCHED" ] && ok "Patched binary: found" || { err "Patched binary: missing (run: node pipeline/patch.cjs)"; MISSING=true; }
 
     # Provider auth
     echo ""
@@ -148,14 +136,7 @@ case "${1:-}" in
 
     # Defaults
     echo ""
-    source "$ROOT_DIR/bin/silly-common.sh" 2>/dev/null
-    ok "Stable flags: ${#SILLY_FEATURES[@]}"
-    if [[ "${SILLY_EXPERIMENTAL:-0}" == "1" ]]; then
-      warn "Experimental mode: ON"
-    else
-      ok "Experimental mode: off (set SILLY_EXPERIMENTAL=1 to enable)"
-    fi
-    ok "Permission mode: bypassPermissions (default)"
+    ok "Mode: patched binary (upstream + silly-code patches)"
 
     # AutoDream / memory
     MEMDIR="$HOME/.claude/projects"
@@ -211,13 +192,11 @@ case "${1:-}" in
     # ── Check dependencies ──
     info "Checking dependencies..."
 
-    # Bun
-    WANT_BUN=$(python3 -c "import json; print(json.load(open('$DEPS_JSON'))['deps']['bun']['version'])")
-    if command -v bun >/dev/null 2>&1; then
-      CUR_BUN=$(bun --version 2>/dev/null || echo "0.0.0")
-      ok "Bun: $CUR_BUN (want >= $WANT_BUN)"
+    # Node
+    if command -v node >/dev/null 2>&1; then
+      ok "Node: $(node --version)"
     else
-      warn "Bun: not installed (required >= $WANT_BUN)"
+      warn "Node: not installed (required)"
     fi
 
     # ripgrep
@@ -259,9 +238,9 @@ case "${1:-}" in
         cd "$ROOT_DIR"
         if git pull --ff-only origin main 2>/dev/null; then
           ok "Updated to $(git rev-parse --short HEAD)"
-          info "Installing dependencies..."
-          bun install --frozen-lockfile 2>/dev/null || bun install
-          ok "Dependencies updated"
+          info "Rebuilding patched binary..."
+          node "$ROOT_DIR/pipeline/patch.cjs" || warn "Patch rebuild failed"
+          ok "Binary updated"
         else
           warn "Pull failed — run 'silly update apply' again or reinstall"
         fi

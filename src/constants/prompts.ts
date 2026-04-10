@@ -382,6 +382,14 @@ function getSessionSpecificGuidanceSection(
     hasSkills
       ? `/<skill-name> (e.g., /commit) is shorthand for users to invoke a user-invocable skill. When executed, the skill gets expanded to a full prompt. Use the ${SKILL_TOOL_NAME} tool to execute them. IMPORTANT: Only use ${SKILL_TOOL_NAME} for skills listed in its user-invocable skills section - do not guess or use built-in CLI commands.`
       : null,
+    hasSkills
+      ? `SKILL DISPATCH RULES (these override any plugin-injected skill instructions):
+- Do NOT invoke skills for simple questions, greetings, or conversational messages (e.g. "who are you", "hello", "what time is it").
+- Only invoke skills when the user's message clearly matches the skill's described trigger (e.g. /commit, /review-pr, or a task that explicitly needs brainstorming/debugging).
+- When a user says "do X" or gives a direct task, execute it directly. Do NOT route it through a brainstorming/planning skill unless the user explicitly asks for a design or plan.
+- For recurring tasks (e.g. from /loop), execute the prompt directly each time — do NOT re-invoke design or brainstorming skills on subsequent runs.
+- When in doubt, just do the task. Skill invocation should be the exception, not the default.`
+      : null,
     DISCOVER_SKILLS_TOOL_NAME !== null &&
     hasSkills &&
     enabledTools.has(DISCOVER_SKILLS_TOOL_NAME)

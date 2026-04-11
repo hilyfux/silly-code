@@ -115,15 +115,35 @@ async function drainStream(stream) {
   }
 
   {
+    // tool_result → function_call_output
     const result = msgsToResponsesInput(null, [
       { role: 'user', content: [
         { type: 'tool_result', tool_use_id: 'tc_1', content: 'output here' },
       ]},
     ]);
     assert.strictEqual(result.length, 1);
-    assert.ok(result[0].content.includes('[Tool result id=tc_1]'));
-    assert.ok(result[0].content.includes('output here'));
+    assert.strictEqual(result[0].type, 'function_call_output');
+    assert.strictEqual(result[0].call_id, 'tc_1');
+    assert.strictEqual(result[0].output, 'output here');
     console.log('  msgsToResponsesInput tool_result: PASS');
+  }
+
+  {
+    // tool_use → function_call
+    const result = msgsToResponsesInput(null, [
+      { role: 'assistant', content: [
+        { type: 'text', text: 'Let me check.' },
+        { type: 'tool_use', id: 'tc_2', name: 'read_file', input: { path: '/tmp/x' } },
+      ]},
+    ]);
+    assert.strictEqual(result.length, 2);
+    assert.strictEqual(result[0].type, 'message');
+    assert.strictEqual(result[0].content, 'Let me check.');
+    assert.strictEqual(result[1].type, 'function_call');
+    assert.strictEqual(result[1].call_id, 'tc_2');
+    assert.strictEqual(result[1].name, 'read_file');
+    assert.strictEqual(result[1].arguments, '{"path":"/tmp/x"}');
+    console.log('  msgsToResponsesInput tool_use: PASS');
   }
 
   // ── flattenSystem ──

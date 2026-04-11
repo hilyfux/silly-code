@@ -86,14 +86,22 @@ function msgsToResponsesInput(system, messages) {
   for(const m of (messages||[])){
     if(typeof m.content==='string'){_parts.push({type:'message',role:m.role==='assistant'?'assistant':'user',content:m.content});continue;}
     if(!Array.isArray(m.content)){_parts.push({type:'message',role:m.role==='user'?'user':'assistant',content:String(m.content||'')});continue;}
-    // Flatten content blocks into text (Responses API input only accepts message items)
-    const _text=m.content.map(p=>{
-      if(p.type==='text')return p.text;
-      if(p.type==='tool_result')return '[Tool result id='+p.tool_use_id+']: '+(typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join(''));
-      if(p.type==='tool_use')return '[Tool call '+p.name+': '+JSON.stringify(p.input)+']';
-      return JSON.stringify(p);
-    }).join('');
-    _parts.push({type:'message',role:m.role==='user'?'user':'assistant',content:_text});
+    // Split content blocks: text→message, tool_use→function_call, tool_result→function_call_output
+    const _texts=[];
+    for(const p of m.content){
+      if(p.type==='text'){_texts.push(p.text);}
+      else if(p.type==='tool_use'){
+        if(_texts.length>0){_parts.push({type:'message',role:'assistant',content:_texts.join('')});_texts.length=0;}
+        _parts.push({type:'function_call',call_id:p.id||'tc_'+Date.now(),name:p.name,arguments:JSON.stringify(p.input||{})});
+      }
+      else if(p.type==='tool_result'){
+        if(_texts.length>0){_parts.push({type:'message',role:m.role==='user'?'user':'assistant',content:_texts.join('')});_texts.length=0;}
+        const _c=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
+        _parts.push({type:'function_call_output',call_id:p.tool_use_id,output:_c});
+      }
+      else{_texts.push(JSON.stringify(p));}
+    }
+    if(_texts.length>0){_parts.push({type:'message',role:m.role==='user'?'user':'assistant',content:_texts.join('')});}
   }
   return _parts;
 }
@@ -214,7 +222,8 @@ function makeResponsesSseStream(oaiResp, model) {
         if(_t==='response.completed'){
           if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});}
           const _u=_ev.response?.usage||{};
-          const _sr='end_turn';
+          const _hasTools=(_ev.response?.output||[]).some(o=>o.type==='function_call');
+          const _sr=_ev.response?.status==='incomplete'?'max_tokens':_hasTools?'tool_use':'end_turn';
           _send('message_delta',{type:'message_delta',delta:{stop_reason:_sr},usage:{output_tokens:_u.output_tokens||_outTok}});
           _send('message_stop',{type:'message_stop'});ctrl.close();return;
         }

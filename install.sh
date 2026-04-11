@@ -24,22 +24,14 @@ echo ""
 
 # ── Prerequisites ────────────────────────────────────────────
 command -v git >/dev/null 2>&1 || err "git is required. Install it first."
-
-if ! command -v bun >/dev/null 2>&1; then
-  info "Installing Bun..."
-  curl -fsSL https://bun.sh/install | bash
-  export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
-  command -v bun >/dev/null 2>&1 || err "Bun installation failed."
-  ok "Bun installed: $(bun --version)"
-else
-  ok "Bun: $(bun --version)"
-fi
+command -v node >/dev/null 2>&1 || err "Node.js >= 20 is required. Install it first."
+ok "Node: $(node --version)"
 
 # ── ripgrep (required for file search) ───────────────────────
 # Version is read from deps.json if available (post-clone), else fallback to hardcoded
 _read_rg_version() {
   if [ -f "$INSTALL_DIR/deps.json" ]; then
-    python3 -c "import json; print(json.load(open('$INSTALL_DIR/deps.json'))['deps']['ripgrep']['version'])" 2>/dev/null
+    node -e "console.log(require('$INSTALL_DIR/deps.json').deps.ripgrep.version)" 2>/dev/null
   fi
 }
 if ! command -v rg >/dev/null 2>&1; then

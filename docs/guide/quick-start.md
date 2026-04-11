@@ -1,64 +1,44 @@
 # 快速开始
 
-## 1. 安装 Bun
+## 1. 一键安装
 
 ```bash
-# macOS / Linux
-curl -fsSL https://bun.sh/install | bash
-
-# macOS (Homebrew)
-brew install bun
-
-# Windows (PowerShell)
-powershell -c "irm bun.sh/install.ps1 | iex"
+curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
 ```
 
-> 精简版 Linux 如提示 `unzip is required`，先运行 `apt update && apt install -y unzip`
+需要 **Node.js >= 20** 和 **git**。安装脚本会自动克隆代码、获取上游二进制、构建补丁。
 
-## 2. 安装依赖并配置
+## 2. 登录
 
 ```bash
-bun install
-cp .env.example .env
-# 编辑 .env 填入你的 API Key，详见「环境变量」文档
+silly login codex      # ChatGPT Pro / Codex (推荐)
+silly login copilot    # GitHub Copilot
+silly login claude     # Claude Pro/Max
 ```
-
-环境变量的完整说明请参考 [环境变量配置](./env-vars.md)。
 
 ## 3. 启动
 
-### macOS / Linux
-
 ```bash
-./bin/claude-haha                          # 交互 TUI 模式
-./bin/claude-haha -p "your prompt here"    # 无头模式
-./bin/claude-haha --help                   # 查看所有选项
+sillyx                 # OpenAI Codex
+sillyt                 # GitHub Copilot
+sillye                 # Claude
 ```
 
-### Windows
-
-> **前置要求**：必须安装 [Git for Windows](https://git-scm.com/download/win)
-
-```powershell
-# PowerShell / cmd 直接调用 Bun
-bun --env-file=.env ./src/entrypoints/cli.tsx
-
-# 或在 Git Bash 中运行
-./bin/claude-haha
-```
-
-## 4. 全局使用（可选）
-
-将 `bin/` 加入 PATH 后可在任意目录启动，详见 [全局使用指南](./global-usage.md)：
+## 4. 管理
 
 ```bash
-export PATH="$HOME/path/to/claude-code-haha/bin:$PATH"
+silly status           # 查看登录状态
+silly models           # 查看可用模型
+silly doctor           # 检查环境
+silly update           # 检查更新
+silly update apply     # 应用更新
+silly uninstall        # 完全卸载
 ```
 
 ## 5. 降级模式
 
-如果 Ink TUI 出现问题，可以使用降级 Recovery CLI 模式：
+如果 TUI 出现问题：
 
 ```bash
-CLAUDE_CODE_FORCE_RECOVERY_CLI=1 ./bin/claude-haha
+CLAUDE_CODE_FORCE_RECOVERY_CLI=1 sillyx
 ```

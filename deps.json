@@ -8,13 +8,18 @@
     "checkInterval": 86400
   },
   "deps": {
-    "bun": {
-      "version": "1.3.11",
-      "versionConstraint": ">=1.3.11",
-      "installUrl": "https://bun.sh/install",
-      "versionCmd": "bun --version",
+    "node": {
+      "version": "20.0.0",
+      "versionConstraint": ">=20",
+      "versionCmd": "node --version",
       "required": true,
       "description": "JavaScript runtime"
+    },
+    "upstream": {
+      "version": "2.1.101",
+      "package": "@anthropic-ai/claude-code",
+      "required": true,
+      "description": "Upstream Claude Code binary — MATCH constants are validated against this version"
     },
     "ripgrep": {
       "version": "14.1.1",

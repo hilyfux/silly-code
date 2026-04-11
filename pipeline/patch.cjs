@@ -16,6 +16,23 @@ const path = require('path')
 const INPUT = process.argv[2] || path.join(__dirname, 'upstream/package/cli.js')
 const OUTPUT = process.argv[3] || path.join(__dirname, 'build/cli-patched.js')
 
+// ── Upstream version guard ──────────────────────────────────
+const depsPath = path.join(__dirname, '..', 'deps.json')
+if (fs.existsSync(depsPath)) {
+  const deps = JSON.parse(fs.readFileSync(depsPath, 'utf8'))
+  const expectedVer = deps.deps?.upstream?.version
+  const upstreamPkg = path.join(__dirname, 'upstream/package/package.json')
+  if (expectedVer && fs.existsSync(upstreamPkg)) {
+    const actualVer = JSON.parse(fs.readFileSync(upstreamPkg, 'utf8')).version
+    if (actualVer !== expectedVer) {
+      console.error(`\n  ✗ Upstream version mismatch: expected ${expectedVer}, got ${actualVer}`)
+      console.error(`    MATCH constants may be invalid. Run: node pipeline/upgrade.cjs fetch`)
+      console.error(`    Or update deps.json upstream.version to ${actualVer}\n`)
+      process.exit(1)
+    }
+  }
+}
+
 // Ensure output directory exists
 fs.mkdirSync(path.dirname(OUTPUT), { recursive: true })
 
@@ -66,9 +83,6 @@ for (const mod of modules) {
   mod(helpers)
 }
 
-// ── Write output ─────────────────────────────────────────────
-fs.writeFileSync(OUTPUT, src)
-
 // ── Report ───────────────────────────────────────────────────
 console.log('\n  silly-code patch pipeline\n')
 const ok = results.filter(r => r.status === 'OK').length
@@ -80,6 +94,12 @@ for (const r of results) {
   console.log(`  ${icon} ${r.name}${extra}${reason}`)
 }
 console.log(`\n  ${ok} OK, ${fail} FAIL`)
-console.log(`  Output: ${OUTPUT}\n`)
 
-if (fail > 0) process.exit(1)
+// ── Atomic write: only overwrite output if ALL patches passed ─
+if (fail > 0) {
+  console.log(`  Output: NOT written (${fail} patches failed)\n`)
+  process.exit(1)
+}
+fs.writeFileSync(OUTPUT + '.tmp', src)
+fs.renameSync(OUTPUT + '.tmp', OUTPUT)
+console.log(`  Output: ${OUTPUT}\n`)

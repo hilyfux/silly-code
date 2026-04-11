@@ -89,7 +89,8 @@ async function _openaiAdapter(url, init) {
     const _om = mapModel(_b.model, _codexModelTable);
     const _sysText = flattenSystem(_b.system);
     const _input = msgsToResponsesInput(null, _b.messages);
-    const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: true };
+    const _stream = !!_b.stream;
+    const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: _stream };
     if (_b.tools && _b.tools.length) {
       _req.tools = _b.tools.map(t => ({ type: 'function', name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } }));
     }
@@ -99,7 +100,21 @@ async function _openaiAdapter(url, init) {
       body: JSON.stringify(_req),
     });
     if (!_r.ok) { const _e = await _r.text(); throw new Error('Codex API error ' + _r.status + ': ' + _e); }
-    return new Response(makeResponsesSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
+    if (_stream) return new Response(makeResponsesSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
+    // Non-streaming: Responses API returns {output: [{type:'message', content:[{type:'output_text', text:'...'}]}]}
+    const _rd = await _r.json();
+    const _ct = [];
+    for (const item of (_rd.output || [])) {
+      if (item.type === 'message') {
+        for (const c of (item.content || [])) {
+          if (c.type === 'output_text') _ct.push({ type: 'text', text: c.text });
+        }
+      } else if (item.type === 'function_call') {
+        let _i = {}; try { _i = JSON.parse(item.arguments || '{}') } catch {}
+        _ct.push({ type: 'tool_use', id: item.call_id || 'tc_' + Date.now(), name: item.name, input: _i });
+      }
+    }
+    return new Response(JSON.stringify({ id: 'msg_' + (_rd.id || Date.now()), type: 'message', role: 'assistant', content: _ct, model: _b.model, stop_reason: _rd.status === 'incomplete' ? 'max_tokens' : _ct.some(c => c.type === 'tool_use') ? 'tool_use' : 'end_turn', usage: { input_tokens: _rd.usage?.input_tokens || 0, output_tokens: _rd.usage?.output_tokens || 0 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } else {
     // API key → Chat Completions
     const _om = mapModel(_b.model, _oaiModelTable);

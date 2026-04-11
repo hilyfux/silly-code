@@ -57,11 +57,9 @@ function patchAll(name, find, replace) {
 const helpers = { patch, patchAll }
 const modules = [
   require('./patches/branding.cjs'),
-  require('./patches/providers.cjs'),
-  require('./patches/identity.cjs'),
+  require('./patches/provider-engine.cjs'),
   require('./patches/equality.cjs'),
   require('./patches/privacy.cjs'),
-  require('./patches/platform.cjs'),
 ]
 
 for (const mod of modules) {

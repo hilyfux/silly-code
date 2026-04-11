@@ -66,7 +66,7 @@ async function _openaiAuth() {
               try { writeFileSync(join(_dir, 'codex-auth.json'), JSON.stringify(_openaiData, null, 2)); } catch {}
             }
           } catch (e) { console.error('[silly] OpenAI token refresh failed:', e.message || e); }
-          _openaiData._refreshP = null;
+          finally { _openaiData._refreshP = null; }
         })();
       }
       await _openaiData._refreshP;

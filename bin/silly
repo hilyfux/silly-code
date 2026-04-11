@@ -63,6 +63,7 @@ case "${1:-}" in
       "")
         echo "Usage: silly login <provider>"
         echo "Providers: codex, copilot, claude"
+        exit 1
         ;;
       *)
         err "Unknown provider: $PROVIDER"

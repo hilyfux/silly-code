@@ -136,7 +136,7 @@ if ! echo "$PATH" | tr ':' '\n' | grep -q "^$BIN_DIR$"; then
     [ -f "$HOME/.zshrc" ]  && SHELL_RC="$HOME/.zshrc"
     [ -z "$SHELL_RC" ] && [ -f "$HOME/.bashrc" ] && SHELL_RC="$HOME/.bashrc"
   fi
-  if [ -n "$SHELL_RC" ]; then
+  if [ -n "$SHELL_RC" ] && ! grep -qF "$BIN_DIR" "$SHELL_RC" 2>/dev/null; then
     echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$SHELL_RC"
     ok "Added $BIN_DIR to PATH in $SHELL_RC"
     warn "Run: source $SHELL_RC  (or restart terminal)"

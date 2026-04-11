@@ -12,8 +12,8 @@ module.exports = function applyIdentity({ patch }) {
   // Patch 60: G0 — model display name for TUI title bar
   // Prepend provider-aware branch before the existing Claude model mapping
   patch('60-model-display-name',
-    'function G0(q){if(dq()==="foundry")return;',
-    'function G0(q){' +
+    'function y0(q){if(dq()==="foundry")return;',
+    'function y0(q){' +
     'if(dq()==="openai"){' +
       'let _m=q.toLowerCase();' +
       'if(_m.includes("gpt-5.4-mini"))return"GPT 5.4 Mini";' +
@@ -43,8 +43,8 @@ module.exports = function applyIdentity({ patch }) {
 
   // Patch 61: System prompt identity — make it provider-aware
   patch('61-system-identity',
-    'Xh1="You are Claude Code, Anthropic\'s official CLI for Claude."',
-    'Xh1=(()=>{' +
+    'Bh1="You are Claude Code, Anthropic\'s official CLI for Claude."',
+    'Bh1=(()=>{' +
       'const _p=typeof dq==="function"?dq():"firstParty";' +
       'if(_p==="openai")return"You are Silly Code, a multi-provider AI coding assistant, currently running with OpenAI GPT as the backend model.";' +
       'if(_p==="copilot")return"You are Silly Code, a multi-provider AI coding assistant, currently running with GitHub Copilot as the backend model.";' +
@@ -54,8 +54,8 @@ module.exports = function applyIdentity({ patch }) {
 
   // Patch 62: SDK identity string
   patch('62-sdk-identity',
-    'f64="You are Claude Code, Anthropic\'s official CLI for Claude, running within the Claude Agent SDK."',
-    'f64="You are Silly Code, a multi-provider AI coding assistant, running within the Agent SDK."'
+    'z14="You are Claude Code, Anthropic\'s official CLI for Claude, running within the Claude Agent SDK."',
+    'z14="You are Silly Code, a multi-provider AI coding assistant, running within the Agent SDK."'
   )
 
   // Patch 64: Model identity in system prompt — hide internal claude model ID for non-Claude providers
@@ -68,8 +68,8 @@ module.exports = function applyIdentity({ patch }) {
 
   // Patch 65: Agent identity (T64) — "Claude agent" → provider-aware
   patch('65-agent-identity',
-    'T64="You are a Claude agent, built on Anthropic\'s Claude Agent SDK."',
-    'T64=(()=>{const _p=typeof dq==="function"?dq():"firstParty";' +
+    'Y14="You are a Claude agent, built on Anthropic\'s Claude Agent SDK."',
+    'Y14=(()=>{const _p=typeof dq==="function"?dq():"firstParty";' +
       'if(_p==="openai")return"You are a Silly Code agent, running with OpenAI GPT.";' +
       'if(_p==="copilot")return"You are a Silly Code agent, running with GitHub Copilot.";' +
       'return"You are a Silly Code agent, running with Claude.";})()'

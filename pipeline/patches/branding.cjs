@@ -6,8 +6,8 @@
 
 module.exports = function applyBranding({ patch, patchAll }) {
   patchAll('01-version',
-    'VERSION:"2.1.100"',
-    'VERSION:"2.1.100-silly"'
+    'VERSION:"2.1.101"',
+    'VERSION:"2.1.101-silly"'
   )
 
   patchAll('02-package-url',

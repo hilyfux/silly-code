@@ -6,7 +6,7 @@
  * Upstream uses:
  *   pv() — context window: reads CLAUDE_CODE_MAX_CONTEXT_TOKENS (only when DISABLE_COMPACT=1)
  *   jo() — max output tokens: hardcoded per model family
- *   Hy1  — default context window (200000)
+ *   xL1  — default context window (200000)
  *
  * We set correct env vars at startup AND patch the default for non-Claude providers.
  */
@@ -14,11 +14,11 @@
 module.exports = function applyPlatform({ patch }) {
   // Patch 50: Context window adaptation via env vars
   // pv() reads CLAUDE_CODE_MAX_CONTEXT_TOKENS (requires DISABLE_COMPACT=1)
-  // Must match AFTER patch 15 has already modified the '// Version: 2.1.100' line
+  // Must match AFTER patch 15 has already modified the '// Version: 2.1.101' line
   patch('50-context-window',
-    '// Version: 2.1.100\n' +
+    '// Version: 2.1.101\n' +
     'if(!process.env.ANTHROPIC_DEFAULT_SONNET_MODEL)',
-    '// Version: 2.1.100\n' +
+    '// Version: 2.1.101\n' +
     '(function(){' +
       'const _p=process.env.CLAUDE_CODE_USE_COPILOT?"copilot":process.env.CLAUDE_CODE_USE_OPENAI?"codex":null;' +
       'if(_p==="copilot"){' +
@@ -36,7 +36,7 @@ module.exports = function applyPlatform({ patch }) {
   // Hy1=200000 is the hardcoded default. For non-Claude providers, override at runtime.
   // This catches code paths that don't go through pv() env var check.
   patch('51-default-context',
-    'Hy1=200000',
-    'Hy1=(process.env.CLAUDE_CODE_USE_COPILOT?30000:process.env.CLAUDE_CODE_USE_OPENAI?120000:200000)'
+    'xL1=200000',
+    'xL1=(process.env.CLAUDE_CODE_USE_COPILOT?30000:process.env.CLAUDE_CODE_USE_OPENAI?120000:200000)'
   )
 }

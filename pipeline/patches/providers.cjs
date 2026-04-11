@@ -54,16 +54,33 @@ function _makeSseStream(oaiResp, model) {
 }
 
 function _msgToOai(msg){
-  if(typeof msg.content==='string')return{role:msg.role,content:msg.content};
-  if(!Array.isArray(msg.content))return{role:msg.role,content:String(msg.content||'')};
-  const _p=msg.content.map(p=>{
-    if(p.type==='text')return{type:'text',text:p.text};
-    if(p.type==='image')return{type:'image_url',image_url:{url:'data:'+p.source.media_type+';base64,'+p.source.data}};
-    if(p.type==='tool_result')return{type:'text',text:'[Tool result id='+p.tool_use_id+']: '+(typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join(''))};
-    if(p.type==='tool_use')return{type:'text',text:'[Tool call '+p.name+': '+JSON.stringify(p.input)+']'};
-    return{type:'text',text:JSON.stringify(p)};
-  });
-  return{role:msg.role==='user'?'user':'assistant',content:_p};
+  if(typeof msg.content==='string')return[{role:msg.role,content:msg.content}];
+  if(!Array.isArray(msg.content))return[{role:msg.role,content:String(msg.content||'')}];
+  // Separate content into: text/image parts, tool_use calls, and tool_results
+  const _texts=[], _toolCalls=[], _toolResults=[];
+  for(const p of msg.content){
+    if(p.type==='text')_texts.push({type:'text',text:p.text});
+    else if(p.type==='image')_texts.push({type:'image_url',image_url:{url:'data:'+p.source.media_type+';base64,'+p.source.data}});
+    else if(p.type==='tool_use')_toolCalls.push({id:p.id||'tc_'+Date.now(),type:'function',function:{name:p.name,arguments:JSON.stringify(p.input||{})}});
+    else if(p.type==='tool_result'){
+      const _c=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
+      _toolResults.push({role:'tool',tool_call_id:p.tool_use_id,content:_c});
+    }
+    else _texts.push({type:'text',text:JSON.stringify(p)});
+  }
+  const _out=[];
+  // Assistant message with text + tool_calls
+  if(_toolCalls.length>0){
+    const _am={role:'assistant',tool_calls:_toolCalls};
+    if(_texts.length>0)_am.content=_texts.length===1&&_texts[0].type==='text'?_texts[0].text:_texts;
+    else _am.content=null;
+    _out.push(_am);
+  } else if(_texts.length>0){
+    _out.push({role:msg.role==='user'?'user':'assistant',content:_texts.length===1&&_texts[0].type==='text'?_texts[0].text:_texts});
+  }
+  // Tool result messages (one per result)
+  for(const tr of _toolResults)_out.push(tr);
+  return _out;
 }
 
 function _mapModel(model){
@@ -181,7 +198,7 @@ function _msgsToResponsesInput(system, messages) {
   for(const m of (messages||[])){
     if(typeof m.content==='string'){_parts.push({type:'message',role:m.role==='assistant'?'assistant':'user',content:m.content});continue;}
     if(!Array.isArray(m.content)){_parts.push({type:'message',role:m.role==='user'?'user':'assistant',content:String(m.content||'')});continue;}
-    // Flatten content blocks into text
+    // Flatten content blocks into text (Responses API input only accepts message items)
     const _text=m.content.map(p=>{
       if(p.type==='text')return p.text;
       if(p.type==='tool_result')return '[Tool result id='+p.tool_use_id+']: '+(typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join(''));
@@ -214,7 +231,7 @@ async function _sillyCodFetch(url,init){
     const _om=_mapModel(_b.model);
     const _msgs=[];
     if(_b.system)_msgs.push({role:'system',content:typeof _b.system==='string'?_b.system:(_b.system||[]).map(p=>p.text||'').join('')});
-    for(const m of (_b.messages||[]))_msgs.push(_msgToOai(m));
+    for(const m of (_b.messages||[]))_msgs.push(..._msgToOai(m));
     const _req={model:_om,messages:_msgs,stream:!!_b.stream,max_tokens:_b.max_tokens||4096,temperature:_b.temperature!=null?_b.temperature:1};
     if(_b.tools&&_b.tools.length){_req.tools=_b.tools.map(t=>({type:'function',function:{name:t.name,description:t.description||'',parameters:t.input_schema||{type:'object',properties:{}}}}));_req.tool_choice='auto';}
     const _r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_tok},body:JSON.stringify(_req)});
@@ -249,7 +266,7 @@ async function _sillyCopFetch(url,init){
   const _b=JSON.parse(init.body);
   const _msgs=[];
   if(_b.system)_msgs.push({role:'system',content:typeof _b.system==='string'?_b.system:(_b.system||[]).map(p=>p.text||'').join('')});
-  for(const m of (_b.messages||[]))_msgs.push(_msgToOai(m));
+  for(const m of (_b.messages||[]))_msgs.push(..._msgToOai(m));
   const _om=_mapModel(_b.model);
   const _req={model:_om,messages:_msgs,stream:!!_b.stream,max_tokens:_b.max_tokens||4096};
   if(_b.tools&&_b.tools.length){_req.tools=_b.tools.map(t=>({type:'function',function:{name:t.name,description:t.description||'',parameters:t.input_schema||{type:'object',properties:{}}}}));_req.tool_choice='auto';}
@@ -273,8 +290,8 @@ const COPILOT_ADAPTER = '_sillyCopFetch'
 module.exports = function applyProviders({ patch }) {
   // Patch 10: Provider detection — add openai + copilot branches
   patch('10-provider-detection',
-    'return B6(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"',
-    'return B6(process.env.CLAUDE_CODE_USE_OPENAI)?"openai":B6(process.env.CLAUDE_CODE_USE_COPILOT)?"copilot":B6(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"'
+    'return F6(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"',
+    'return F6(process.env.CLAUDE_CODE_USE_OPENAI)?"openai":F6(process.env.CLAUDE_CODE_USE_COPILOT)?"copilot":F6(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"'
   )
 
   // Patch 13: Model resolution — treat openai/copilot like firstParty
@@ -285,23 +302,23 @@ module.exports = function applyProviders({ patch }) {
 
   // Patch 14: Provider family — include openai/copilot in known set
   patch('14-provider-family',
-    'function fg(q=dq()){return q==="firstParty"||q==="anthropicAws"||q==="foundry"||q==="mantle"}',
-    'function fg(q=dq()){return q==="firstParty"||q==="anthropicAws"||q==="foundry"||q==="mantle"||q==="openai"||q==="copilot"}'
+    'function lg(q=dq()){return q==="firstParty"||q==="anthropicAws"||q==="foundry"||q==="mantle"}',
+    'function lg(q=dq()){return q==="firstParty"||q==="anthropicAws"||q==="foundry"||q==="mantle"||q==="openai"||q==="copilot"}'
   )
 
   // Patch 11-12: Inject fetch adapters before bedrock branch
   patch('11-12-provider-adapters',
-    'P=BX(_);if(P==="bedrock")',
-    `P=BX(_);${ADAPTER_HELPERS};` +
-    `if(P==="openai"){return new hL({...M,apiKey:'codex-placeholder',fetch:${CODEX_ADAPTER}});}` +
-    `if(P==="copilot"){return new hL({...M,apiKey:'copilot-placeholder',fetch:${COPILOT_ADAPTER}});}` +
+    'P=cX(_);if(P==="bedrock")',
+    `P=cX(_);${ADAPTER_HELPERS};` +
+    `if(P==="openai"){return new gL({...M,apiKey:'codex-placeholder',fetch:${CODEX_ADAPTER}});}` +
+    `if(P==="copilot"){return new gL({...M,apiKey:'copilot-placeholder',fetch:${COPILOT_ADAPTER}});}` +
     `if(P==="bedrock")`
   )
 
   // Patch 15: Model defaults — ensure model string is never undefined
   patch('15-model-defaults',
-    '// Version: 2.1.100',
-    '// Version: 2.1.100\n' +
+    '// Version: 2.1.101',
+    '// Version: 2.1.101\n' +
     'if(!process.env.ANTHROPIC_DEFAULT_SONNET_MODEL)process.env.ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-6";\n' +
     'if(!process.env.ANTHROPIC_DEFAULT_OPUS_MODEL)process.env.ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-6";\n' +
     'if(!process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL)process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5";'

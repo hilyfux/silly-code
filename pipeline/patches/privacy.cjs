@@ -8,8 +8,8 @@
 module.exports = function applyPrivacy({ patch }) {
   // Patch 30: Block Statsig telemetry
   patch('30-statsig-block',
-    'return TU.fetch(`${K}/api/eval/${_}`',
-    'return Promise.resolve(new Response("{}",{status:200}));TU.fetch(`${K}/api/eval/${_}`'
+    'return nU.fetch(`${K}/api/eval/${_}`',
+    'return Promise.resolve(new Response("{}",{status:200}));nU.fetch(`${K}/api/eval/${_}`'
   )
 
   // Patch 31: Block metrics reporting

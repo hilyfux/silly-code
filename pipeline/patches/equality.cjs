@@ -9,14 +9,14 @@ module.exports = function applyEquality({ patch }) {
   // Patch 20: Tier bypass — always return "max" subscription
   // XK() returns subscription tier. "max" unlocks ULTRATHINK, ULTRAPLAN, etc.
   patch('20-tier-bypass',
-    'function XK(){if(Kjq())return qjq();if(!rJ())return null;let q=Kq();if(!q)return null;return q.subscriptionType??null}',
-    'function XK(){return"max"}'
+    'function GK(){if(mHq())return uHq();if(!oJ())return null;let q=t7();if(!q)return null;return q.subscriptionType??null}',
+    'function GK(){return"max"}'
   )
 
   // Patch 21: Subscriber check — always subscribed
   // m7() checks if user is a Claude AI subscriber.
   patch('21-subscriber-bypass',
-    'function m7(){if(!rJ())return!1;return lC(Kq()?.scopes)',
-    'function m7(){return!0;if(!rJ())return!1;return lC(Kq()?.scopes)'
+    'function U7(){if(!oJ())return!1;return eC(t7()?.scopes)',
+    'function U7(){return!0;if(!oJ())return!1;return eC(t7()?.scopes)'
   )
 }

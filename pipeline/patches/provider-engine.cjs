@@ -281,14 +281,16 @@ module.exports = function applyProviders({ patch }) {
   );
 
   // ── Patch 65: Agent identity ──
+  // IMPORTANT: Anthropic server validates system prompt integrity for firstParty.
+  // Y14 MUST keep its original value for firstParty, only override for third-party.
   const agentBranches = providers
     .filter(p => p.runtimeId !== 'firstParty')
     .map(p => `if(_p==="${p.runtimeId}")return"${p.identity.agentPrompt}";`)
     .join('');
-  const fallbackAgent = fallback.identity.agentPrompt;
+  const originalAgent = "You are a Claude agent, built on Anthropic\\'s Claude Agent SDK.";
   patch('65-agent-identity',
     MATCH.AGENT_ID,
-    `Y14=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${agentBranches}return"${fallbackAgent}";})()`
+    `Y14=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${agentBranches}return"${originalAgent}";})()`
   );
 
   // ── Patch 63a: Simple identity ──

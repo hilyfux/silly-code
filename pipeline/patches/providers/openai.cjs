@@ -17,10 +17,10 @@
 // Returns { headers, kind } where kind is 'oauth' or 'apikey'
 // _openaiData is declared by the serialization engine as: let _openaiData = null;
 async function _openaiAuth() {
+  const { readFileSync, writeFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const _dir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '~', '.silly-code');
   if (!_openaiData) {
-    const { readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const _dir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '~', '.silly-code');
     // Try new filename first, fall back to legacy
     try {
       _openaiData = JSON.parse(readFileSync(join(_dir, 'codex-auth.json'), 'utf8'));
@@ -61,13 +61,7 @@ async function _openaiAuth() {
           _openaiData.access_token = _d.access_token || _openaiData.access_token;
           if (_d.refresh_token) _openaiData.refresh_token = _d.refresh_token;
           _openaiData.savedAt = new Date().toISOString();
-          try {
-            const { writeFileSync } = await import('node:fs');
-            const { join } = await import('node:path');
-            const _dir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '~', '.silly-code');
-            // Write to whichever file was loaded (prefer new name)
-            writeFileSync(join(_dir, 'codex-auth.json'), JSON.stringify(_openaiData, null, 2));
-          } catch {}
+          try { writeFileSync(join(_dir, 'codex-auth.json'), JSON.stringify(_openaiData, null, 2)); } catch {}
         }
       } catch {}
     }
@@ -93,7 +87,7 @@ async function _openaiAdapter(url, init) {
   if (cred.kind === 'oauth') {
     // ChatGPT OAuth → Responses API
     const _om = mapModel(_b.model, _codexModelTable);
-    const _sysText = typeof _b.system === 'string' ? _b.system : (_b.system || []).map(p => p.text || '').join('');
+    const _sysText = flattenSystem(_b.system);
     const _input = msgsToResponsesInput(null, _b.messages);
     const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: true };
     if (_b.tools && _b.tools.length) {
@@ -110,7 +104,7 @@ async function _openaiAdapter(url, init) {
     // API key → Chat Completions
     const _om = mapModel(_b.model, _oaiModelTable);
     const _msgs = [];
-    if (_b.system) _msgs.push({ role: 'system', content: typeof _b.system === 'string' ? _b.system : (_b.system || []).map(p => p.text || '').join('') });
+    if (_b.system) _msgs.push({ role: 'system', content: flattenSystem(_b.system) });
     for (const m of (_b.messages || [])) _msgs.push(...msgToOai(m));
     const _req = { model: _om, messages: _msgs, stream: !!_b.stream, max_tokens: _b.max_tokens || 4096, temperature: _b.temperature != null ? _b.temperature : 1 };
     if (_b.tools && _b.tools.length) {
@@ -124,14 +118,7 @@ async function _openaiAdapter(url, init) {
     });
     if (!_r.ok) { const _e = await _r.text(); throw new Error('OpenAI API error ' + _r.status + ': ' + _e); }
     if (_b.stream) return new Response(makeSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
-    const _d = await _r.json();
-    const _c = _d.choices?.[0], _mg = _c?.message, _ct = [];
-    if (_mg?.content) _ct.push({ type: 'text', text: _mg.content });
-    if (_mg?.tool_calls) for (const tc of _mg.tool_calls) {
-      let _i = {}; try { _i = JSON.parse(tc.function.arguments || '{}') } catch {}
-      _ct.push({ type: 'tool_use', id: tc.id || 'tc_' + Date.now(), name: tc.function.name, input: _i });
-    }
-    return new Response(JSON.stringify({ id: 'msg_' + (_d.id || Date.now()), type: 'message', role: 'assistant', content: _ct, model: _b.model, stop_reason: _c?.finish_reason === 'tool_calls' ? 'tool_use' : 'end_turn', usage: { input_tokens: _d.usage?.prompt_tokens || 0, output_tokens: _d.usage?.completion_tokens || 0 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return oaiToAnthropicResponse(await _r.json(), _b.model);
   }
 }
 

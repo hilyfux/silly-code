@@ -15,11 +15,11 @@
 // Returns { headers, kind } where headers includes all required Copilot headers.
 // _copilotData is declared by the serialization engine as: let _copilotData = null;
 async function _copilotAuth() {
+  const { readFileSync, writeFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const _dir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '~', '.silly-code');
+  const _hdrs = (tok) => ({ 'Authorization': 'Bearer ' + tok, 'Copilot-Integration-Id': 'vscode-chat', 'Editor-Version': 'vscode/1.85.0' });
   if (!_copilotData) {
-    const { readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const _dir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '~', '.silly-code');
-    // Try new filename first, fall back to legacy
     try {
       _copilotData = JSON.parse(readFileSync(join(_dir, 'copilot-auth.json'), 'utf8'));
     } catch {
@@ -33,45 +33,21 @@ async function _copilotAuth() {
 
   // Return cached Copilot API token if still valid (60s buffer)
   if (_copilotData.copilotToken && _copilotData.copilotExpiresAt && Date.now() < _copilotData.copilotExpiresAt - 60000) {
-    return {
-      headers: {
-        'Authorization': 'Bearer ' + _copilotData.copilotToken,
-        'Copilot-Integration-Id': 'vscode-chat',
-        'Editor-Version': 'vscode/1.85.0',
-      },
-      kind: 'oauth',
-    };
+    return { headers: _hdrs(_copilotData.copilotToken), kind: 'oauth' };
   }
 
   // Refresh Copilot API token using GitHub OAuth token
   const _r = await fetch('https://api.github.com/copilot_internal/v2/token', {
     method: 'GET',
-    headers: {
-      'Authorization': 'Bearer ' + _copilotData.githubToken,
-      'Editor-Version': 'vscode/1.85.0',
-      'Copilot-Integration-Id': 'vscode-chat',
-    },
+    headers: _hdrs(_copilotData.githubToken),
   });
   if (!_r.ok) throw new Error('Copilot token refresh failed: ' + _r.status);
   const _d = await _r.json();
   _copilotData.copilotToken = _d.token;
   _copilotData.copilotExpiresAt = (_d.expires_at || 0) * 1000;
-  try {
-    const { writeFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const _dir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '~', '.silly-code');
-    // Write to whichever file was loaded (prefer new name)
-    writeFileSync(join(_dir, 'copilot-auth.json'), JSON.stringify(_copilotData));
-  } catch {}
+  try { writeFileSync(join(_dir, 'copilot-auth.json'), JSON.stringify(_copilotData)); } catch {}
 
-  return {
-    headers: {
-      'Authorization': 'Bearer ' + _copilotData.copilotToken,
-      'Copilot-Integration-Id': 'vscode-chat',
-      'Editor-Version': 'vscode/1.85.0',
-    },
-    kind: 'oauth',
-  };
+  return { headers: _hdrs(_copilotData.copilotToken), kind: 'oauth' };
 }
 
 // ── adapter function ─────────────────────────────────────────────────────────
@@ -84,7 +60,7 @@ async function _copilotAdapter(url, init) {
   const cred = await _copilotAuth();
   const _b = JSON.parse(init.body);
   const _msgs = [];
-  if (_b.system) _msgs.push({ role: 'system', content: typeof _b.system === 'string' ? _b.system : (_b.system || []).map(p => p.text || '').join('') });
+  if (_b.system) _msgs.push({ role: 'system', content: flattenSystem(_b.system) });
   for (const m of (_b.messages || [])) _msgs.push(...msgToOai(m));
   const _om = mapModel(_b.model, _copilotModelTable);
   const _req = { model: _om, messages: _msgs, stream: !!_b.stream, max_tokens: _b.max_tokens || 4096 };
@@ -99,14 +75,7 @@ async function _copilotAdapter(url, init) {
   });
   if (!_r.ok) { const _e = await _r.text(); throw new Error('Copilot API error ' + _r.status + ': ' + _e); }
   if (_b.stream) return new Response(makeSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
-  const _d = await _r.json();
-  const _c = _d.choices?.[0], _mg = _c?.message, _ct = [];
-  if (_mg?.content) _ct.push({ type: 'text', text: _mg.content });
-  if (_mg?.tool_calls) for (const tc of _mg.tool_calls) {
-    let _i = {}; try { _i = JSON.parse(tc.function.arguments || '{}') } catch {}
-    _ct.push({ type: 'tool_use', id: tc.id || 'tc_' + Date.now(), name: tc.function.name, input: _i });
-  }
-  return new Response(JSON.stringify({ id: 'msg_' + (_d.id || Date.now()), type: 'message', role: 'assistant', content: _ct, model: _b.model, stop_reason: _c?.finish_reason === 'tool_calls' ? 'tool_use' : 'end_turn', usage: { input_tokens: _d.usage?.prompt_tokens || 0, output_tokens: _d.usage?.completion_tokens || 0 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  return oaiToAnthropicResponse(await _r.json(), _b.model);
 }
 
 module.exports = {

@@ -22,12 +22,7 @@ if [ ! -f "$SILLY_CODE_DATA/claude-oauth.json" ] && [ ! -f "$HOME/.claude/.crede
   # so we proceed directly to the TUI.
 fi
 
-# ── Ensure patched binary exists ────────────────────────────
-PATCHED="$ROOT_DIR/pipeline/build/cli-patched.js"
-if [ ! -f "$PATCHED" ]; then
-  info "Building patched binary (first run)..."
-  node "$ROOT_DIR/pipeline/patch.cjs" || { err "Patch build failed"; exit 1; }
-fi
+ensure_patched_binary "$ROOT_DIR"
 
 cd "$CALLER_DIR"
 exec node "$PATCHED" "$@"

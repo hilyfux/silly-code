@@ -223,4 +223,36 @@ function makeResponsesSseStream(oaiResp, model) {
   }});
 }
 
-module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream };
+/**
+ * Flatten Anthropic system prompt to a plain string.
+ * Handles both string and array-of-blocks formats.
+ */
+function flattenSystem(sys) {
+  if (!sys) return '';
+  return typeof sys === 'string' ? sys : (sys || []).map(p => p.text || '').join('');
+}
+
+/**
+ * Convert an OpenAI Chat Completions non-streaming response to an
+ * Anthropic Messages API response body (as a Response object).
+ *
+ * @param {Object} oaiJson - Parsed JSON from Chat Completions
+ * @param {string} model - Model name to embed in response
+ * @returns {Response}
+ */
+function oaiToAnthropicResponse(oaiJson, model) {
+  const _c = oaiJson.choices?.[0], _mg = _c?.message, _ct = [];
+  if (_mg?.content) _ct.push({ type: 'text', text: _mg.content });
+  if (_mg?.tool_calls) for (const tc of _mg.tool_calls) {
+    let _i = {}; try { _i = JSON.parse(tc.function.arguments || '{}') } catch {}
+    _ct.push({ type: 'tool_use', id: tc.id || 'tc_' + Date.now(), name: tc.function.name, input: _i });
+  }
+  return new Response(JSON.stringify({
+    id: 'msg_' + (oaiJson.id || Date.now()), type: 'message', role: 'assistant',
+    content: _ct, model,
+    stop_reason: _c?.finish_reason === 'tool_calls' ? 'tool_use' : 'end_turn',
+    usage: { input_tokens: oaiJson.usage?.prompt_tokens || 0, output_tokens: oaiJson.usage?.completion_tokens || 0 }
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
+module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, flattenSystem, oaiToAnthropicResponse };

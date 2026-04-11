@@ -23,19 +23,15 @@ _silly_check_deps() {
   local now
   now=$(date +%s)
 
-  # Skip if checked within last 24h
+  # Skip if state file modified within last 24h (avoids python3 subprocess)
   if [ -f "$state_file" ]; then
-    local last_ts
-    last_ts=$(python3 -c "
-import json, sys
-from datetime import datetime
-try:
-    d = json.load(open('$state_file'))
-    t = datetime.fromisoformat(d['lastChecked'].replace('Z','+00:00'))
-    print(int(t.timestamp()))
-except: print(0)
-" 2>/dev/null || echo 0)
-    if [ $((now - last_ts)) -lt 86400 ]; then
+    local file_age
+    if stat -f %m "$state_file" >/dev/null 2>&1; then
+      file_age=$(stat -f %m "$state_file")  # macOS
+    else
+      file_age=$(stat -c %Y "$state_file" 2>/dev/null || echo 0)  # Linux
+    fi
+    if [ $((now - file_age)) -lt 86400 ]; then
       return 0
     fi
   fi
@@ -53,5 +49,12 @@ except: print(0)
 # Run check (suppress all errors)
 _silly_check_deps 2>/dev/null || true
 
-# To enable all flags, build with: bun run build:dev:full
-# This compiles a binary with dead-code elimination that removes missing modules.
+# ── Ensure patched binary exists ──────────────────────────
+ensure_patched_binary() {
+  local root="${1:-$ROOT_DIR}"
+  PATCHED="$root/pipeline/build/cli-patched.js"
+  if [ ! -f "$PATCHED" ]; then
+    info "Building patched binary (first run)..."
+    node "$root/pipeline/patch.cjs" || { err "Patch build failed"; exit 1; }
+  fi
+}

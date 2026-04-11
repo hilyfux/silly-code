@@ -3,15 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+source "$ROOT_DIR/bin/silly-common.sh"
 
 DATA_DIR="${SILLY_CODE_DATA:-$HOME/.silly-code}"
 mkdir -p "$DATA_DIR"
-
-G='\033[0;32m' Y='\033[0;33m' C='\033[0;36m' R='\033[0;31m' B='\033[1m' N='\033[0m'
-info()  { echo -e "${C}[silly]${N} $*"; }
-ok()    { echo -e "${G}[silly]${N} $*"; }
-warn()  { echo -e "${Y}[silly]${N} $*"; }
-err()   { echo -e "${R}[silly]${N} $*" >&2; }
 
 check_provider() {
   local name="$1" token_file="$2"

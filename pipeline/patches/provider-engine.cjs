@@ -111,13 +111,7 @@ function checkSerialization(code, label) {
   for (const im of importMatches) {
     if (!im.includes("'node:") && !im.includes('"node:')) throw new Error(`${label}: non-node: import detected: ${im}`);
   }
-  // Isolation compile check (compile-level defense)
-  try {
-    new Function(code);
-  } catch (e) {
-    throw new Error(`${label}: compile check failed — ${e.message}`);
-  }
-  // Minimal execution verification: invoke with no-op fetch mock
+  // Compile + execution verification: invoke with no-op fetch mock
   try {
     const mockFetch = () => Promise.resolve(new Response('{}', { status: 200 }));
     new Function('fetch', code)(mockFetch);
@@ -149,23 +143,20 @@ module.exports = function applyProviders({ patch }) {
     'return ' + detectChain + ':' + MATCH.DETECT.replace('return ', '')
   );
 
-  // ── Patch 13: Model resolution ──
-  const resolveExt = allRuntimeIds.map(id => `||q==="${id}"`).join('');
+  // ── Patch 13: Model resolution + Patch 14: Provider family ──
+  const runtimeIdExt = allRuntimeIds.map(id => `||q==="${id}"`).join('');
   patch('13-model-resolution',
     MATCH.RESOLVE,
     MATCH.RESOLVE.replace(
       'q==="firstParty"||q==="anthropicAws"}',
-      'q==="firstParty"||q==="anthropicAws"' + resolveExt + '}'
+      'q==="firstParty"||q==="anthropicAws"' + runtimeIdExt + '}'
     )
   );
-
-  // ── Patch 14: Provider family ──
-  const familyExt = allRuntimeIds.map(id => `||q==="${id}"`).join('');
   patch('14-provider-family',
     MATCH.FAMILY,
     MATCH.FAMILY.replace(
       'q==="foundry"||q==="mantle"}',
-      'q==="foundry"||q==="mantle"' + familyExt + '}'
+      'q==="foundry"||q==="mantle"' + runtimeIdExt + '}'
     )
   );
 
@@ -301,14 +292,10 @@ module.exports = function applyProviders({ patch }) {
     .map(p => `if(_p==="${p.runtimeId}")return"${p.identity.simplePrompt}";`)
     .join('');
   const fallbackSimple = fallback.identity.simplePrompt;
-  const longBranches = providers
-    .filter(p => p.runtimeId !== 'firstParty')
-    .map(p => `if(_p==="${p.runtimeId}")return"${p.identity.systemPrompt}";`)
-    .join('');
   patch('63a-prompt-simple-identity',
     MATCH.SIMPLE_ID,
     `?(()=>{const _p=typeof dq==="function"?dq():"firstParty";${simpleBranches}return"${fallbackSimple}";})()`
-    + `:((()=>{const _p=typeof dq==="function"?dq():"firstParty";${longBranches}return"${fallbackPrompt}";})())+\``
+    + `:((()=>{const _p=typeof dq==="function"?dq():"firstParty";${identityBranches}return"${fallbackPrompt}";})())+\``
   );
 
   // ── Patch 63: Tier display ──

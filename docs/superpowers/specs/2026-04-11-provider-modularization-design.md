@@ -76,7 +76,10 @@ module.exports = {
 
   contextWindow: {                         // max context tokens (canonical form)
     default: 128000,                       // provider-level default
-    perModel: {},                          // optional: per-model override, e.g. { 'gpt-5.4': 128000 }
+    perModel: {},                          // optional: per-model override
+    // perModel keys use post-mapping provider model names (e.g. 'gpt-5.4', not 'claude-opus'),
+    // because context window limits are a property of the provider's model, not the Claude alias.
+    // Example: { 'gpt-5.3-codex': 32000 } to limit the cheaper model's context.
   },
   // Shorthand: contextWindow: 128000 is accepted as input
   // but normalized to { default: 128000, perModel: {} } at build time.
@@ -161,40 +164,45 @@ The adapter must NOT:
 - Use `require()` — only `await import('node:...')` for Node built-ins
 - Store state in module-level variables (use closure variables or dynamic imports for file I/O)
 
-### auth() → string (token)
+### auth() → credential object
 
-The auth function returns a valid access token for the provider's API. It handles token storage, expiry detection, and refresh.
+The auth function returns a valid credential for the provider's API. It handles token storage, expiry detection, and refresh.
 
 ```
 Input:  none
-Output: string — valid bearer token
+Output: {
+  headers: { Authorization: 'Bearer xxx', ... },  // headers to merge into fetch request
+  kind: 'oauth' | 'apikey',                       // credential type (for adapter routing)
+}
 
 Lifecycle:
-  1. Read token from disk (~/.silly-code/<provider>-oauth.json)
+  1. Read credential from disk (~/.silly-code/<key>-oauth.json)
   2. Check expiry (JWT decode or stored timestamp)
-  3. If valid → return token
+  3. If valid → return credential
   4. If expired → refresh using provider's refresh flow
-  5. Write refreshed token to disk
-  6. Return new token
+  5. Write refreshed credential to disk
+  6. Return credential
 
 Error:
   throw Error('<Provider>: no auth token. Run: silly login <provider>')
-  — missing token is a user-facing setup error, not a retry scenario
+  — missing credential is a user-facing setup error, not a retry scenario
 ```
+
+Returning a `headers` object instead of a bare token string allows providers that need multi-header auth (e.g. Copilot's `Copilot-Integration-Id` + `Editor-Version` + `Authorization`) to handle it inside auth without leaking header logic into the adapter. The `kind` field lets the adapter select different code paths (e.g. OpenAI's OAuth → Responses API vs API key → Chat Completions).
 
 ### Dependency: adapter calls auth
 
 ```
 adapter(url, init)
-  └── const token = await auth()
-      └── reads/refreshes token from disk
+  └── const cred = await auth()
+      └── reads/refreshes credential from disk
   └── converts request using _base helpers
-  └── fetches provider endpoint with token
+  └── fetches provider endpoint with cred.headers
   └── converts response using _base SSE translators
   └── returns Response
 ```
 
-Token storage is owned by auth. The adapter never reads token files directly.
+Credential storage is owned by auth. The adapter never reads token files directly.
 
 ## Shared Base (`_base.cjs`)
 
@@ -242,14 +250,14 @@ const MATCH = {
 
 ### Patch Generation
 
-The engine iterates over loaded providers to generate each patch:
+The engine iterates over loaded providers to generate each patch. **All runtime branches that depend on `dq()` return values use `runtimeId`, not `key`.** This applies to detection, resolution, family, identity, context, and tier patches. `key` is only used for build-time operations (logging, validation, file naming).
 
-- **Detection (patch 10):** Build ternary chain from all providers with `envKey`
-- **Adapters (patch 11-12):** Serialize `_base.cjs` + each provider's `adapter` function, inject before bedrock branch
-- **Resolution (patch 13-14):** Extend firstParty check with all provider names
-- **Context (patch 50-51):** Generate env-var-based context window selection from `contextWindow` values
-- **Identity (patches 60-65):** Generate provider-aware strings from `identity` configs using `dq()` switch
-- **Tier (patch 63):** Generate tier name switch from `tierNames` configs
+- **Detection (patch 10):** Build ternary chain: `F6(envKey)?"runtimeId":...` sorted by `priority`
+- **Adapters (patch 11-12):** Serialize `_base.cjs` + each provider's `adapter` function; inject `if(P==="runtimeId"){...}` branches before bedrock
+- **Resolution (patch 13-14):** Extend firstParty check with all `runtimeId` values: `q==="firstParty"||q==="openai"||q==="copilot"`
+- **Context (patch 50-51):** Generate `dq()==="runtimeId"?contextWindow.default:...` chain
+- **Identity (patches 60-62, 64-65):** Generate `dq()==="runtimeId"?"identity.systemPrompt":...` for each identity field
+- **Tier (patch 63, 63a):** Generate `dq()==="runtimeId"?"tierNames.max":...` for each tier level
 
 ## Patch Inventory (Before → After)
 
@@ -299,7 +307,7 @@ upstream update → patches break → update MATCH constants in provider-engine.
 On build, the engine validates every provider config before generating patches:
 
 - `key` is a non-empty string, unique across all providers
-- `runtimeId` is a non-empty string (may duplicate across providers if intentional, e.g. aliasing)
+- `runtimeId` is a non-empty string, unique across all providers. Aliasing (two providers sharing a runtime identity) is not supported — if two providers share a `runtimeId`, the engine cannot generate distinct runtime branches for identity, tier, context, or adapter selection. If aliasing becomes needed in the future, it should be modeled as an explicit `aliasOf` relationship, not a coincidental `runtimeId` collision
 - `envKey` is unique across all providers (or null for exactly one default provider)
 - `priority` values do not collide between non-null providers
 - `models.default` exists if `models` is provided
@@ -343,7 +351,7 @@ Adapter functions and `_base.cjs` exports run in a restricted runtime (upstream 
 - `import()` of non-`node:` packages → FAIL
 - Only `await import('node:...')` for Node built-ins is allowed
 
-**Isolation compile check:** After serialization, attempt to compile the combined adapter code string in an isolated `new Function()` context. If it throws a SyntaxError or ReferenceError, build fails with the exact error location. This catches the "builds fine, crashes at runtime" class of bugs that static scanning alone misses.
+**Isolation compile check (compile-level defense):** After serialization, attempt to compile the combined adapter code string in an isolated `new Function()` context. If it throws a SyntaxError or ReferenceError, build fails with the exact error location. This is a compile-level defense — it catches syntax errors and undeclared references, but cannot catch all runtime issues (e.g. calling a function with wrong arguments, runtime type mismatches, async errors). For runtime-level assurance, complement with a minimal execution verification: invoke the compiled function with a no-op fetch mock and verify it returns without throwing, confirming that the adapter's initialization path is sound.
 
 ## Testing
 

@@ -46,7 +46,7 @@ async function _copilotAuth() {
           method: 'GET',
           headers: _hdrs(_copilotData.githubToken),
         });
-        if (!_r.ok) throw new Error('Copilot token refresh failed: ' + _r.status);
+        if (!_r.ok) { const _e = await _r.text().catch(() => ''); throw new Error('Copilot token refresh failed: ' + _r.status + ': ' + _e); }
         const _d = await _r.json();
         _copilotData.copilotToken = _d.token;
         _copilotData.copilotExpiresAt = (_d.expires_at || 0) * 1000;
@@ -62,7 +62,8 @@ async function _copilotAuth() {
 
 // ── adapter function ─────────────────────────────────────────────────────────
 // Intercepts fetch calls from the upstream client and routes to Copilot.
-// References _copilotAuth (auth), mapModel, msgToOai, makeSseStream
+// References _copilotAuth (auth), mapModel, msgToOai, makeSseStream,
+// flattenSystem, oaiToAnthropicResponse, tameSkillPrompts from _base.cjs
 // all serialized into the same scope.
 async function _copilotAdapter(url, init) {
   const _copilotModelTable = { 'claude-opus': 'gpt-4o', 'claude-sonnet': 'gpt-4o', 'claude-haiku': 'gpt-4o-mini', default: 'gpt-4o' };
@@ -82,7 +83,7 @@ async function _copilotAdapter(url, init) {
   if (_b.system) _msgs.push({ role: 'system', content: flattenSystem(_b.system) });
   for (const m of (_b.messages || [])) _msgs.push(...msgToOai(m));
   const _om = mapModel(_b.model, _copilotModelTable);
-  const _req = { model: _om, messages: _msgs, stream: !!_b.stream, max_tokens: _b.max_tokens || 4096 };
+  const _req = { model: _om, messages: _msgs, stream: !!_b.stream, max_tokens: _b.max_tokens || 4096, temperature: _b.temperature != null ? _b.temperature : 1 };
   if (_b.tools && _b.tools.length) {
     _req.tools = _b.tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } } }));
     _req.tool_choice = 'auto';

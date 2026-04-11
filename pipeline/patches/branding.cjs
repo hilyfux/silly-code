@@ -93,4 +93,52 @@ module.exports = function applyBranding({ patch, patchAll }) {
     'You are Claude, and you are bad at verification.',
     'You are the AI model, and you are bad at verification.'
   )
+
+  // Patch 10a: TUI header brand name variable
+  patch('10a-header-brand-var',
+    'var ljK="Claude Code"',
+    'var ljK="Silly Code"'
+  )
+
+  // Patch 10b: TUI header themed render — status bar "Claude Code vX.X.X"
+  patch('10b-header-themed-render',
+    '"claude",n)("Claude Code")',
+    '"claude",n)("Silly Code")'
+  )
+
+  // Patch 10c: TUI header bold render — cache sentinel fallback
+  patch('10c-header-bold-render',
+    'bold:!0},"Claude Code"',
+    'bold:!0},"Silly Code"'
+  )
+
+  // Patch 10d: MCP client info — title in LSP/MCP handshake
+  patchAll('10d-mcp-client-title',
+    'title:"Claude Code"',
+    'title:"Silly Code"'
+  )
+
+  // Patch 10e: MCP client info — name field
+  patchAll('10e-mcp-client-name',
+    'name:"Claude Code"',
+    'name:"Silly Code"'
+  )
+
+  // Patch 10f: MCP display name fallback
+  patch('10f-mcp-display-fallback',
+    '"claudeai-proxy"?"claude.ai":"Claude Code"',
+    '"claudeai-proxy"?"claude.ai":"Silly Code"'
+  )
+
+  // Patch 10g: Agent name fallback in TUI header
+  patch('10g-agent-name-fallback',
+    '??"Claude Code"',
+    '??"Silly Code"'
+  )
+
+  // Patch 10h: First-run permission prompt
+  patch('10h-first-run-prompt',
+    'null,"Claude Code","\'","ll be able to read',
+    'null,"Silly Code","\'","ll be able to read'
+  )
 }

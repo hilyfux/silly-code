@@ -15,7 +15,9 @@ err()   { echo -e "${R}[silly]${N} $*" >&2; }
 
 check_provider() {
   local name="$1" token_file="$2"
-  if [ -f "$DATA_DIR/$token_file" ]; then
+  # Check both new (-auth.json) and legacy (-oauth.json) filenames
+  local alt_file="${token_file/-oauth.json/-auth.json}"
+  if [ -f "$DATA_DIR/$token_file" ] || [ -f "$DATA_DIR/$alt_file" ]; then
     ok "$name: logged in"
     return 0
   else
@@ -79,8 +81,8 @@ case "${1:-}" in
   logout)
     PROVIDER="${2:-}"
     case "$PROVIDER" in
-      codex)   rm -f "$DATA_DIR/codex-oauth.json";   ok "Codex tokens removed" ;;
-      copilot) rm -f "$DATA_DIR/copilot-oauth.json"; ok "Copilot tokens removed" ;;
+      codex)   rm -f "$DATA_DIR/codex-oauth.json" "$DATA_DIR/codex-auth.json";     ok "Codex tokens removed" ;;
+      copilot) rm -f "$DATA_DIR/copilot-oauth.json" "$DATA_DIR/copilot-auth.json"; ok "Copilot tokens removed" ;;
       claude)  rm -f "$DATA_DIR/claude-oauth.json";  ok "Claude tokens removed" ;;
       "") err "Usage: silly logout <codex|copilot|claude>"; exit 1 ;;
       *) err "Unknown provider: $PROVIDER"; exit 1 ;;
@@ -158,8 +160,8 @@ case "${1:-}" in
 
     # Fallback
     AUTHED=0
-    [ -f "$DATA_DIR/codex-oauth.json" ] && AUTHED=$((AUTHED+1))
-    [ -f "$DATA_DIR/copilot-oauth.json" ] && AUTHED=$((AUTHED+1))
+    { [ -f "$DATA_DIR/codex-auth.json" ] || [ -f "$DATA_DIR/codex-oauth.json" ]; } && AUTHED=$((AUTHED+1))
+    { [ -f "$DATA_DIR/copilot-auth.json" ] || [ -f "$DATA_DIR/copilot-oauth.json" ]; } && AUTHED=$((AUTHED+1))
     [ -f "$HOME/.claude/.credentials.json" ] && AUTHED=$((AUTHED+1))
     if [ "$AUTHED" -ge 2 ]; then
       ok "Provider fallback: active ($AUTHED providers)"

@@ -13,4 +13,5 @@ cli-dev
 .knowledge-graph/
 .mcp.json
 .playwright/
+.playwright-mcp/
 skills/

@@ -119,7 +119,16 @@ case "${1:-}" in
 
     # Runtime
     MISSING=false
-    command -v node >/dev/null 2>&1 && ok "Node: $(node --version)" || { err "Node: not found"; MISSING=true; }
+    if command -v node >/dev/null 2>&1; then
+      NODE_VER=$(node -e "console.log(process.versions.node.split('.')[0])")
+      if [ "$NODE_VER" -ge 20 ] 2>/dev/null; then
+        ok "Node: $(node --version)"
+      else
+        err "Node: $(node --version) (need >= 20)"; MISSING=true
+      fi
+    else
+      err "Node: not found"; MISSING=true
+    fi
     command -v git >/dev/null 2>&1 && ok "Git: $(git --version | head -1)" || warn "Git: not found (optional)"
     command -v rg >/dev/null 2>&1 && ok "ripgrep: $(rg --version | head -1)" || warn "ripgrep: not found (file search will be slow)"
     PATCHED="$ROOT_DIR/pipeline/build/cli-patched.js"

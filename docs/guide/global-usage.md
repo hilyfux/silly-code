@@ -1,40 +1,33 @@
 # 全局使用（任意目录启动）
 
-
-如果你希望在任意项目目录直接运行 `claude-haha`，可以通过以下方式配置。配置完成后，`claude-haha` 会自动识别你当前所在的工作目录。
-
-## macOS / Linux
-
-在 `~/.bashrc` 或 `~/.zshrc` 中添加：
+安装脚本会自动将命令链接到 `~/.local/bin/`。如果 PATH 已配置，可以在任意目录直接使用：
 
 ```bash
-# 方式一：添加 PATH（推荐）
-export PATH="$HOME/path/to/claude-code-haha/bin:$PATH"
-
-# 方式二：alias
-alias claude-haha="$HOME/path/to/claude-code-haha/bin/claude-haha"
+cd ~/your-project
+sillyx                 # OpenAI Codex
+sillyt                 # GitHub Copilot
+sillye                 # Claude
+silly status           # 查看状态
 ```
 
-然后重新加载配置：
+## 手动配置 PATH
+
+如果安装脚本未自动配置 PATH，在 `~/.bashrc` 或 `~/.zshrc` 中添加：
 
 ```bash
-source ~/.bashrc  # 或 source ~/.zshrc
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-## Windows (Git Bash)
-
-在 `~/.bashrc` 中添加：
+然后重新加载：
 
 ```bash
-export PATH="$HOME/path/to/claude-code-haha/bin:$PATH"
+source ~/.zshrc  # 或 source ~/.bashrc
 ```
 
 ## 验证
 
-配置完成后，进入任意项目目录测试：
-
 ```bash
-cd ~/your-other-project
-claude-haha
-# 启动后询问「当前目录是什么？」，应显示 ~/your-other-project
+cd ~/any-project
+sillyx
+# 启动后询问「当前目录是什么？」，应显示 ~/any-project
 ```

@@ -1,4 +1,7 @@
-# Feature Flags Audit
+# Feature Flags Audit (v1 — Historical Reference)
+
+> **Note:** This audit is from the v1 source-code architecture. The v2 patch pipeline
+> does not use bun build or feature flags. Kept for historical reference only.
 
 Audit date: 2026-03-31
 

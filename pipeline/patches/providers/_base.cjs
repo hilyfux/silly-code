@@ -309,6 +309,8 @@ function tameSkillPrompts(text) {
   text = text.replace(/<EXTREMELY_IMPORTANT>[\s\S]*?<\/EXTREMELY_IMPORTANT>/g, '');
   // Remove HARD-GATE blocks that block autonomous execution
   text = text.replace(/<HARD-GATE>[\s\S]*?<\/HARD-GATE>/g, '');
+  // Remove SUBAGENT-STOP blocks
+  text = text.replace(/<SUBAGENT-STOP>[\s\S]*?<\/SUBAGENT-STOP>/g, '');
   // Tone down remaining aggressive directives
   text = text.replace(/you ABSOLUTELY MUST invoke the skill/gi, 'consider invoking the skill if relevant');
   text = text.replace(/IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE\. YOU MUST USE IT\./gi, '');
@@ -319,4 +321,40 @@ function tameSkillPrompts(text) {
   return text;
 }
 
-module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts };
+/**
+ * Clean Claude-specific identity content from system/message text for
+ * third-party models. The upstream binary constructs system prompts with
+ * many hardcoded Claude/Anthropic references beyond what the identity
+ * patches can cover. This function strips or rewrites them so GPT models
+ * don't get confused about who they are.
+ *
+ * @param {string} text - System prompt or message text
+ * @param {string} providerName - e.g. "OpenAI GPT", "GitHub Copilot"
+ * @returns {string}
+ */
+function cleanIdentityForProvider(text, providerName) {
+  if (!text || typeof text !== 'string') return text;
+  // Co-author attribution (before other Claude replacements to match original text)
+  text = text.replace(/Co-Authored-By: Claude[^\n]*/g, `Co-Authored-By: Silly Code (${providerName}) <noreply@silly-code.dev>`);
+  // Core identity replacements
+  text = text.replace(/\bClaude Code\b/g, 'Silly Code');
+  text = text.replace(/Anthropic's official CLI for Claude/g, 'a multi-provider AI coding assistant');
+  // Model name references — don't confuse GPT about what model it is
+  text = text.replace(/You are powered by the model named [^\n]+?\.\s/g, `You are powered by ${providerName}. `);
+  text = text.replace(/The exact model ID is [^\n]+?\.\s/g, '');
+  // Remove entire sentences about Claude model family/IDs
+  text = text.replace(/The most recent Claude model family[^\n]*\n?/g, '');
+  text = text.replace(/Model IDs[^\n]*\n?/g, '');
+  // Claude model name references (e.g. "Claude Opus 4.6", "Claude Sonnet 4.6")
+  text = text.replace(/\bClaude (Opus|Sonnet|Haiku) [\d.]+/g, providerName);
+  // Specific phrases before generic Claude replacement
+  text = text.replace(/the latest and most capable Claude models/g, 'the latest and most capable models');
+  // Possessive Claude's, then remaining standalone Claude
+  text = text.replace(/\bClaude's\b/g, "the AI model's");
+  text = text.replace(/\bClaude\b(?!\.md|\.ai|_CODE|-code)/g, 'the AI model');
+  // Anthropic references in non-URL contexts (not in URLs or SDK imports)
+  text = text.replace(/\bAnthropic\b(?!\.com|\/|_ai|-ai)/g, 'the provider');
+  return text;
+}
+
+module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider };

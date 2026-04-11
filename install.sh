@@ -113,6 +113,19 @@ info "Building patched binary..."
 node pipeline/patch.cjs || err "Patch build failed"
 ok "Patched binary ready"
 
+# ── Vendor ripgrep symlink ──────────────────────────────────
+# The upstream binary looks for rg at vendor/ripgrep/<arch>-<platform>/rg
+# relative to its package dir. Create symlink so the Grep tool works.
+RG_BIN=$(command -v rg 2>/dev/null || echo "$BIN_DIR/rg")
+if [ -x "$RG_BIN" ]; then
+  _node_arch=$(uname -m | sed 's/x86_64/x64/; s/aarch64/arm64/')
+  _node_plat=$(uname -s | tr '[:upper:]' '[:lower:]')
+  RG_VENDOR_DIR="pipeline/build/vendor/ripgrep/${_node_arch}-${_node_plat}"
+  mkdir -p "$RG_VENDOR_DIR"
+  ln -sf "$RG_BIN" "$RG_VENDOR_DIR/rg"
+  ok "Vendor ripgrep: $RG_VENDOR_DIR/rg → $RG_BIN"
+fi
+
 # ── Install commands ─────────────────────────────────────────
 mkdir -p "$BIN_DIR"
 for cmd in silly sillyt sillyx sillye; do

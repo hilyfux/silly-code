@@ -319,6 +319,29 @@ module.exports = function applyProviders({ patch }) {
     tierCases.join(';')
   );
 
+  // ── Patch 67: Public model display name — provider-aware ──
+  // N76 (getPublicModelDisplayName) is hardcoded to return "Opus 4.6" etc.
+  // for Claude model IDs. The header uses N76 via rH, so third-party providers
+  // always show Claude names. Fix: delegate to y0 (marketing name) which is
+  // already provider-aware from Patch 60.
+  patch('67-public-model-display',
+    'function N76(q){let K=q.endsWith("[1m]")?" (1M context)":"";switch',
+    'function N76(q){if(typeof dq==="function"&&dq()!=="firstParty"){let _n=y0(q);if(_n)return _n;}let K=q.endsWith("[1m]")?" (1M context)":"";switch'
+  );
+
+  // ── Patch 66: Fast mode display name ──
+  // Upstream hardcodes var Um="Opus 4.6" — make it provider-aware
+  {
+    const branches = providers
+      .filter(p => p.runtimeId !== 'firstParty' && p.identity.modelDisplayNames)
+      .map(p => `if(_p==="${p.runtimeId}")return"${p.identity.modelDisplayNames.default}";`)
+      .join('');
+    patch('66-fast-mode-display',
+      'var Um="Opus 4.6"',
+      `var Um=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${branches}return"Opus 4.6";})()`
+    );
+  }
+
   // ── Patch report ──
   const providerList = providers.map(p => p.key).join(', ');
   const adapterCount = adaptersWithCode.length;
@@ -331,6 +354,7 @@ module.exports = function applyProviders({ patch }) {
   if (ctxProviders.length > 0) console.log(`  50-51-context-window     ${ctxProviders.length} providers with custom context`);
   console.log(`  60-65-identity           ${identityCount} identity branches`);
   console.log(`  63/63a-tier/simple       ${providers.filter(p=>p.runtimeId!=='firstParty').length} non-default providers`);
+  console.log(`  66-fast-mode-display     provider-aware model name`);
   console.log(`  ${'─'.repeat(50)}`);
   console.log(`  providers: ${providerList}`);
 };

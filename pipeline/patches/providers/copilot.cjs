@@ -63,21 +63,23 @@ async function _copilotAuth() {
 // ── adapter function ─────────────────────────────────────────────────────────
 // Intercepts fetch calls from the upstream client and routes to Copilot.
 // References _copilotAuth (auth), mapModel, msgToOai, makeSseStream,
-// flattenSystem, oaiToAnthropicResponse, tameSkillPrompts from _base.cjs
+// flattenSystem, oaiToAnthropicResponse, cleanIdentityForProvider from _base.cjs
 // all serialized into the same scope.
 async function _copilotAdapter(url, init) {
   const _copilotModelTable = { 'claude-opus': 'gpt-4o', 'claude-sonnet': 'gpt-4o', 'claude-haiku': 'gpt-4o-mini', default: 'gpt-4o' };
+  const _provName = 'GitHub Copilot';
 
   const cred = await _copilotAuth();
   const _b = JSON.parse(init.body);
-  // Tame aggressive skill instructions for third-party models
+  // Clean Claude-specific identity and tame aggressive skill instructions
+  const _clean = (t) => cleanIdentityForProvider(tameSkillPrompts(t), _provName);
   if (_b.system) {
-    if (typeof _b.system === 'string') _b.system = tameSkillPrompts(_b.system);
-    else if (Array.isArray(_b.system)) _b.system = _b.system.map(p => p.text ? { ...p, text: tameSkillPrompts(p.text) } : p);
+    if (typeof _b.system === 'string') _b.system = _clean(_b.system);
+    else if (Array.isArray(_b.system)) _b.system = _b.system.map(p => p.text ? { ...p, text: _clean(p.text) } : p);
   }
   for (const m of (_b.messages || [])) {
-    if (typeof m.content === 'string') m.content = tameSkillPrompts(m.content);
-    else if (Array.isArray(m.content)) for (const p of m.content) { if (p.type === 'text' && p.text) p.text = tameSkillPrompts(p.text); }
+    if (typeof m.content === 'string') m.content = _clean(m.content);
+    else if (Array.isArray(m.content)) for (const p of m.content) { if (p.type === 'text' && p.text) p.text = _clean(p.text); }
   }
   const _msgs = [];
   if (_b.system) _msgs.push({ role: 'system', content: flattenSystem(_b.system) });

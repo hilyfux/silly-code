@@ -81,23 +81,25 @@ async function _openaiAuth() {
 // ── adapter function ─────────────────────────────────────────────────────────
 // Intercepts fetch calls from the upstream client and routes to OpenAI.
 // References _openaiAuth (auth), mapModel, msgToOai, makeSseStream,
-// msgsToResponsesInput, makeResponsesSseStream from _base.cjs
+// msgsToResponsesInput, makeResponsesSseStream, cleanIdentityForProvider from _base.cjs
 // all serialized into the same scope.
 async function _openaiAdapter(url, init) {
   const _codexModelTable = { 'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.4', 'claude-haiku': 'gpt-5.3-codex', default: 'gpt-5.4' };
   const _oaiModelTable = { 'claude-opus': 'gpt-4o', 'claude-sonnet': 'gpt-4o', 'claude-haiku': 'gpt-4o-mini', default: 'gpt-4o' };
+  const _provName = 'OpenAI GPT';
 
   const cred = await _openaiAuth();
   const _b = JSON.parse(init.body);
 
-  // Tame aggressive skill instructions for third-party models
+  // Clean Claude-specific identity and tame aggressive skill instructions
+  const _clean = (t) => cleanIdentityForProvider(tameSkillPrompts(t), _provName);
   if (_b.system) {
-    if (typeof _b.system === 'string') _b.system = tameSkillPrompts(_b.system);
-    else if (Array.isArray(_b.system)) _b.system = _b.system.map(p => p.text ? { ...p, text: tameSkillPrompts(p.text) } : p);
+    if (typeof _b.system === 'string') _b.system = _clean(_b.system);
+    else if (Array.isArray(_b.system)) _b.system = _b.system.map(p => p.text ? { ...p, text: _clean(p.text) } : p);
   }
   for (const m of (_b.messages || [])) {
-    if (typeof m.content === 'string') m.content = tameSkillPrompts(m.content);
-    else if (Array.isArray(m.content)) for (const p of m.content) { if (p.type === 'text' && p.text) p.text = tameSkillPrompts(p.text); }
+    if (typeof m.content === 'string') m.content = _clean(m.content);
+    else if (Array.isArray(m.content)) for (const p of m.content) { if (p.type === 'text' && p.text) p.text = _clean(p.text); }
   }
 
   if (cred.kind === 'oauth') {

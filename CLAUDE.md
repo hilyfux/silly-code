@@ -12,12 +12,15 @@ silly-code is a multi-provider AI coding assistant built on top of the upstream 
 upstream @anthropic-ai/claude-code (npm pack)
     ↓
 pipeline/patch.cjs (orchestrator)
-    ├── patches/branding.cjs    (01-07a) URLs, names, mascot color
-    ├── patches/providers.cjs   (10-15)  OpenAI + Copilot adapters
-    ├── patches/identity.cjs    (60-65)  Provider-aware system prompts
-    ├── patches/equality.cjs    (20-21)  Tier bypass
-    ├── patches/privacy.cjs     (30-39)  Telemetry blocking
-    └── patches/platform.cjs    (50-51)  Context window tuning
+    ├── patches/branding.cjs          (01-07a) URLs, names, mascot color
+    ├── patches/provider-engine.cjs   (10-15, 50-51, 60-65) Provider system
+    │   └── providers/
+    │       ├── _base.cjs             Protocol translation (mapModel, msgToOai, SSE)
+    │       ├── claude.cjs            Claude config (default/fallback)
+    │       ├── openai.cjs            OpenAI Codex adapter + config
+    │       └── copilot.cjs           GitHub Copilot adapter + config
+    ├── patches/equality.cjs          (20-21) Tier bypass
+    └── patches/privacy.cjs           (30-39) Telemetry blocking
     ↓
 pipeline/build/cli-patched.js (output)
 ```
@@ -44,7 +47,8 @@ curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh 
 ## Key directories
 
 - `pipeline/` — Patch pipeline (the core of this project)
-- `pipeline/patches/` — Domain-specific patch modules
+- `pipeline/patches/` — Domain-specific patch modules (provider-engine.cjs is the main one)
+- `pipeline/patches/providers/` — Per-provider config files + shared base protocol
 - `pipeline/upstream/package/` — Upstream binary (gitignored)
 - `pipeline/build/` — Patched output (gitignored)
 - `bin/` — Launcher scripts (sillyx, sillyt, sillye, silly)

@@ -1,6 +1,6 @@
-# Provider Modularization Design
+# Provider Modularization Design — IMPLEMENTED
 
-Date: 2026-04-11
+Date: 2026-04-11 | Status: Implemented in `pipeline/patches/provider-engine.cjs` + `providers/*.cjs`
 
 ## Problem
 

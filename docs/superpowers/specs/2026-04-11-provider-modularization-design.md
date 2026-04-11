@@ -4,7 +4,7 @@ Date: 2026-04-11
 
 ## Problem
 
-Provider adaptation logic is scattered across 4 patch files (providers.cjs, identity.cjs, platform.cjs, branding.cjs) with overlapping responsibilities. Adding a new provider requires coordinated edits in 3+ files. Upstream upgrades require fixing the same match string patterns in multiple places.
+Provider adaptation logic is scattered across 3 patch files (providers.cjs, identity.cjs, platform.cjs) with overlapping responsibilities. Each file independently checks provider state and hardcodes provider-specific values. Adding a new provider requires coordinated edits in all 3 files. Upstream upgrades require fixing the same match string patterns in multiple places.
 
 ## Goal
 
@@ -40,8 +40,8 @@ patch.cjs (orchestrator)
   │     │                        - patch 11-12: adapter injection (serialized)
   │     │                        - patch 13-14: model resolution / family expansion
   │     │                        - patch 50-51: context window (per-provider)
-  │     │                        - patch 60-65: identity (per-provider)
-  │     │                        - patch 63: tier display (per-provider)
+  │     │                        - patch 60-62, 64-65: identity prompts (per-provider)
+  │     │                        - patch 63, 63a: tier display + simple identity (per-provider)
   │     ├── claude.cjs          → { config }
   │     ├── openai.cjs          → { config, adapter, auth }
   │     └── copilot.cjs         → { config, adapter, auth }
@@ -55,7 +55,8 @@ Every provider file exports a single object with this structure:
 
 ```javascript
 module.exports = {
-  name: 'openai',                          // provider identifier (used in dq() return value)
+  key: 'openai',                           // internal provider identifier (unique, used in config/logging)
+  runtimeId: 'openai',                     // value returned by dq() at runtime (injected into binary)
   envKey: 'CLAUDE_CODE_USE_OPENAI',        // env var that activates this provider (null = default)
   priority: 10,                            // detection order (lower = checked first; null = default/fallback)
 
@@ -73,10 +74,13 @@ module.exports = {
     default: 'gpt-5.4',
   },
 
-  contextWindow: {                         // max context tokens
+  contextWindow: {                         // max context tokens (canonical form)
     default: 128000,                       // provider-level default
-    // perModel: { 'gpt-5.4': 128000 },   // optional: per-model override (future-proofing)
+    perModel: {},                          // optional: per-model override, e.g. { 'gpt-5.4': 128000 }
   },
+  // Shorthand: contextWindow: 128000 is accepted as input
+  // but normalized to { default: 128000, perModel: {} } at build time.
+  // null means "use upstream default (200K)".
 
   tierNames: {                             // subscription tier display names
     max: 'ChatGPT Pro',
@@ -106,7 +110,8 @@ The engine sorts providers by priority and generates the ternary chain in that o
 ```javascript
 // providers/claude.cjs
 module.exports = {
-  name: 'claude',
+  key: 'claude',                           // internal identifier
+  runtimeId: 'firstParty',                // upstream's default dq() value — no patch needed
   envKey: null,                            // default provider, no env var needed
   priority: null,                          // always fallback
   identity: {
@@ -122,6 +127,74 @@ module.exports = {
   auth: null,
 }
 ```
+
+## Adapter & Auth Contract
+
+### adapter(url, init) → Response
+
+The adapter function replaces the native `fetch` in the Anthropic SDK client. It receives the same arguments as `fetch` and must return a `Response` object that the SDK can consume.
+
+```
+Input:
+  url:  string — the Anthropic API URL (ignored; adapter routes to its own endpoint)
+  init: { method, headers, body } — body is JSON string in Anthropic Messages API format
+        body contains: { model, system, messages, tools, stream, max_tokens, ... }
+
+Output:
+  Response object with either:
+    - streaming: status 200, Content-Type text/event-stream, body is ReadableStream of Anthropic SSE
+    - non-streaming: status 200, Content-Type application/json, body is Anthropic message JSON
+
+Error:
+  throw Error('Provider API error <status>: <body>')
+  — errors propagate to upstream error handling, surfaced to user as API errors
+```
+
+The adapter is responsible for:
+1. Calling `auth()` to get a valid token
+2. Converting Anthropic request format to provider's format (using `_base.cjs` helpers)
+3. Making the fetch to the provider's endpoint
+4. Converting the provider's response back to Anthropic format (using `_base.cjs` SSE translators)
+
+The adapter must NOT:
+- Reference variables outside its own function scope (serialization boundary)
+- Use `require()` — only `await import('node:...')` for Node built-ins
+- Store state in module-level variables (use closure variables or dynamic imports for file I/O)
+
+### auth() → string (token)
+
+The auth function returns a valid access token for the provider's API. It handles token storage, expiry detection, and refresh.
+
+```
+Input:  none
+Output: string — valid bearer token
+
+Lifecycle:
+  1. Read token from disk (~/.silly-code/<provider>-oauth.json)
+  2. Check expiry (JWT decode or stored timestamp)
+  3. If valid → return token
+  4. If expired → refresh using provider's refresh flow
+  5. Write refreshed token to disk
+  6. Return new token
+
+Error:
+  throw Error('<Provider>: no auth token. Run: silly login <provider>')
+  — missing token is a user-facing setup error, not a retry scenario
+```
+
+### Dependency: adapter calls auth
+
+```
+adapter(url, init)
+  └── const token = await auth()
+      └── reads/refreshes token from disk
+  └── converts request using _base helpers
+  └── fetches provider endpoint with token
+  └── converts response using _base SSE translators
+  └── returns Response
+```
+
+Token storage is owned by auth. The adapter never reads token files directly.
 
 ## Shared Base (`_base.cjs`)
 
@@ -209,7 +282,7 @@ upstream update → patches break → update MATCH constants in provider-engine.
 
 1. Create `providers/newprovider.cjs` with the standard interface
 2. `node pipeline/patch.cjs` — engine auto-discovers and includes it
-3. No changes to engine, base, or other providers
+3. No changes to engine, base, or other providers — when the new provider fits the existing adapter/auth contract and capability model. If it requires a new streaming protocol, auth flow shape, or tool calling convention, `_base.cjs` or engine extensions are also needed.
 
 ## Constraints
 
@@ -225,15 +298,16 @@ upstream update → patches break → update MATCH constants in provider-engine.
 
 On build, the engine validates every provider config before generating patches:
 
-- `name` is a non-empty string, unique across all providers
-- `envKey` is unique across all providers (or null for default)
+- `key` is a non-empty string, unique across all providers
+- `runtimeId` is a non-empty string (may duplicate across providers if intentional, e.g. aliasing)
+- `envKey` is unique across all providers (or null for exactly one default provider)
 - `priority` values do not collide between non-null providers
 - `models.default` exists if `models` is provided
 - `tierNames` has all three keys: `max`, `pro`, `api`
-- `adapter` is a function or null
+- `adapter` is a function or null; if non-null, `auth` must also be non-null
 - `auth` is a function or null
 - `identity.systemPrompt` is a non-empty string
-- `contextWindow` is null, a number, or an object with `default` key
+- `contextWindow` is normalized at build time: `null` stays null, `number` → `{ default: number, perModel: {} }`, `object` must have `default` key
 
 Build fails with a descriptive error if validation fails. Provider files are "compile-time verified modules", not convention-based objects.
 
@@ -261,13 +335,15 @@ On build completion, output a patch report:
 
 ### Layer 3: Serialization Boundary Enforcement
 
-Adapter functions and `_base.cjs` exports run in a restricted runtime (upstream client factory scope). The engine enforces:
+Adapter functions and `_base.cjs` exports run in a restricted runtime (upstream client factory scope). The engine enforces two checks:
 
-- Serialized functions must not reference variables outside their own scope
-- Only `await import('node:...')` for Node built-ins is allowed (no npm packages)
-- A static scan at build time checks for common violations: bare `require()`, references to `module`, `exports`, `__dirname`, `__filename`
+**Static scan:** At build time, scan serialized function source for violations:
+- bare `require()` calls → FAIL
+- references to `module`, `exports`, `__dirname`, `__filename` → FAIL
+- `import()` of non-`node:` packages → FAIL
+- Only `await import('node:...')` for Node built-ins is allowed
 
-Build warns (not fails) on suspicious patterns. This catches the "works at build, crashes at runtime" class of bugs.
+**Isolation compile check:** After serialization, attempt to compile the combined adapter code string in an isolated `new Function()` context. If it throws a SyntaxError or ReferenceError, build fails with the exact error location. This catches the "builds fine, crashes at runtime" class of bugs that static scanning alone misses.
 
 ## Testing
 

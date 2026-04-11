@@ -291,4 +291,32 @@ function oaiToAnthropicResponse(oaiJson, model) {
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
-module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, flattenSystem, oaiToAnthropicResponse };
+/**
+ * Tone down aggressive skill activation instructions for third-party models.
+ * GPT models follow "ABSOLUTELY MUST" / "1% chance" too literally, causing
+ * skills to fire on every turn and block autonomous loop execution.
+ *
+ * Operates on message content strings — strips or rewrites the most
+ * problematic patterns while preserving skill descriptions.
+ *
+ * @param {string} text - Message text (may contain system-reminder tags)
+ * @returns {string}
+ */
+function tameSkillPrompts(text) {
+  if (!text || typeof text !== 'string') return text;
+  // Strip the EXTREMELY-IMPORTANT blocks that force skill invocation
+  text = text.replace(/<EXTREMELY-IMPORTANT>[\s\S]*?<\/EXTREMELY-IMPORTANT>/g, '');
+  text = text.replace(/<EXTREMELY_IMPORTANT>[\s\S]*?<\/EXTREMELY_IMPORTANT>/g, '');
+  // Remove HARD-GATE blocks that block autonomous execution
+  text = text.replace(/<HARD-GATE>[\s\S]*?<\/HARD-GATE>/g, '');
+  // Tone down remaining aggressive directives
+  text = text.replace(/you ABSOLUTELY MUST invoke the skill/gi, 'consider invoking the skill if relevant');
+  text = text.replace(/IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE\. YOU MUST USE IT\./gi, '');
+  text = text.replace(/This is not negotiable\. This is not optional\. You cannot rationalize your way out of this\./gi, '');
+  text = text.replace(/even a 1% chance a skill might apply/gi, 'a skill clearly applies');
+  // Remove the "Red Flags" table that makes models paranoid about skipping skills
+  text = text.replace(/## Red Flags[\s\S]*?(?=## |\n---|\Z)/g, '');
+  return text;
+}
+
+module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts };

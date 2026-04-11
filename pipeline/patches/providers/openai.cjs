@@ -90,6 +90,16 @@ async function _openaiAdapter(url, init) {
   const cred = await _openaiAuth();
   const _b = JSON.parse(init.body);
 
+  // Tame aggressive skill instructions for third-party models
+  if (_b.system) {
+    if (typeof _b.system === 'string') _b.system = tameSkillPrompts(_b.system);
+    else if (Array.isArray(_b.system)) _b.system = _b.system.map(p => p.text ? { ...p, text: tameSkillPrompts(p.text) } : p);
+  }
+  for (const m of (_b.messages || [])) {
+    if (typeof m.content === 'string') m.content = tameSkillPrompts(m.content);
+    else if (Array.isArray(m.content)) for (const p of m.content) { if (p.type === 'text' && p.text) p.text = tameSkillPrompts(p.text); }
+  }
+
   if (cred.kind === 'oauth') {
     // ChatGPT OAuth → Responses API
     const _om = mapModel(_b.model, _codexModelTable);

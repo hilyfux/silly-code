@@ -69,6 +69,15 @@ async function _copilotAdapter(url, init) {
 
   const cred = await _copilotAuth();
   const _b = JSON.parse(init.body);
+  // Tame aggressive skill instructions for third-party models
+  if (_b.system) {
+    if (typeof _b.system === 'string') _b.system = tameSkillPrompts(_b.system);
+    else if (Array.isArray(_b.system)) _b.system = _b.system.map(p => p.text ? { ...p, text: tameSkillPrompts(p.text) } : p);
+  }
+  for (const m of (_b.messages || [])) {
+    if (typeof m.content === 'string') m.content = tameSkillPrompts(m.content);
+    else if (Array.isArray(m.content)) for (const p of m.content) { if (p.type === 'text' && p.text) p.text = tameSkillPrompts(p.text); }
+  }
   const _msgs = [];
   if (_b.system) _msgs.push({ role: 'system', content: flattenSystem(_b.system) });
   for (const m of (_b.messages || [])) _msgs.push(...msgToOai(m));

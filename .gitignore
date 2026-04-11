@@ -1,6 +1,6 @@
 node_modules/
 pipeline/build/
-pipeline/upstream/
+# pipeline/upstream/ is tracked — clone includes it, no npm pack needed
 pipeline/.upgrade-tmp/
 pipeline/varmap-*.json
 *.tgz

@@ -43,7 +43,7 @@ function mapModel(model, table) {
 function msgToOai(msg){
   if(typeof msg.content==='string')return[{role:msg.role,content:msg.content}];
   if(!Array.isArray(msg.content))return[{role:msg.role,content:String(msg.content||'')}];
-  // Separate content into: text/image parts, tool_use calls, and tool_results
+  if(msg.content.length===0)return[{role:msg.role,content:''}];
   const _texts=[], _toolCalls=[], _toolResults=[];
   for(const p of msg.content){
     if(p.type==='text')_texts.push({type:'text',text:p.text});

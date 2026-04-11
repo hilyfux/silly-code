@@ -197,7 +197,7 @@ case "${1:-}" in
     fi
 
     # ripgrep
-    WANT_RG=$(python3 -c "import json; print(json.load(open('$DEPS_JSON'))['deps']['ripgrep']['version'])")
+    WANT_RG=$(node -e "console.log(require('$DEPS_JSON').deps.ripgrep.version)")
     if command -v rg >/dev/null 2>&1; then
       CUR_RG=$(rg --version | head -1 | awk '{print $2}')
       ok "ripgrep: $CUR_RG (want >= $WANT_RG)"
@@ -220,7 +220,7 @@ case "${1:-}" in
 
     REMOTE_COMMIT=$(curl -fsSL -H "Accept: application/vnd.github.v3+json" \
       "https://api.github.com/repos/hilyfux/silly-code/commits/main" 2>/dev/null \
-      | python3 -c "import json,sys; print(json.load(sys.stdin).get('sha','unknown'))" 2>/dev/null \
+      | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).sha||'unknown')}catch{console.log('unknown')}})" 2>/dev/null \
       || echo "unknown")
 
     if [ "$REMOTE_COMMIT" = "unknown" ]; then

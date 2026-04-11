@@ -28,7 +28,7 @@ async function _openaiAuth() {
       try {
         _openaiData = JSON.parse(readFileSync(join(_dir, 'codex-oauth.json'), 'utf8'));
       } catch (e) {
-        throw new Error('OpenAI: no auth token. Run: node pipeline/login.mjs codex');
+        throw new Error('OpenAI: no auth token. Run: silly login codex');
       }
     }
   }

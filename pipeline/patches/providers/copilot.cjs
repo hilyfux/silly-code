@@ -26,10 +26,12 @@ async function _copilotAuth() {
       try {
         _copilotData = JSON.parse(readFileSync(join(_dir, 'copilot-oauth.json'), 'utf8'));
       } catch (e) {
-        throw new Error('Copilot: no auth token. Run: silly /login copilot');
+        throw new Error('Copilot: no auth token. Run: silly login copilot');
       }
     }
   }
+
+  if (!_copilotData.githubToken) throw new Error('Copilot: auth file missing githubToken. Re-run: silly login copilot');
 
   // Return cached Copilot API token if still valid (60s buffer)
   if (_copilotData.copilotToken && _copilotData.copilotExpiresAt && Date.now() < _copilotData.copilotExpiresAt - 60000) {

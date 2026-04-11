@@ -38,16 +38,22 @@ async function _copilotAuth() {
     return { headers: _hdrs(_copilotData.copilotToken), kind: 'oauth' };
   }
 
-  // Refresh Copilot API token using GitHub OAuth token
-  const _r = await fetch('https://api.github.com/copilot_internal/v2/token', {
-    method: 'GET',
-    headers: _hdrs(_copilotData.githubToken),
-  });
-  if (!_r.ok) throw new Error('Copilot token refresh failed: ' + _r.status);
-  const _d = await _r.json();
-  _copilotData.copilotToken = _d.token;
-  _copilotData.copilotExpiresAt = (_d.expires_at || 0) * 1000;
-  try { writeFileSync(join(_dir, 'copilot-auth.json'), JSON.stringify(_copilotData)); } catch {}
+  // Refresh Copilot API token using GitHub OAuth token (with concurrency lock)
+  if (!_copilotData._refreshP) {
+    _copilotData._refreshP = (async () => {
+      const _r = await fetch('https://api.github.com/copilot_internal/v2/token', {
+        method: 'GET',
+        headers: _hdrs(_copilotData.githubToken),
+      });
+      if (!_r.ok) throw new Error('Copilot token refresh failed: ' + _r.status);
+      const _d = await _r.json();
+      _copilotData.copilotToken = _d.token;
+      _copilotData.copilotExpiresAt = (_d.expires_at || 0) * 1000;
+      try { writeFileSync(join(_dir, 'copilot-auth.json'), JSON.stringify(_copilotData)); } catch {}
+      _copilotData._refreshP = null;
+    })();
+  }
+  await _copilotData._refreshP;
 
   return { headers: _hdrs(_copilotData.copilotToken), kind: 'oauth' };
 }

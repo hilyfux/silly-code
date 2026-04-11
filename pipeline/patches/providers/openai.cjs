@@ -44,26 +44,32 @@ async function _openaiAuth() {
         return { headers: { 'Authorization': 'Bearer ' + _openaiData.access_token }, kind: 'oauth' };
       }
     } catch {}
-    // JWT expired or unreadable — try refresh
+    // JWT expired or unreadable — try refresh (with concurrency lock)
     if (_openaiData.refresh_token) {
-      try {
-        const _r = await fetch('https://auth.openai.com/oauth/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            grant_type: 'refresh_token',
-            client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
-            refresh_token: _openaiData.refresh_token,
-          }).toString(),
-        });
-        if (_r.ok) {
-          const _d = await _r.json();
-          _openaiData.access_token = _d.access_token || _openaiData.access_token;
-          if (_d.refresh_token) _openaiData.refresh_token = _d.refresh_token;
-          _openaiData.savedAt = new Date().toISOString();
-          try { writeFileSync(join(_dir, 'codex-auth.json'), JSON.stringify(_openaiData, null, 2)); } catch {}
-        }
-      } catch {}
+      if (!_openaiData._refreshP) {
+        _openaiData._refreshP = (async () => {
+          try {
+            const _r = await fetch('https://auth.openai.com/oauth/token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                grant_type: 'refresh_token',
+                client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+                refresh_token: _openaiData.refresh_token,
+              }).toString(),
+            });
+            if (_r.ok) {
+              const _d = await _r.json();
+              _openaiData.access_token = _d.access_token || _openaiData.access_token;
+              if (_d.refresh_token) _openaiData.refresh_token = _d.refresh_token;
+              _openaiData.savedAt = new Date().toISOString();
+              try { writeFileSync(join(_dir, 'codex-auth.json'), JSON.stringify(_openaiData, null, 2)); } catch {}
+            }
+          } catch {}
+          _openaiData._refreshP = null;
+        })();
+      }
+      await _openaiData._refreshP;
     }
     return { headers: { 'Authorization': 'Bearer ' + _openaiData.access_token }, kind: 'oauth' };
   }

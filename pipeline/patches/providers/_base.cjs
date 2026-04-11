@@ -50,7 +50,8 @@ function msgToOai(msg){
     else if(p.type==='image')_texts.push({type:'image_url',image_url:{url:'data:'+p.source.media_type+';base64,'+p.source.data}});
     else if(p.type==='tool_use')_toolCalls.push({id:p.id||'tc_'+Date.now(),type:'function',function:{name:p.name,arguments:JSON.stringify(p.input||{})}});
     else if(p.type==='tool_result'){
-      const _c=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
+      let _c=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
+      if(p.is_error)_c='[ERROR] '+_c;
       _toolResults.push({role:'tool',tool_call_id:p.tool_use_id,content:_c});
     }
     else _texts.push({type:'text',text:JSON.stringify(p)});
@@ -96,7 +97,8 @@ function msgsToResponsesInput(system, messages) {
       }
       else if(p.type==='tool_result'){
         if(_texts.length>0){_parts.push({type:'message',role:m.role==='user'?'user':'assistant',content:_texts.join('')});_texts.length=0;}
-        const _c=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
+        let _c=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
+        if(p.is_error)_c='[ERROR] '+_c;
         _parts.push({type:'function_call_output',call_id:p.tool_use_id,output:_c});
       }
       else{_texts.push(JSON.stringify(p));}
@@ -117,10 +119,21 @@ function msgsToResponsesInput(system, messages) {
 function makeSseStream(oaiResp, model) {
   const _enc=new TextEncoder(),_dec=new TextDecoder();
   const _msgId='msg_sc_'+Date.now();
-  let _sentStart=false,_blockIdx=0,_blockOpen=false,_outTok=0;
+  let _sentStart=false,_blockIdx=0,_blockOpen=false,_outTok=0,_hasTools=false;
+  // Track active tool block indices to properly close them
+  const _openToolBlocks=new Set();
   return new ReadableStream({async start(ctrl){
     const _rd=oaiResp.body.getReader();let _buf='';
     const _send=(ev,d)=>ctrl.enqueue(_enc.encode('event: '+ev+'\ndata: '+JSON.stringify(d)+'\n\n'));
+    const _closeAll=()=>{
+      if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockOpen=false;}
+      for(const bi of _openToolBlocks){_send('content_block_stop',{type:'content_block_stop',index:bi});}_openToolBlocks.clear();
+    };
+    const _finish=(reason)=>{
+      _closeAll();
+      _send('message_delta',{type:'message_delta',delta:{stop_reason:reason,stop_sequence:null},usage:{output_tokens:_outTok}});
+      _send('message_stop',{type:'message_stop'});ctrl.close();
+    };
     try{while(true){
       const{done,value}=await _rd.read();if(done)break;
       _buf+=_dec.decode(value,{stream:true});
@@ -128,13 +141,9 @@ function makeSseStream(oaiResp, model) {
       for(const line of _lines){
         if(!line.startsWith('data: '))continue;
         const _d=line.slice(6).trim();
-        if(_d==='[DONE]'){
-          if(_blockOpen)_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});
-          _send('message_delta',{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:_outTok}});
-          _send('message_stop',{type:'message_stop'});ctrl.close();return;
-        }
+        if(_d==='[DONE]'){_finish(_hasTools?'tool_use':'end_turn');return;}
         let _chunk;try{_chunk=JSON.parse(_d)}catch{continue}
-        if(!_sentStart){_sentStart=true;_send('message_start',{type:'message_start',message:{id:_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,usage:{input_tokens:0,output_tokens:0}}});}
+        if(!_sentStart){_sentStart=true;_send('message_start',{type:'message_start',message:{id:_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,stop_sequence:null,usage:{input_tokens:0,output_tokens:0}}});}
         const _ch=_chunk.choices?.[0];if(!_ch)continue;
         const _dt=_ch.delta||{};
         if(_dt.content!=null){
@@ -142,20 +151,27 @@ function makeSseStream(oaiResp, model) {
           _outTok++;_send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'text_delta',text:_dt.content}});
         }
         if(_dt.tool_calls){
+          // Close text block before first tool call
+          if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
           for(const tc of _dt.tool_calls){
+            _hasTools=true;
             const ti=tc.index||0;
-            if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
-            if(tc.function?.name)_send('content_block_start',{type:'content_block_start',index:_blockIdx+ti,content_block:{type:'tool_use',id:'tc_'+(tc.id||ti+'_'+Date.now()),name:tc.function.name,input:{}}});
-            if(tc.function?.arguments)_send('content_block_delta',{type:'content_block_delta',index:_blockIdx+ti,delta:{type:'input_json_delta',partial_json:tc.function.arguments}});
+            const _bi=_blockIdx+ti;
+            if(tc.function?.name){
+              // Use OpenAI's native ID (e.g. call_abc123) — do NOT prepend tc_
+              const _tcId=tc.id||('toolu_'+ti+'_'+Date.now());
+              _send('content_block_start',{type:'content_block_start',index:_bi,content_block:{type:'tool_use',id:_tcId,name:tc.function.name,input:{}}});
+              _openToolBlocks.add(_bi);
+            }
+            if(tc.function?.arguments)_send('content_block_delta',{type:'content_block_delta',index:_bi,delta:{type:'input_json_delta',partial_json:tc.function.arguments}});
           }
         }
-        if(_ch.finish_reason){
-          if(_blockOpen)_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});
-          _send('message_delta',{type:'message_delta',delta:{stop_reason:_ch.finish_reason==='tool_calls'?'tool_use':'end_turn'},usage:{output_tokens:_outTok}});
-          _send('message_stop',{type:'message_stop'});ctrl.close();return;
-        }
+        if(_ch.finish_reason){_finish(_ch.finish_reason==='tool_calls'?'tool_use':'end_turn');return;}
       }
-    }}catch(e){ctrl.error(e);}
+    }
+    // Stream ended without [DONE] or finish_reason — clean up
+    if(_sentStart){_finish(_hasTools?'tool_use':'end_turn');}else{ctrl.close();}
+    }catch(e){ctrl.error(e);}
   }});
 }
 
@@ -170,10 +186,16 @@ function makeSseStream(oaiResp, model) {
 function makeResponsesSseStream(oaiResp, model) {
   const _enc=new TextEncoder(),_dec=new TextDecoder();
   const _msgId='msg_sc_'+Date.now();
-  let _blockIdx=0,_blockOpen=false,_outTok=0,_sentStart=false;
+  let _blockIdx=0,_blockOpen=false,_outTok=0,_sentStart=false,_hasTools=false;
   return new ReadableStream({async start(ctrl){
     const _rd=oaiResp.body.getReader();let _buf='';
     const _send=(ev,d)=>ctrl.enqueue(_enc.encode('event: '+ev+'\ndata: '+JSON.stringify(d)+'\n\n'));
+    const _ensureStart=()=>{if(!_sentStart){_sentStart=true;_send('message_start',{type:'message_start',message:{id:_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,stop_sequence:null,usage:{input_tokens:0,output_tokens:0}}});}};
+    const _finish=(sr,usage)=>{
+      if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockOpen=false;}
+      _send('message_delta',{type:'message_delta',delta:{stop_reason:sr,stop_sequence:null},usage:{output_tokens:usage||_outTok}});
+      _send('message_stop',{type:'message_stop'});ctrl.close();
+    };
     try{while(true){
       const{done,value}=await _rd.read();if(done)break;
       _buf+=_dec.decode(value,{stream:true});
@@ -181,54 +203,45 @@ function makeResponsesSseStream(oaiResp, model) {
       for(const line of _lines){
         if(!line.startsWith('data: '))continue;
         const _d=line.slice(6).trim();
-        if(_d==='[DONE]'){
-          if(_blockOpen)_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});
-          _send('message_delta',{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:_outTok}});
-          _send('message_stop',{type:'message_stop'});ctrl.close();return;
-        }
+        if(_d==='[DONE]'){_ensureStart();_finish(_hasTools?'tool_use':'end_turn');return;}
         let _ev;try{_ev=JSON.parse(_d)}catch{continue}
         const _t=_ev.type;
-        // response.created → message_start
         if(_t==='response.created'&&!_sentStart){
           _sentStart=true;
-          _send('message_start',{type:'message_start',message:{id:_ev.response?.id||_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,usage:{input_tokens:_ev.response?.usage?.input_tokens||0,output_tokens:0}}});
+          _send('message_start',{type:'message_start',message:{id:_ev.response?.id||_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,stop_sequence:null,usage:{input_tokens:_ev.response?.usage?.input_tokens||0,output_tokens:0}}});
         }
-        // response.output_text.delta → content_block_delta (text)
         if(_t==='response.output_text.delta'){
-          if(!_sentStart){_sentStart=true;_send('message_start',{type:'message_start',message:{id:_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,usage:{input_tokens:0,output_tokens:0}}});}
+          _ensureStart();
           if(!_blockOpen){_blockOpen=true;_send('content_block_start',{type:'content_block_start',index:_blockIdx,content_block:{type:'text',text:''}});}
           _outTok++;
           _send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'text_delta',text:_ev.delta||''}});
         }
-        // response.output_item.added with type=function_call → content_block_start (tool_use)
         if(_t==='response.output_item.added'&&_ev.item?.type==='function_call'){
+          _ensureStart();_hasTools=true;
           if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
-          _send('content_block_start',{type:'content_block_start',index:_blockIdx,content_block:{type:'tool_use',id:_ev.item.call_id||'tc_'+Date.now(),name:_ev.item.name||'',input:{}}});
+          _send('content_block_start',{type:'content_block_start',index:_blockIdx,content_block:{type:'tool_use',id:_ev.item.call_id||('toolu_'+Date.now()),name:_ev.item.name||'',input:{}}});
           _blockOpen=true;
         }
-        // response.function_call_arguments.delta → content_block_delta (input_json_delta)
         if(_t==='response.function_call_arguments.delta'){
           _send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'input_json_delta',partial_json:_ev.delta||''}});
         }
-        // response.function_call_arguments.done → close tool block
         if(_t==='response.function_call_arguments.done'){
           if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
         }
-        // response.output_text.done → close text block
         if(_t==='response.output_text.done'){
           if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
         }
-        // response.completed → message_delta + message_stop
         if(_t==='response.completed'){
-          if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});}
+          if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockOpen=false;}
           const _u=_ev.response?.usage||{};
-          const _hasTools=(_ev.response?.output||[]).some(o=>o.type==='function_call');
-          const _sr=_ev.response?.status==='incomplete'?'max_tokens':_hasTools?'tool_use':'end_turn';
-          _send('message_delta',{type:'message_delta',delta:{stop_reason:_sr},usage:{output_tokens:_u.output_tokens||_outTok}});
-          _send('message_stop',{type:'message_stop'});ctrl.close();return;
+          const _ht=_hasTools||(_ev.response?.output||[]).some(o=>o.type==='function_call');
+          _finish(_ev.response?.status==='incomplete'?'max_tokens':_ht?'tool_use':'end_turn',_u.output_tokens||_outTok);return;
         }
       }
-    }}catch(e){ctrl.error(e);}
+    }
+    // Stream ended without response.completed — clean up
+    if(_sentStart){_finish(_hasTools?'tool_use':'end_turn');}else{ctrl.close();}
+    }catch(e){ctrl.error(e);}
   }});
 }
 

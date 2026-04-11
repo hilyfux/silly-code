@@ -73,4 +73,24 @@ module.exports = function applyBranding({ patch, patchAll }) {
     'Fast mode for Claude Code uses the same',
     'Fast mode for Silly Code uses the same'
   )
+
+  // Patch 09: Sub-agent identity — file search specialist
+  patch('09-search-agent-identity',
+    'You are a file search specialist for Claude Code, Anthropic\'s official CLI for Claude.',
+    'You are a file search specialist for Silly Code, a multi-provider AI coding assistant.'
+  )
+
+  // Patch 09a: Sub-agent identity — general agent (2 occurrences)
+  patchAll('09a-general-agent-identity',
+    'You are an agent for Claude Code, Anthropic\'s official CLI for Claude.',
+    'You are an agent for Silly Code, a multi-provider AI coding assistant.'
+  )
+
+  // 09b skipped: CWD context is part of SIMPLE_ID match, handled by patch 63a in provider-engine.cjs
+
+  // Patch 09c: Verification agent — "You are Claude, and you are bad"
+  patch('09c-verification-identity',
+    'You are Claude, and you are bad at verification.',
+    'You are the AI model, and you are bad at verification.'
+  )
 }

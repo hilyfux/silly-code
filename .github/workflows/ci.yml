@@ -20,5 +20,11 @@ jobs:
       - name: Run unit tests
         run: node tests/base.test.cjs && node tests/schema.test.cjs
 
+      - name: Fetch upstream binary
+        run: |
+          mkdir -p pipeline/upstream
+          npm pack @anthropic-ai/claude-code --pack-destination /tmp
+          tar xzf /tmp/anthropic-ai-claude-code-*.tgz -C pipeline/upstream
+
       - name: Build patched binary
         run: node pipeline/patch.cjs

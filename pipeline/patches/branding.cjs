@@ -54,4 +54,23 @@ module.exports = function applyBranding({ patch, patchAll }) {
     'clawd_body:"ansi:redBright"',
     'clawd_body:"ansi:greenBright"'
   )
+
+  // Patch 08: Environment section — Claude model family info
+  // This leaks Claude model IDs into the system prompt for all providers
+  patch('08-model-family',
+    'The most recent Claude model family is Claude 4.6 and 4.5. Model IDs — Opus 4.6: \'${wj7.opus}\', Sonnet 4.6: \'${wj7.sonnet}\', Haiku 4.5: \'${wj7.haiku}\'. When building AI applications, default to the latest and most capable Claude models.',
+    'The most recent model family is Claude 4.6 and 4.5. When building AI applications, default to the latest and most capable models.'
+  )
+
+  // Patch 08a: Environment section — "Claude Code is available as a CLI"
+  patch('08a-cli-description',
+    'Claude Code is available as a CLI in the terminal, desktop app (Mac/Windows), web app (claude.ai/code), and IDE extensions (VS Code, JetBrains).',
+    'Silly Code is available as a CLI in the terminal.'
+  )
+
+  // Patch 08b: Environment section — "Fast mode for Claude Code"
+  patch('08b-fast-mode',
+    'Fast mode for Claude Code uses the same',
+    'Fast mode for Silly Code uses the same'
+  )
 }

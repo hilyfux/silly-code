@@ -96,6 +96,7 @@ const MATCH = {
   SDK_ID:      'z14="You are Claude Code, Anthropic\'s official CLI for Claude, running within the Claude Agent SDK."',
   AGENT_ID:    'Y14="You are a Claude agent, built on Anthropic\'s Claude Agent SDK."',
   MODEL_ID:    'You are powered by the model named ${$}. The exact model ID is ${q}.',
+  MODEL_ID_2:  'You are powered by the model named ${H}. The exact model ID is ${q}.',
   SIMPLE_ID:   '?"You are Claude Code, Anthropic\'s official CLI for Claude.":`You are Claude Code, Anthropic\'s official CLI for Claude.',
   TIER:        'case"max":return"Claude Max";case"pro":return"Claude Pro";default:return"Claude API"',
   CONSTRUCTOR: 'gL',
@@ -269,10 +270,14 @@ module.exports = function applyProviders({ patch }) {
     `z14="${sdkPrompt}"`
   );
 
-  // ── Patch 64: Model ID in prompt ──
+  // ── Patch 64: Model ID in prompt (two occurrences with different var names) ──
   patch('64-model-id-in-prompt',
     MATCH.MODEL_ID,
     'You are powered by the model named ${$}.'
+  );
+  patch('64b-model-id-in-prompt-2',
+    MATCH.MODEL_ID_2,
+    'You are powered by the model named ${H}.'
   );
 
   // ── Patch 65: Agent identity ──

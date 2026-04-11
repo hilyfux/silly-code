@@ -53,7 +53,7 @@ for cmd in silly sillyt sillyx sillye; do
 done
 
 # ── Auth tokens ─────────────────────────────────────────────
-DATA_DIR="$HOME/.silly-code"
+DATA_DIR="${SILLY_CODE_DATA:-$HOME/.silly-code}"
 if [ -d "$DATA_DIR" ]; then
   CONFIRM="n"
   CAN_ASK=false

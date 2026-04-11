@@ -155,9 +155,9 @@ function makeSseStream(oaiResp, model) {
           if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
           for(const tc of _dt.tool_calls){
             _hasTools=true;
-            const ti=tc.index||0;
+            const ti=tc.index!=null?tc.index:0;
             const _bi=_blockIdx+ti;
-            if(tc.function?.name){
+            if(tc.function?.name&&!_openToolBlocks.has(_bi)){
               // Use OpenAI's native ID (e.g. call_abc123) — do NOT prepend tc_
               const _tcId=tc.id||('toolu_'+ti+'_'+Date.now());
               _send('content_block_start',{type:'content_block_start',index:_bi,content_block:{type:'tool_use',id:_tcId,name:tc.function.name,input:{}}});
@@ -216,11 +216,17 @@ function makeResponsesSseStream(oaiResp, model) {
           _outTok++;
           _send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'text_delta',text:_ev.delta||''}});
         }
-        if(_t==='response.output_item.added'&&_ev.item?.type==='function_call'){
-          _ensureStart();_hasTools=true;
-          if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
-          _send('content_block_start',{type:'content_block_start',index:_blockIdx,content_block:{type:'tool_use',id:_ev.item.call_id||('toolu_'+Date.now()),name:_ev.item.name||'',input:{}}});
-          _blockOpen=true;
+        if(_t==='response.output_item.added'){
+          _ensureStart();
+          if(_ev.item?.type==='function_call'){
+            _hasTools=true;
+            if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
+            _send('content_block_start',{type:'content_block_start',index:_blockIdx,content_block:{type:'tool_use',id:_ev.item.call_id||('toolu_'+Date.now()),name:_ev.item.name||'',input:{}}});
+            _blockOpen=true;
+          } else if(_ev.item?.type==='message'){
+            // New text output item — close previous block if open, start fresh text block
+            if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
+          }
         }
         if(_t==='response.function_call_arguments.delta'){
           _send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'input_json_delta',partial_json:_ev.delta||''}});
@@ -263,9 +269,17 @@ function flattenSystem(sys) {
  * @returns {Response}
  */
 function oaiToAnthropicResponse(oaiJson, model) {
-  const _c = oaiJson.choices?.[0], _mg = _c?.message, _ct = [];
-  if (_mg?.content) _ct.push({ type: 'text', text: _mg.content });
-  if (_mg?.tool_calls) for (const tc of _mg.tool_calls) {
+  const _c = oaiJson.choices?.[0], _mg = _c?.message;
+  if (!_c || !_mg) {
+    const _err = oaiJson.error?.message || 'No valid completion in response';
+    return new Response(JSON.stringify({
+      id: 'msg_' + (oaiJson.id || Date.now()), type: 'error',
+      error: { type: 'api_error', message: _err }
+    }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+  const _ct = [];
+  if (_mg.content) _ct.push({ type: 'text', text: _mg.content });
+  if (_mg.tool_calls) for (const tc of _mg.tool_calls) {
     let _i = {}; try { _i = JSON.parse(tc.function.arguments || '{}') } catch {}
     _ct.push({ type: 'tool_use', id: tc.id || 'tc_' + Date.now(), name: tc.function.name, input: _i });
   }

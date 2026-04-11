@@ -261,5 +261,34 @@ async function drainStream(stream) {
     console.log('  makeResponsesSseStream tool_call: PASS');
   }
 
+  // ── oaiToAnthropicResponse empty choices ──
+  {
+    const oaiJson = { id: 'chatcmpl-err', choices: [], usage: {} };
+    const resp = oaiToAnthropicResponse(oaiJson, 'gpt-4o');
+    assert.strictEqual(resp.status, 500);
+    const body = JSON.parse(await resp.text());
+    assert.strictEqual(body.type, 'error');
+    assert.ok(body.error.message, 'missing error message');
+    console.log('  oaiToAnthropicResponse empty choices: PASS');
+  }
+
+  // ── makeSseStream tool_calls with chunked name/args ──
+  {
+    const sseLines = [
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_abc","function":{"name":"bash","arguments":""}}]},"index":0}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"cmd\\":"}}]},"index":0}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"ls\\"}"}}]},"index":0}]}',
+      'data: {"choices":[{"index":0,"finish_reason":"tool_calls"}]}',
+    ];
+    const output = await drainStream(makeSseStream(mockSseResponse(sseLines), 'gpt-4o'));
+    // Should have exactly ONE content_block_start for this tool
+    // Each SSE event produces 2 matches: "event: content_block_start" + "data: {...content_block_start...}"
+    const blockStarts = (output.match(/event: content_block_start/g) || []).length;
+    assert.strictEqual(blockStarts, 1, 'duplicate content_block_start for same tool');
+    assert.ok(output.includes('"call_abc"'), 'missing tool call id');
+    assert.ok(output.includes('"stop_reason":"tool_use"'), 'missing tool_use stop_reason');
+    console.log('  makeSseStream chunked tool_calls: PASS');
+  }
+
   console.log('\nAll _base tests passed.');
 })().catch(e => { console.error(e); process.exit(1); });

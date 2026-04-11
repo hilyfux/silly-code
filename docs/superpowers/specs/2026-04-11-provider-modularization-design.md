@@ -176,7 +176,7 @@ Output: {
 }
 
 Lifecycle:
-  1. Read credential from disk (~/.silly-code/<key>-oauth.json)
+  1. Read credential from disk (~/.silly-code/<key>-auth.json)
   2. Check expiry (JWT decode or stored timestamp)
   3. If valid → return credential
   4. If expired → refresh using provider's refresh flow
@@ -255,7 +255,7 @@ The engine iterates over loaded providers to generate each patch. **All runtime 
 - **Detection (patch 10):** Build ternary chain: `F6(envKey)?"runtimeId":...` sorted by `priority`
 - **Adapters (patch 11-12):** Serialize `_base.cjs` + each provider's `adapter` function; inject `if(P==="runtimeId"){...}` branches before bedrock
 - **Resolution (patch 13-14):** Extend firstParty check with all `runtimeId` values: `q==="firstParty"||q==="openai"||q==="copilot"`
-- **Context (patch 50-51):** Generate `dq()==="runtimeId"?contextWindow.default:...` chain
+- **Context (patch 50-51):** Generate per-provider context window resolution. At runtime the logic is: `mappedModel = mapModel(requestedModel, provider.models)`, then `contextWindow.perModel[mappedModel] ?? contextWindow.default`. The engine generates this as a nested lookup: first match `dq()` to select the provider's context config, then match the mapped model name against `perModel` entries, falling back to `default`. Providers with `contextWindow: null` are omitted (use upstream 200K)
 - **Identity (patches 60-62, 64-65):** Generate `dq()==="runtimeId"?"identity.systemPrompt":...` for each identity field
 - **Tier (patch 63, 63a):** Generate `dq()==="runtimeId"?"tierNames.max":...` for each tier level
 

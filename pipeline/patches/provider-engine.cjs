@@ -252,22 +252,31 @@ module.exports = function applyProviders({ patch }) {
   }
 
   // ── Patch 61: System prompt identity ──
+  // IMPORTANT: Anthropic server validates Bh1 integrity for firstParty.
+  // Bh1 MUST keep its original value for firstParty, only override for third-party.
   const identityBranches = providers
     .filter(p => p.runtimeId !== 'firstParty')
     .map(p => `if(_p==="${p.runtimeId}")return"${p.identity.systemPrompt}";`)
     .join('');
-  const fallbackPrompt = fallback.identity.systemPrompt;
+  const originalIdentity = "You are Claude Code, Anthropic\\'s official CLI for Claude.";
   patch('61-system-identity',
     MATCH.IDENTITY,
-    `Bh1=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${identityBranches}return"${fallbackPrompt}";})()`
+    `Bh1=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${identityBranches}return"${originalIdentity}";})()`
   );
 
   // ── Patch 62: SDK identity ──
+  // IMPORTANT: Anthropic server validates z14 integrity for firstParty.
+  // z14 MUST keep its original value for firstParty, only override for third-party.
   const sdkPrompt = providers.find(p => p.identity.sdkPrompt)?.identity.sdkPrompt
     || 'You are Silly Code, a multi-provider AI coding assistant, running within the Agent SDK.';
+  const originalSdk = "You are Claude Code, Anthropic\\'s official CLI for Claude, running within the Claude Agent SDK.";
+  const sdkBranches = providers
+    .filter(p => p.runtimeId !== 'firstParty')
+    .map(p => `if(_p==="${p.runtimeId}")return"${sdkPrompt}";`)
+    .join('');
   patch('62-sdk-identity',
     MATCH.SDK_ID,
-    `z14="${sdkPrompt}"`
+    `z14=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${sdkBranches}return"${originalSdk}";})()`
   );
 
   // ── Patch 64: Model ID in prompt (two occurrences with different var names) ──
@@ -294,15 +303,18 @@ module.exports = function applyProviders({ patch }) {
   );
 
   // ── Patch 63a: Simple identity ──
+  // Note: This builds inline template text, not Bh1/z14/Y14, so no server validation issue.
+  // But for firstParty we still return original Claude identity to stay consistent.
   const simpleBranches = providers
     .filter(p => p.runtimeId !== 'firstParty')
     .map(p => `if(_p==="${p.runtimeId}")return"${p.identity.simplePrompt}";`)
     .join('');
   const fallbackSimple = fallback.identity.simplePrompt;
+  const fallbackFull = fallback.identity.systemPrompt;
   patch('63a-prompt-simple-identity',
     MATCH.SIMPLE_ID,
     `?(()=>{const _p=typeof dq==="function"?dq():"firstParty";${simpleBranches}return"${fallbackSimple}";})()`
-    + `:((()=>{const _p=typeof dq==="function"?dq():"firstParty";${identityBranches}return"${fallbackPrompt}";})())+\``
+    + `:((()=>{const _p=typeof dq==="function"?dq():"firstParty";${identityBranches}return"${fallbackFull}";})())+\``
   );
 
   // ── Patch 63: Tier display ──

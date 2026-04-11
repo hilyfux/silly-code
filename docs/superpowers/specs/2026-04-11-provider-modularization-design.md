@@ -8,11 +8,11 @@ Provider adaptation logic is scattered across 4 patch files (providers.cjs, iden
 
 ## Goal
 
-Modularize the three provider adaptations (Claude, OpenAI/Codex, Copilot) into a plugin architecture where:
+Modularize the three provider adaptations (Claude, OpenAI/Codex, Copilot) into a single-engine governed provider system where:
 - Each provider is a self-contained file declaring its configuration and unique logic
 - A shared engine generates all patches from provider configs
 - The upstream Claude Code binary serves as the base with all capabilities preserved
-- Adding a new provider = adding one file, zero changes to existing code
+- Adding a new provider = adding one file, **if it falls within the existing capability model** (same auth flow shape, same streaming protocol, same tool calling convention). Providers requiring new protocol shapes will also need `_base.cjs` or engine extensions.
 
 ## Architecture
 
@@ -57,6 +57,7 @@ Every provider file exports a single object with this structure:
 module.exports = {
   name: 'openai',                          // provider identifier (used in dq() return value)
   envKey: 'CLAUDE_CODE_USE_OPENAI',        // env var that activates this provider (null = default)
+  priority: 10,                            // detection order (lower = checked first; null = default/fallback)
 
   identity: {
     displayName: 'OpenAI GPT',             // TUI title bar display (null = use upstream default)
@@ -72,7 +73,10 @@ module.exports = {
     default: 'gpt-5.4',
   },
 
-  contextWindow: 128000,                   // max context tokens (null = upstream default 200K)
+  contextWindow: {                         // max context tokens
+    default: 128000,                       // provider-level default
+    // perModel: { 'gpt-5.4': 128000 },   // optional: per-model override (future-proofing)
+  },
 
   tierNames: {                             // subscription tier display names
     max: 'ChatGPT Pro',
@@ -85,6 +89,18 @@ module.exports = {
 }
 ```
 
+### Detection Priority & Conflict Resolution
+
+When multiple provider env vars are set simultaneously, detection order is determined by `priority` (lower number = checked first). The first matching env var wins. Providers without `envKey` (i.e. Claude) are always the fallback.
+
+```
+priority 10: openai  (CLAUDE_CODE_USE_OPENAI)
+priority 20: copilot (CLAUDE_CODE_USE_COPILOT)
+priority null: claude (default fallback)
+```
+
+The engine sorts providers by priority and generates the ternary chain in that order. If two providers share the same priority, build fails with a conflict error.
+
 ### Claude Provider (Minimal)
 
 ```javascript
@@ -92,6 +108,7 @@ module.exports = {
 module.exports = {
   name: 'claude',
   envKey: null,                            // default provider, no env var needed
+  priority: null,                          // always fallback
   identity: {
     displayName: null,                     // null = use upstream Claude display names
     systemPrompt: 'You are Silly Code, running with Claude.',
@@ -99,7 +116,7 @@ module.exports = {
     simplePrompt: 'You are Silly Code (Claude).',
   },
   models: null,                            // no mapping, use original Claude model names
-  contextWindow: null,                     // use upstream 200K default
+  contextWindow: null,                     // null = use upstream 200K default
   tierNames: { max: 'Claude Max', pro: 'Claude Pro', api: 'Claude API' },
   adapter: null,                           // no fetch interception, native Anthropic SDK
   auth: null,
@@ -148,7 +165,7 @@ const MATCH = {
 }
 ```
 
-**Upstream upgrade workflow: only update these constants.** The engine code and provider configs remain unchanged.
+**Upstream upgrade: in the common case, only these constants need updating.** The engine code and provider configs remain unchanged. However, if upstream restructures the code around a match point (not just renames the variable), the engine's patch generation logic for that patch may also need adjustment. This design centralizes fragility into a single file — it does not eliminate it.
 
 ### Patch Generation
 
@@ -202,7 +219,59 @@ upstream update → patches break → update MATCH constants in provider-engine.
 - `patch.cjs` orchestrator load order: branding → provider-engine → equality → privacy
 - Claude provider's `adapter: null` means zero fetch interception — full native capability
 
+## Build Safeguards
+
+### Layer 1: Provider Config Schema Validation
+
+On build, the engine validates every provider config before generating patches:
+
+- `name` is a non-empty string, unique across all providers
+- `envKey` is unique across all providers (or null for default)
+- `priority` values do not collide between non-null providers
+- `models.default` exists if `models` is provided
+- `tierNames` has all three keys: `max`, `pro`, `api`
+- `adapter` is a function or null
+- `auth` is a function or null
+- `identity.systemPrompt` is a non-empty string
+- `contextWindow` is null, a number, or an object with `default` key
+
+Build fails with a descriptive error if validation fails. Provider files are "compile-time verified modules", not convention-based objects.
+
+### Layer 2: Match Assertion
+
+Every patch call asserts exactly 1 match (or the expected count for patchAll). The engine wraps each `patch()` call with a post-check:
+
+```
+patch('10-provider-detection', MATCH.DETECT, replacement)
+→ if match count !== 1: FAIL with "MATCH.DETECT: expected 1, found N"
+```
+
+On build completion, output a patch report:
+
+```
+  PATCH REPORT
+  ─────────────────────────────────────────
+  10-provider-detection    1 match   3 providers in chain
+  11-12-provider-adapters  1 match   2 adapters injected (openai, copilot)
+  60-model-display         1 match   3 identity branches
+  ...
+  ─────────────────────────────────────────
+  35 OK, 0 FAIL | providers: claude, openai, copilot
+```
+
+### Layer 3: Serialization Boundary Enforcement
+
+Adapter functions and `_base.cjs` exports run in a restricted runtime (upstream client factory scope). The engine enforces:
+
+- Serialized functions must not reference variables outside their own scope
+- Only `await import('node:...')` for Node built-ins is allowed (no npm packages)
+- A static scan at build time checks for common violations: bare `require()`, references to `module`, `exports`, `__dirname`, `__filename`
+
+Build warns (not fails) on suspicious patterns. This catches the "works at build, crashes at runtime" class of bugs.
+
 ## Testing
+
+### Smoke Test (build verification)
 
 After rebuild (`node pipeline/patch.cjs`), verify all three providers:
 
@@ -220,3 +289,32 @@ CLAUDE_CODE_USE_COPILOT=1 SILLY_CODE_DATA=~/.silly-code \
 ```
 
 Expected: each reports "Silly Code" with its own model name.
+
+### Protocol Tests (`_base.cjs`)
+
+These are the heaviest test targets — `_base.cjs` is the kernel of the multi-provider architecture:
+
+| Test | What it verifies |
+|------|-----------------|
+| `msgToOai` — text message | Simple string content passes through |
+| `msgToOai` — tool_use block | Produces assistant message with `tool_calls` array |
+| `msgToOai` — tool_result block | Produces `role: "tool"` message with correct `tool_call_id` |
+| `msgToOai` — mixed content | Text + tool_use in one message → split into correct sequence |
+| `makeSseStream` — text delta | OpenAI `choices[0].delta.content` → Anthropic `content_block_delta` |
+| `makeSseStream` — tool call | OpenAI `delta.tool_calls` → Anthropic `content_block_start` (tool_use) |
+| `makeSseStream` — finish | OpenAI `finish_reason` → Anthropic `message_delta` + `message_stop` |
+| `makeResponsesSseStream` — text delta | Responses API `response.output_text.delta` → Anthropic text delta |
+| `makeResponsesSseStream` — function call | Responses API `response.output_item.added` → Anthropic tool_use |
+| `mapModel` — known mapping | `claude-opus` + openai table → `gpt-5.4` |
+| `mapModel` — unknown model | Falls back to `default` entry |
+
+### Behavioral Tests (per-provider)
+
+| Test | What it verifies |
+|------|-----------------|
+| Tool call round-trip | Model calls a tool, gets result, responds coherently |
+| Identity display | TUI header shows correct provider name and model |
+| Tier display | Subscription tier shows provider-specific name |
+| Context window | Provider respects its configured context limit |
+| Auth refresh | Token expiry triggers refresh (OpenAI JWT, Copilot GitHub token) |
+| Error propagation | API errors surface as readable messages, not silent hangs |

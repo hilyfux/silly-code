@@ -65,7 +65,7 @@ async function _openaiAuth() {
               _openaiData.savedAt = new Date().toISOString();
               try { writeFileSync(join(_dir, 'codex-auth.json'), JSON.stringify(_openaiData, null, 2)); } catch {}
             }
-          } catch {}
+          } catch (e) { console.error('[silly] OpenAI token refresh failed:', e.message || e); }
           _openaiData._refreshP = null;
         })();
       }

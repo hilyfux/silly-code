@@ -49,6 +49,19 @@ _silly_check_deps() {
 # Run check (suppress all errors)
 _silly_check_deps 2>/dev/null || true
 
+# ── Auth file constants ───────────────────────────────────
+# Canonical filenames for provider tokens in $SILLY_CODE_DATA.
+# Adapters write -auth.json on refresh; login writes -oauth.json.
+# Both must be checked for login detection.
+# NOTE: these names are also hardcoded in provider adapters (string-injected,
+#       can't share modules) and login.mjs. Keep them in sync manually.
+CODEX_AUTH="codex-auth.json"
+CODEX_OAUTH="codex-oauth.json"
+COPILOT_AUTH="copilot-auth.json"
+COPILOT_OAUTH="copilot-oauth.json"
+CLAUDE_OAUTH="claude-oauth.json"
+CLAUDE_CRED="$HOME/.claude/.credentials.json"
+
 # ── Ensure patched binary exists ──────────────────────────
 ensure_patched_binary() {
   local root="${1:-$ROOT_DIR}"

@@ -12,7 +12,7 @@ export CLAUDE_CODE_USE_COPILOT=1
 export SILLY_CODE_DATA="${SILLY_CODE_DATA:-$HOME/.silly-code}"
 mkdir -p "$SILLY_CODE_DATA"
 
-if [ ! -f "$SILLY_CODE_DATA/copilot-auth.json" ] && [ ! -f "$SILLY_CODE_DATA/copilot-oauth.json" ]; then
+if [ ! -f "$SILLY_CODE_DATA/$COPILOT_AUTH" ] && [ ! -f "$SILLY_CODE_DATA/$COPILOT_OAUTH" ]; then
   echo ""
   echo "  sillyt — GitHub Copilot"
   echo ""
@@ -20,7 +20,7 @@ if [ ! -f "$SILLY_CODE_DATA/copilot-auth.json" ] && [ ! -f "$SILLY_CODE_DATA/cop
   echo ""
   "$ROOT_DIR/bin/silly" login copilot
   # Re-check after login
-  if [ ! -f "$SILLY_CODE_DATA/copilot-auth.json" ] && [ ! -f "$SILLY_CODE_DATA/copilot-oauth.json" ]; then
+  if [ ! -f "$SILLY_CODE_DATA/$COPILOT_AUTH" ] && [ ! -f "$SILLY_CODE_DATA/$COPILOT_OAUTH" ]; then
     echo ""
     warn "Login was cancelled. Run 'sillyt' again when ready."
     exit 1

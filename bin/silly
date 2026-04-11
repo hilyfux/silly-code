@@ -22,9 +22,7 @@ check_provider() {
 }
 
 check_claude() {
-  # Claude stores tokens in ~/.claude/.credentials.json (managed by TUI)
-  local cred="$HOME/.claude/.credentials.json"
-  if [ -f "$cred" ] || [ -f "$DATA_DIR/claude-oauth.json" ]; then
+  if [ -f "$CLAUDE_CRED" ] || [ -f "$DATA_DIR/$CLAUDE_OAUTH" ]; then
     ok "Claude  (sillye): logged in"
     return 0
   else
@@ -38,8 +36,8 @@ case "${1:-}" in
     echo ""
     echo -e "  ${B}silly-code${N} — Multi-Provider AI Coding Assistant"
     echo ""
-    check_provider "Codex   (sillyx)" "codex-oauth.json" || true
-    check_provider "Copilot (sillyt)" "copilot-oauth.json" || true
+    check_provider "Codex   (sillyx)" "$CODEX_OAUTH" || true
+    check_provider "Copilot (sillyt)" "$COPILOT_OAUTH" || true
     check_claude || true
     echo ""
     exit 0
@@ -76,9 +74,9 @@ case "${1:-}" in
   logout)
     PROVIDER="${2:-}"
     case "$PROVIDER" in
-      codex)   rm -f "$DATA_DIR/codex-oauth.json" "$DATA_DIR/codex-auth.json";     ok "Codex tokens removed" ;;
-      copilot) rm -f "$DATA_DIR/copilot-oauth.json" "$DATA_DIR/copilot-auth.json"; ok "Copilot tokens removed" ;;
-      claude)  rm -f "$DATA_DIR/claude-oauth.json";  ok "Claude tokens removed" ;;
+      codex)   rm -f "$DATA_DIR/$CODEX_OAUTH" "$DATA_DIR/$CODEX_AUTH";     ok "Codex tokens removed" ;;
+      copilot) rm -f "$DATA_DIR/$COPILOT_OAUTH" "$DATA_DIR/$COPILOT_AUTH"; ok "Copilot tokens removed" ;;
+      claude)  rm -f "$DATA_DIR/$CLAUDE_OAUTH";  ok "Claude tokens removed" ;;
       "") err "Usage: silly logout <codex|copilot|claude>"; exit 1 ;;
       *) err "Unknown provider: $PROVIDER"; exit 1 ;;
     esac
@@ -136,8 +134,8 @@ case "${1:-}" in
 
     # Provider auth
     echo ""
-    check_provider "Codex   (sillyx)" "codex-oauth.json" || true
-    check_provider "Copilot (sillyt)" "copilot-oauth.json" || true
+    check_provider "Codex   (sillyx)" "$CODEX_OAUTH" || true
+    check_provider "Copilot (sillyt)" "$COPILOT_OAUTH" || true
     check_claude || true
 
     # Defaults
@@ -164,9 +162,9 @@ case "${1:-}" in
 
     # Fallback
     AUTHED=0
-    { [ -f "$DATA_DIR/codex-auth.json" ] || [ -f "$DATA_DIR/codex-oauth.json" ]; } && AUTHED=$((AUTHED+1))
-    { [ -f "$DATA_DIR/copilot-auth.json" ] || [ -f "$DATA_DIR/copilot-oauth.json" ]; } && AUTHED=$((AUTHED+1))
-    [ -f "$HOME/.claude/.credentials.json" ] && AUTHED=$((AUTHED+1))
+    { [ -f "$DATA_DIR/$CODEX_AUTH" ] || [ -f "$DATA_DIR/$CODEX_OAUTH" ]; } && AUTHED=$((AUTHED+1))
+    { [ -f "$DATA_DIR/$COPILOT_AUTH" ] || [ -f "$DATA_DIR/$COPILOT_OAUTH" ]; } && AUTHED=$((AUTHED+1))
+    [ -f "$CLAUDE_CRED" ] && AUTHED=$((AUTHED+1))
     if [ "$AUTHED" -ge 2 ]; then
       ok "Provider fallback: active ($AUTHED providers)"
     elif [ "$AUTHED" -eq 1 ]; then
@@ -322,8 +320,8 @@ case "${1:-}" in
     echo ""
     echo -e "  ${B}silly-code${N} — Multi-Provider AI Coding Assistant"
     echo ""
-    check_provider "Codex   (sillyx)" "codex-oauth.json" || true
-    check_provider "Copilot (sillyt)" "copilot-oauth.json" || true
+    check_provider "Codex   (sillyx)" "$CODEX_OAUTH" || true
+    check_provider "Copilot (sillyt)" "$COPILOT_OAUTH" || true
     check_claude || true
     echo ""
     echo "  Get started:"

@@ -11,7 +11,7 @@ source "$ROOT_DIR/bin/silly-common.sh"
 export SILLY_CODE_DATA="${SILLY_CODE_DATA:-$HOME/.silly-code}"
 mkdir -p "$SILLY_CODE_DATA"
 
-if [ ! -f "$SILLY_CODE_DATA/claude-oauth.json" ] && [ ! -f "$HOME/.claude/.credentials.json" ]; then
+if [ ! -f "$SILLY_CODE_DATA/$CLAUDE_OAUTH" ] && [ ! -f "$CLAUDE_CRED" ]; then
   echo ""
   echo "  sillye — Claude"
   echo ""

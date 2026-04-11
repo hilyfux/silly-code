@@ -96,7 +96,6 @@ ok "Source: $INSTALL_DIR"
 UPSTREAM_CLI="pipeline/upstream/package/cli.js"
 if [ ! -f "$UPSTREAM_CLI" ]; then
   info "Fetching upstream Claude Code binary..."
-  info "Fetching upstream Claude Code binary..."
   mkdir -p pipeline/upstream
   TMP_DIR=$(mktemp -d)
   TGZ_NAME=$(npm pack @anthropic-ai/claude-code --pack-destination "$TMP_DIR" 2>/dev/null | tail -1)

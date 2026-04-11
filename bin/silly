@@ -242,13 +242,29 @@ case "${1:-}" in
       if [ "$UPDATE_MODE" = "apply" ]; then
         info "Pulling latest..."
         cd "$ROOT_DIR"
+        # Backup current binary before updating
+        PATCHED="$ROOT_DIR/pipeline/build/cli-patched.js"
+        if [ -f "$PATCHED" ]; then
+          cp "$PATCHED" "$PATCHED.bak"
+        fi
         if git pull --ff-only origin main 2>/dev/null; then
           ok "Updated to $(git rev-parse --short HEAD)"
           info "Rebuilding patched binary..."
-          node "$ROOT_DIR/pipeline/patch.cjs" || warn "Patch rebuild failed"
-          ok "Binary updated"
+          if node "$ROOT_DIR/pipeline/patch.cjs"; then
+            ok "Binary updated"
+            rm -f "$PATCHED.bak"
+          else
+            warn "Patch rebuild failed — restoring previous binary"
+            if [ -f "$PATCHED.bak" ]; then
+              mv "$PATCHED.bak" "$PATCHED"
+              warn "Rolled back to previous working binary"
+            fi
+            warn "This may happen after an upstream Claude Code update"
+            warn "Check: https://github.com/hilyfux/silly-code/issues"
+          fi
         else
           warn "Pull failed — run 'silly update apply' again or reinstall"
+          rm -f "$PATCHED.bak"
         fi
       else
         echo ""

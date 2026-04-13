@@ -11,7 +11,18 @@ source "$ROOT_DIR/bin/silly-common.sh"
 export SILLY_CODE_DATA="${SILLY_CODE_DATA:-$HOME/.silly-code}"
 mkdir -p "$SILLY_CODE_DATA"
 
-if [ ! -f "$SILLY_CODE_DATA/$CLAUDE_OAUTH" ] && [ ! -f "$CLAUDE_CRED" ]; then
+_claude_logged_in() {
+  # File-based stores (Linux, or user-moved config)
+  [ -f "$SILLY_CODE_DATA/$CLAUDE_OAUTH" ] && return 0
+  [ -f "$CLAUDE_CRED" ] && return 0
+  # macOS Keychain (default on darwin)
+  if [ "$(uname)" = "Darwin" ]; then
+    security find-generic-password -s "Claude Code-credentials" -a "$USER" -w >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
+if ! _claude_logged_in; then
   echo ""
   echo "  sillye — Claude"
   echo ""

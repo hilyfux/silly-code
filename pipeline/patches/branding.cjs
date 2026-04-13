@@ -276,4 +276,27 @@ module.exports = function applyBranding({ patch, patchAll }) {
     "Review Claude Code's changes",
     "Review Silly Code's changes"
   )
+
+  // Patch 12a-e: Cuter mascot — swap bulky L-corners (▛▜/▟/▙) at head top
+  // for tiny dot-pixels (▘▝▖▗) so the creature reads as 呆萌 baby-blob
+  // instead of a blocky robot. Two rows × 4 poses (default/look-left/
+  // look-right/arms-up). ▛███▜ appears in both default+arms-up poses.
+  patchAll('12a-mascot-eyes-default',
+    'r1E:"▛███▜"',
+    'r1E:"▘███▝"'
+  )
+  patch('12b-mascot-eyes-look-left',
+    'r1E:"▟███▟"',
+    'r1E:"▘███▘"'
+  )
+  patch('12c-mascot-eyes-look-right',
+    'r1E:"▙███▙"',
+    'r1E:"▝███▝"'
+  )
+
+  // Patch 12d: Apple Terminal variant — eyes up-outward for wide-eyed cute
+  patchAll('12d-mascot-apple-default',
+    '" ▗   ▖ "',
+    '" ▘   ▝ "'
+  )
 }

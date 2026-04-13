@@ -28,4 +28,14 @@ module.exports = function applyEquality({ patch }) {
     'function z8z(){return h8("tengu_kairos_loop_dynamic",!1)}',
     'function z8z(){return!0}'
   )
+
+  // Patch 23: Disable tool deferral for third-party providers
+  // GPT/Copilot models don't reliably use ToolSearch to load deferred tools,
+  // so cron tools (CronCreate/CronList/CronDelete) stay invisible and the
+  // model can't cancel a running /loop. Force non-MCP tools to load directly
+  // for non-firstParty providers. MCP tools stay deferred (can be numerous).
+  patch('23-no-defer-third-party',
+    'if(QW4&&q.name===QW4){if((bR8(),p7(CR8)).isLoopDynamicEnabled())return!1}return q.shouldDefer===!0}',
+    'if(QW4&&q.name===QW4){if((bR8(),p7(CR8)).isLoopDynamicEnabled())return!1}if(typeof dq==="function"&&dq()!=="firstParty")return!1;return q.shouldDefer===!0}'
+  )
 }

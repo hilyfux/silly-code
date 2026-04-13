@@ -146,6 +146,47 @@ async function drainStream(stream) {
     console.log('  msgsToResponsesInput tool_use: PASS');
   }
 
+  {
+    // thinking blocks must be dropped (cross-provider resume: Claude session → GPT)
+    const result = msgsToResponsesInput(null, [
+      { role: 'assistant', content: [
+        { type: 'thinking', thinking: 'internal reasoning...', signature: 'abc123' },
+        { type: 'text', text: 'Actual reply.' },
+      ]},
+    ]);
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].type, 'message');
+    assert.strictEqual(result[0].content, 'Actual reply.');
+    console.log('  msgsToResponsesInput thinking-skipped: PASS');
+  }
+
+  {
+    // image block must become input_image multi-part, not JSON-stringified base64
+    const result = msgsToResponsesInput(null, [
+      { role: 'user', content: [
+        { type: 'text', text: 'look:' },
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' } },
+      ]},
+    ]);
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(Array.isArray(result[0].content), true);
+    assert.strictEqual(result[0].content[0].type, 'input_text');
+    assert.strictEqual(result[0].content[1].type, 'input_image');
+    assert.ok(result[0].content[1].image_url.startsWith('data:image/png;base64,'));
+    console.log('  msgsToResponsesInput image multi-part: PASS');
+  }
+
+  {
+    // msgToOai must also drop thinking blocks (Chat Completions API-key mode)
+    const result = msgToOai({ role: 'assistant', content: [
+      { type: 'thinking', thinking: 'leaked', signature: 'sig' },
+      { type: 'text', text: 'clean' },
+    ]});
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].content, 'clean');
+    console.log('  msgToOai thinking-skipped: PASS');
+  }
+
   // ── flattenSystem ──
   {
     assert.strictEqual(flattenSystem('Hello'), 'Hello');

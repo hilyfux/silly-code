@@ -46,6 +46,9 @@ function msgToOai(msg){
   if(msg.content.length===0)return[{role:msg.role,content:''}];
   const _texts=[], _toolCalls=[], _toolResults=[];
   for(const p of msg.content){
+    // Skip Claude-internal reasoning blocks when resuming cross-provider sessions —
+    // their signature base64 payload pollutes the GPT context otherwise.
+    if(p.type==='thinking'||p.type==='redacted_thinking')continue;
     if(p.type==='text')_texts.push({type:'text',text:p.text});
     else if(p.type==='image')_texts.push({type:'image_url',image_url:{url:'data:'+p.source.media_type+';base64,'+p.source.data}});
     else if(p.type==='tool_use')_toolCalls.push({id:p.id||'tc_'+Date.now(),type:'function',function:{name:p.name,arguments:JSON.stringify(p.input||{})}});
@@ -85,25 +88,42 @@ function msgsToResponsesInput(system, messages) {
   const _parts=[];
   if(system){_parts.push({type:'message',role:'developer',content:typeof system==='string'?system:(system||[]).map(p=>p.text||'').join('')});}
   for(const m of (messages||[])){
-    if(typeof m.content==='string'){_parts.push({type:'message',role:m.role==='assistant'?'assistant':'user',content:m.content});continue;}
-    if(!Array.isArray(m.content)){_parts.push({type:'message',role:m.role==='user'?'user':'assistant',content:String(m.content||'')});continue;}
-    // Split content blocks: text→message, tool_use→function_call, tool_result→function_call_output
-    const _texts=[];
+    const _role=m.role==='assistant'?'assistant':'user';
+    if(typeof m.content==='string'){_parts.push({type:'message',role:_role,content:m.content});continue;}
+    if(!Array.isArray(m.content)){_parts.push({type:'message',role:_role,content:String(m.content||'')});continue;}
+    // Accumulated message-mode content (supports text+image multi-part for user msgs)
+    const _mc=[];
+    const _flush=()=>{
+      if(_mc.length===0)return;
+      // Single plain text → string; otherwise multi-part array (user only)
+      if(_mc.length===1&&_mc[0].type==='input_text'){_parts.push({type:'message',role:_role,content:_mc[0].text});}
+      else if(_role==='user'){_parts.push({type:'message',role:'user',content:[..._mc]});}
+      else{_parts.push({type:'message',role:'assistant',content:_mc.filter(x=>x.type==='input_text').map(x=>x.text).join('')});}
+      _mc.length=0;
+    };
     for(const p of m.content){
-      if(p.type==='text'){_texts.push(p.text);}
+      // Drop Claude-internal reasoning blocks (thinking/redacted_thinking) —
+      // their signature payload would otherwise leak into GPT context on resume.
+      if(p.type==='thinking'||p.type==='redacted_thinking')continue;
+      if(p.type==='text'){_mc.push({type:'input_text',text:p.text});}
+      else if(p.type==='image'){
+        const _mt=p.source?.media_type||'image/png';
+        const _dt=p.source?.data||'';
+        _mc.push({type:'input_image',image_url:'data:'+_mt+';base64,'+_dt});
+      }
       else if(p.type==='tool_use'){
-        if(_texts.length>0){_parts.push({type:'message',role:'assistant',content:_texts.join('')});_texts.length=0;}
+        _flush();
         _parts.push({type:'function_call',call_id:p.id||'tc_'+Date.now(),name:p.name,arguments:JSON.stringify(p.input||{})});
       }
       else if(p.type==='tool_result'){
-        if(_texts.length>0){_parts.push({type:'message',role:m.role==='user'?'user':'assistant',content:_texts.join('')});_texts.length=0;}
+        _flush();
         let _c=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
         if(p.is_error)_c='[ERROR] '+_c;
         _parts.push({type:'function_call_output',call_id:p.tool_use_id,output:_c});
       }
-      else{_texts.push(JSON.stringify(p));}
+      else{_mc.push({type:'input_text',text:JSON.stringify(p)});}
     }
-    if(_texts.length>0){_parts.push({type:'message',role:m.role==='user'?'user':'assistant',content:_texts.join('')});}
+    _flush();
   }
   return _parts;
 }

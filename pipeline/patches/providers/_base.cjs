@@ -378,6 +378,28 @@ function cleanIdentityForProvider(text, providerName) {
 }
 
 /**
+ * Scan recent messages for the most recent TodoWrite tool_use and return any
+ * todos that are still pending or in_progress. These are the canonical "open
+ * items" from the model's own planning — far stronger signal than parsing
+ * narration text.
+ */
+function findOpenTodos(messages) {
+  if (!Array.isArray(messages)) return [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!m || m.role !== 'assistant' || !Array.isArray(m.content)) continue;
+    for (let j = m.content.length - 1; j >= 0; j--) {
+      const p = m.content[j];
+      if (p && p.type === 'tool_use' && typeof p.name === 'string' && p.name.toLowerCase() === 'todowrite') {
+        const todos = p.input && Array.isArray(p.input.todos) ? p.input.todos : null;
+        if (todos) return todos.filter(t => t && t.status && t.status !== 'completed');
+      }
+    }
+  }
+  return [];
+}
+
+/**
  * Inject a continuation-discipline block into the system prompt so third-party
  * models (Codex / Copilot) don't stop mid-task with narration-only responses.
  *
@@ -386,13 +408,26 @@ function cleanIdentityForProvider(text, providerName) {
  * stop → user has to manually say "continue". This block tells the model to
  * act instead of narrating future actions.
  *
+ * If `messages` is provided and contains an active TodoWrite list with open
+ * items, the open-todo reminder is appended inside the same discipline block
+ * for a sharper signal than pure narration-pattern matching.
+ *
  * Append-only (doesn't alter upstream prompt semantics).
  */
-function enforceContinuation(text) {
+function enforceContinuation(text, messages) {
   if (!text || typeof text !== 'string') return text;
-  if (text.includes('<continuation-discipline>')) return text;
-  const block = '\n\n<continuation-discipline>\nWhen work remains (open todos, planned steps you just announced, partially-finished edits):\n- DO NOT end your response with narration of future actions. Phrases like "next I will...", "下一步我会...", "接下来继续...", "I\'ll now...", "Let me then..." MUST be immediately followed by the actual tool call in the same turn.\n- A response that describes a plan and then stops without executing it wastes the user\'s turn.\n- Only stop when: (a) all announced work is actually done, (b) you genuinely need user input to proceed, or (c) the user explicitly told you to stop.\n- Before ending a turn, ask yourself: "Did I actually run the tool calls I just described?" If not, do them now.\n</continuation-discipline>';
+  const open = findOpenTodos(messages);
+  let openBlock = '';
+  if (open.length) {
+    const lines = open.slice(0, 8).map(t => '  - [' + (t.status || '?') + '] ' + (t.activeForm || t.content || '')).join('\n');
+    openBlock = '\n\nYour own TodoWrite list currently has ' + open.length + ' unfinished item(s):\n' + lines + '\nThese items are NOT done. You cannot end the turn until every one is completed or explicitly blocked.';
+  }
+  if (text.includes('<continuation-discipline>')) {
+    // Already injected — refresh the open-todos tail so it reflects current state.
+    return text.replace(/\n\nYour own TodoWrite list[\s\S]*?<\/continuation-discipline>/, openBlock + '\n</continuation-discipline>');
+  }
+  const block = '\n\n<continuation-discipline>\nYou are running in autonomous agent mode. The user is NOT waiting between your responses — there is no "natural pause" where you hand control back for approval.\n\nHARD RULES:\n1. If your TodoWrite list has any item with status "pending" or "in_progress" — you MUST call another tool in this same response. Not stop.\n2. Narration like "我会继续 / 继续下一批 / 还在继续 / I\'ll continue / next batch / let me keep going" is NOT a substitute for action. Write narration → call the tool in the SAME response.\n3. "Natural stopping points" (one batch clean, one test passing, one file done, one lint rule cleared) are NOT stopping points here — they are mid-stream. Keep going.\n4. Do NOT announce "I\'ll process the remaining items next" and then stop. Process them now.\n\nStop ONLY when:\n  (a) every TodoWrite item is marked completed AND no announced work remains outstanding; OR\n  (b) you hit an error you cannot recover from without user input (say what you need); OR\n  (c) the user explicitly said "stop" in THIS conversation.\n\nBefore writing the last token of your response, self-check:\n  • "Are there pending/in_progress todos?" → if yes, call the next tool NOW.\n  • "Did I just say I\'ll keep going?" → then keep going in this turn, not the next.\n  • "Am I stopping because it feels like a polite handoff?" → don\'t stop.' + openBlock + '\n</continuation-discipline>';
   return text + block;
 }
 
-module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation };
+module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, findOpenTodos };

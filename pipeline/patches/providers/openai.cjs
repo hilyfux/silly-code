@@ -91,16 +91,29 @@ async function _openaiAdapter(url, init) {
   const cred = await _openaiAuth();
   const _b = JSON.parse(init.body);
 
+  // Debug dump — SILLY_DEBUG_DUMP=1 writes raw incoming Anthropic-format request
+  // to /tmp/silly-debug/. Skips system prompt body (can be 200KB+ of identity).
+  if (process.env.SILLY_DEBUG_DUMP) {
+    try {
+      const { writeFileSync, mkdirSync } = await import('node:fs');
+      mkdirSync('/tmp/silly-debug', { recursive: true });
+      const _stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const _systemLen = typeof _b.system === 'string' ? _b.system.length : Array.isArray(_b.system) ? _b.system.reduce((n, p) => n + ((p.text || '').length), 0) : 0;
+      const _dump = { url, cwd: process.cwd(), env_PWD: process.env.PWD, env_CALLER_DIR: process.env.CALLER_DIR, model: _b.model, stream: !!_b.stream, system_preview: (typeof _b.system === 'string' ? _b.system : (_b.system || []).map(p => p.text || '').join('\n')).slice(0, 2000), system_length: _systemLen, message_count: (_b.messages || []).length, messages: _b.messages, tools_count: (_b.tools || []).length };
+      writeFileSync('/tmp/silly-debug/' + _stamp + '-openai-request.json', JSON.stringify(_dump, null, 2));
+    } catch (_e) { console.error('[silly-debug]', _e.message || _e); }
+  }
+
   // Clean Claude-specific identity and tame aggressive skill instructions
   const _clean = (t) => cleanIdentityForProvider(tameSkillPrompts(t), _provName);
   if (_b.system) {
-    if (typeof _b.system === 'string') _b.system = enforceContinuation(_clean(_b.system));
+    if (typeof _b.system === 'string') _b.system = enforceContinuation(_clean(_b.system), _b.messages);
     else if (Array.isArray(_b.system)) {
       _b.system = _b.system.map(p => p.text ? { ...p, text: _clean(p.text) } : p);
       // Append continuation-discipline block once, on the LAST system block
       if (_b.system.length) {
         const _last = _b.system.length - 1;
-        _b.system[_last] = { ..._b.system[_last], text: enforceContinuation(_b.system[_last].text || '') };
+        _b.system[_last] = { ..._b.system[_last], text: enforceContinuation(_b.system[_last].text || '', _b.messages) };
       }
     }
   }

@@ -9,7 +9,7 @@ module.exports = function applyEquality({ patch }) {
   // Patch 20: Tier bypass — always return "max" subscription
   // XK() returns subscription tier. "max" unlocks ULTRATHINK, ULTRAPLAN, etc.
   patch('20-tier-bypass',
-    'function GK(){if(mHq())return uHq();if(!oJ())return null;let q=t7();if(!q)return null;return q.subscriptionType??null}',
+    'function GK(){if(BHq())return mHq();if(!oJ())return null;let q=t7();if(!q)return null;return q.subscriptionType??null}',
     'function GK(){return"max"}'
   )
 
@@ -25,8 +25,8 @@ module.exports = function applyEquality({ patch }) {
   // which always returns false because privacy patches block statsig/growthbook.
   // Without this, ScheduleWakeup stays deferred and its call() returns {scheduledFor:0}.
   patch('22-loop-dynamic-enable',
-    'function z8z(){return h8("tengu_kairos_loop_dynamic",!1)}',
-    'function z8z(){return!0}'
+    'function A8z(){return h8("tengu_kairos_loop_dynamic",!1)}',
+    'function A8z(){return!0}'
   )
 
   // Patch 24: Enable /loop prompt preamble — bypass feature flag gate
@@ -34,8 +34,8 @@ module.exports = function applyEquality({ patch }) {
   // loop preamble (execution guidance) is injected into /loop conversations.
   // Without it, /loop tasks get less guidance and drift off-task.
   patch('24-loop-prompt-enable',
-    'function s37(){return h8("tengu_kairos_loop_prompt",!1)}',
-    'function s37(){return!0}'
+    'function t37(){return h8("tengu_kairos_loop_prompt",!1)}',
+    'function t37(){return!0}'
   )
 
   // Patch 23: Disable tool deferral for third-party providers
@@ -44,7 +44,7 @@ module.exports = function applyEquality({ patch }) {
   // model can't cancel a running /loop. Force non-MCP tools to load directly
   // for non-firstParty providers. MCP tools stay deferred (can be numerous).
   patch('23-no-defer-third-party',
-    'if(QW4&&q.name===QW4){if((bR8(),p7(CR8)).isLoopDynamicEnabled())return!1}return q.shouldDefer===!0}',
-    'if(QW4&&q.name===QW4){if((bR8(),p7(CR8)).isLoopDynamicEnabled())return!1}if(typeof dq==="function"&&dq()!=="firstParty")return!1;return q.shouldDefer===!0}'
+    'if(dW4&&q.name===dW4){if((IR8(),p7(bR8)).isLoopDynamicEnabled())return!1}return q.shouldDefer===!0}',
+    'if(dW4&&q.name===dW4){if((IR8(),p7(bR8)).isLoopDynamicEnabled())return!1}if(typeof dq==="function"&&dq()!=="firstParty")return!1;return q.shouldDefer===!0}'
   )
 }

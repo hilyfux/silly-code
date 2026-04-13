@@ -84,23 +84,23 @@ function validate(providers) {
   if (defaultCount !== 1) throw new Error(`Exactly one provider must have envKey: null (found ${defaultCount})`);
 }
 
-// ── Match string constants (upstream v2.1.101) ──
+// ── Match string constants (upstream v2.1.104) ──
 const MATCH = {
   DETECT:      'return F6(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"',
   INJECT:      'P=cX(_);if(P==="bedrock")',
   RESOLVE:     'function D$(q=dq()){return q==="firstParty"||q==="anthropicAws"}',
   FAMILY:      'function lg(q=dq()){return q==="firstParty"||q==="anthropicAws"||q==="foundry"||q==="mantle"}',
-  CONTEXT_DEFAULT: 'xL1=200000',
+  CONTEXT_DEFAULT: 'rbz=200000',
   DISPLAY:     'function y0(q){if(dq()==="foundry")return;',
-  IDENTITY:    'Bh1="You are Claude Code, Anthropic\'s official CLI for Claude."',
-  SDK_ID:      'z14="You are Claude Code, Anthropic\'s official CLI for Claude, running within the Claude Agent SDK."',
-  AGENT_ID:    'Y14="You are a Claude agent, built on Anthropic\'s Claude Agent SDK."',
+  IDENTITY:    'Fh1="You are Claude Code, Anthropic\'s official CLI for Claude."',
+  SDK_ID:      'Y14="You are Claude Code, Anthropic\'s official CLI for Claude, running within the Claude Agent SDK."',
+  AGENT_ID:    'A14="You are a Claude agent, built on Anthropic\'s Claude Agent SDK."',
   MODEL_ID:    'You are powered by the model named ${$}. The exact model ID is ${q}.',
   MODEL_ID_2:  'You are powered by the model named ${H}. The exact model ID is ${q}.',
   SIMPLE_ID:   '?"You are Claude Code, Anthropic\'s official CLI for Claude.":`You are Claude Code, Anthropic\'s official CLI for Claude.',
   TIER:        'case"max":return"Claude Max";case"pro":return"Claude Pro";default:return"Claude API"',
   CONSTRUCTOR: 'gL',
-  VERSION:     '// Version: 2.1.101',
+  VERSION:     '// Version: 2.1.104',
 };
 
 // ── Serialization safeguards ──
@@ -229,7 +229,7 @@ module.exports = function applyProviders({ patch }) {
     }).join(':');
     patch('51-default-context',
       MATCH.CONTEXT_DEFAULT,
-      `xL1=(${ctxChain}:200000)`
+      `rbz=(${ctxChain}:200000)`
     );
   }
 
@@ -261,7 +261,7 @@ module.exports = function applyProviders({ patch }) {
   const originalIdentity = "You are Claude Code, Anthropic\\'s official CLI for Claude.";
   patch('61-system-identity',
     MATCH.IDENTITY,
-    `Bh1=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${identityBranches}return"${originalIdentity}";})()`
+    `Fh1=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${identityBranches}return"${originalIdentity}";})()`
   );
 
   // ── Patch 62: SDK identity ──
@@ -276,7 +276,7 @@ module.exports = function applyProviders({ patch }) {
     .join('');
   patch('62-sdk-identity',
     MATCH.SDK_ID,
-    `z14=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${sdkBranches}return"${originalSdk}";})()`
+    `Y14=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${sdkBranches}return"${originalSdk}";})()`
   );
 
   // ── Patch 64: Model ID in prompt (two occurrences with different var names) ──
@@ -299,7 +299,7 @@ module.exports = function applyProviders({ patch }) {
   const originalAgent = "You are a Claude agent, built on Anthropic\\'s Claude Agent SDK.";
   patch('65-agent-identity',
     MATCH.AGENT_ID,
-    `Y14=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${agentBranches}return"${originalAgent}";})()`
+    `A14=(()=>{const _p=typeof dq==="function"?dq():"firstParty";${agentBranches}return"${originalAgent}";})()`
   );
 
   // ── Patch 63a: Simple identity ──

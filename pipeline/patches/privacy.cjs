@@ -65,4 +65,10 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
     'raw.githubusercontent.com/anthropics/claude-code/refs/heads/main/CHANGELOG.md',
     'localhost:0/changelog-disabled'
   )
+
+  // Patch 40: Block event_logging batch endpoint (EventLogger default path)
+  patch('40-event-logging-block',
+    '/api/event_logging/batch',
+    '/api/event_logging/batch_disabled'
+  )
 }

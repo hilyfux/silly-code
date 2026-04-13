@@ -228,4 +228,52 @@ module.exports = function applyBranding({ patch, patchAll }) {
     'null,"Claude Code","\'","ll be able to read',
     'null,"Silly Code","\'","ll be able to read'
   )
+
+  // Patch 11a: Image tool description — leaks brand into system prompt
+  patch('11a-multimodal-desc',
+    'are presented visually as Claude Code is a multimodal LLM',
+    'are presented visually as the assistant is a multimodal LLM'
+  )
+
+  // Patch 11b: think-back session extractor prompt — leaks brand to LLM
+  patch('11b-think-back-session',
+    'Analyze this Claude Code session and extract structured',
+    'Analyze this session and extract structured'
+  )
+
+  // Patch 11c: think-back usage-data analyzer prompts (7 occurrences)
+  patchAll('11c-think-back-usage',
+    'Analyze this Claude Code usage data',
+    'Analyze this usage data'
+  )
+
+  // Patch 11d: Bug report template — leaks brand into LLM context
+  patch('11d-bug-report-template',
+    'Claude Code is an agentic coding CLI based on the Anthropic API',
+    'Silly Code is an agentic coding CLI based on a multi-provider backend'
+  )
+
+  // Patch 11e: Bug report header text (user-facing)
+  patchAll('11e-bug-report-header',
+    'bug report for Claude Code',
+    'bug report for Silly Code'
+  )
+
+  // Patch 11f: Restart prompts (4 occurrences, user-facing UI)
+  patchAll('11f-restart-text',
+    'restart Claude Code',
+    'restart Silly Code'
+  )
+
+  // Patch 11g: Stats loader label
+  patch('11g-stats-loader',
+    'Loading your Claude Code stats…',
+    'Loading your Silly Code stats…'
+  )
+
+  // Patch 11h: Changes-review UI bullet
+  patch('11h-changes-review',
+    "Review Claude Code's changes",
+    "Review Silly Code's changes"
+  )
 }

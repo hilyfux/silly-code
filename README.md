@@ -8,12 +8,14 @@
 
 ## English
 
-Multi-provider AI assistant. Coding is the entry point — not the ceiling. Zero telemetry, three provider backends, smart routing, auto-failover.
+Multi-provider AI assistant built on the latest Claude Code 2.1.104 via patch pipeline. Three pillars: **privacy** (zero telemetry), **purity** (no upstream residue), **equality** (all features unlocked for every user).
 
 ```
 sillyx    → OpenAI Codex (ChatGPT Pro)
 sillyt    → GitHub Copilot
 sillye    → Claude (claude.ai)
+
+sillyxs / sillyts / sillyes   → same providers, --dangerously-skip-permissions
 ```
 
 ### Quick Start
@@ -29,9 +31,10 @@ sillyt    # or sillyx / sillye
 | | Claude Code | Silly Code |
 |---|---|---|
 | Providers | Claude only | Claude + Codex + Copilot |
-| Telemetry | Full | Zero |
-| Feature locks | Tier-gated | All unlocked |
-| Source | Compiled binary | Patched, fully inspectable |
+| Telemetry | 10+ endpoints | All blocked |
+| Feature locks | Tier-gated | Max tier + `/loop` unlocked |
+| Identity leaks | Brand baked in | Scrubbed from LLM prompts |
+| Source | Compiled binary | 78 patches, fully inspectable |
 
 ### Management
 
@@ -61,12 +64,14 @@ silly uninstall
 
 ## 中文
 
-多供应商 AI 助手。编码是起点，不是天花板。零遥测，三个供应商后端，智能路由，自动故障转移。
+基于最新 Claude Code 2.1.104，通过补丁流水线构建的多供应商 AI 助手。三大基石：**隐私保护**（零遥测）、**纯净优化**（清除上游残留）、**技术平权**（所有功能对所有用户开放）。
 
 ```
 sillyx    → OpenAI Codex（ChatGPT Pro）
 sillyt    → GitHub Copilot
 sillye    → Claude（claude.ai）
+
+sillyxs / sillyts / sillyes   → 对应 provider，默认跳过权限确认（--dangerously-skip-permissions）
 ```
 
 ### 快速开始
@@ -82,9 +87,10 @@ sillyt    # 或 sillyx / sillye
 | | Claude Code | Silly Code |
 |---|---|---|
 | 供应商 | 仅 Claude | Claude + Codex + Copilot |
-| 遥测 | 完整采集 | 零遥测 |
-| 功能限制 | 按等级限制 | 全部解锁 |
-| 源码 | 编译二进制 | 补丁注入，完全可审查 |
+| 遥测 | 10+ 端点 | 全部封堵 |
+| 功能限制 | 按等级限制 | Max 等级 + `/loop` 全解锁 |
+| 身份泄漏 | 品牌烙印 | 从 LLM 提示词中清除 |
+| 源码 | 编译二进制 | 78 个补丁，完全可审查 |
 
 ### 管理命令
 
@@ -108,12 +114,14 @@ silly uninstall       # 完全卸载
 
 ## 日本語
 
-マルチプロバイダーAIアシスタント。コーディングは出発点であり、上限ではありません。ゼロテレメトリ、3つのプロバイダーバックエンド、スマートルーティング、自動フェイルオーバー。
+最新の Claude Code 2.1.104 をパッチパイプラインで再構築したマルチプロバイダー AI アシスタント。3つの柱：**プライバシー保護**（ゼロテレメトリ）、**純粋化**（上流の痕跡を除去）、**技術の平等**（すべての機能をすべてのユーザーに開放）。
 
 ```
 sillyx    → OpenAI Codex（ChatGPT Pro）
 sillyt    → GitHub Copilot
 sillye    → Claude（claude.ai）
+
+sillyxs / sillyts / sillyes   → 同じプロバイダー、権限確認をスキップ（--dangerously-skip-permissions）
 ```
 
 ### クイックスタート
@@ -129,9 +137,10 @@ sillyt    # または sillyx / sillye
 | | Claude Code | Silly Code |
 |---|---|---|
 | プロバイダー | Claude のみ | Claude + Codex + Copilot |
-| テレメトリ | 完全収集 | ゼロ |
-| 機能制限 | ティア別制限 | 全機能解放 |
-| ソース | コンパイル済みバイナリ | パッチ注入、完全検査可能 |
+| テレメトリ | 10+ エンドポイント | すべて遮断 |
+| 機能制限 | ティア別制限 | Max ティア + `/loop` 解放 |
+| アイデンティティ漏洩 | ブランドが焼き込み | LLM プロンプトから除去 |
+| ソース | コンパイル済みバイナリ | 78 パッチ、完全検査可能 |
 
 ### 管理コマンド
 
@@ -155,12 +164,14 @@ silly uninstall       # 完全アンインストール
 
 ## Français
 
-Assistant IA multi-fournisseur. Le code est le point d'entrée — pas le plafond. Zéro télémétrie, trois backends, routage intelligent, basculement automatique.
+Assistant IA multi-fournisseur construit sur la dernière version de Claude Code 2.1.104 via un pipeline de patchs. Trois piliers : **protection de la vie privée** (zéro télémétrie), **pureté** (aucun résidu amont), **égalité technologique** (toutes les fonctionnalités débloquées pour chaque utilisateur).
 
 ```
 sillyx    → OpenAI Codex (ChatGPT Pro)
 sillyt    → GitHub Copilot
 sillye    → Claude (claude.ai)
+
+sillyxs / sillyts / sillyes   → mêmes fournisseurs, --dangerously-skip-permissions
 ```
 
 ### Démarrage rapide
@@ -176,9 +187,10 @@ sillyt    # ou sillyx / sillye
 | | Claude Code | Silly Code |
 |---|---|---|
 | Fournisseurs | Claude uniquement | Claude + Codex + Copilot |
-| Télémétrie | Complète | Zéro |
-| Verrouillage | Par niveau | Tout déverrouillé |
-| Source | Binaire compilé | Patchs injectés, entièrement vérifiable |
+| Télémétrie | 10+ endpoints | Tous bloqués |
+| Verrouillage | Par niveau | Max + `/loop` déverrouillés |
+| Fuites d'identité | Marque incrustée | Retirées des prompts LLM |
+| Source | Binaire compilé | 78 patchs, entièrement vérifiable |
 
 ### Commandes de gestion
 

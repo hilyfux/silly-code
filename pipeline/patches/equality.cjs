@@ -29,6 +29,15 @@ module.exports = function applyEquality({ patch }) {
     'function z8z(){return!0}'
   )
 
+  // Patch 24: Enable /loop prompt preamble — bypass feature flag gate
+  // s37() → h8("tengu_kairos_loop_prompt", false). Controls whether the
+  // loop preamble (execution guidance) is injected into /loop conversations.
+  // Without it, /loop tasks get less guidance and drift off-task.
+  patch('24-loop-prompt-enable',
+    'function s37(){return h8("tengu_kairos_loop_prompt",!1)}',
+    'function s37(){return!0}'
+  )
+
   // Patch 23: Disable tool deferral for third-party providers
   // GPT/Copilot models don't reliably use ToolSearch to load deferred tools,
   // so cron tools (CronCreate/CronList/CronDelete) stay invisible and the

@@ -94,6 +94,39 @@ module.exports = function applyBranding({ patch, patchAll }) {
     'You are the AI model, and you are bad at verification.'
   )
 
+  // Patch 09d: Status line setup agent system prompt
+  patch('09d-statusline-agent-identity',
+    'You are a status line setup agent for Claude Code. Your job is to create or update the statusLine command in the user\'s Claude Code settings.',
+    'You are a status line setup agent for Silly Code. Your job is to create or update the statusLine command in the user\'s Silly Code settings.'
+  )
+
+  // Patch 09e: Claude guide agent — explains Claude Code/SDK/API to users.
+  // For non-firstParty providers, this agent is less useful but keep it
+  // functional; just replace identity phrasing so the agent doesn't claim
+  // to be running as Claude Code when it isn't.
+  patch('09e-guide-agent-identity',
+    'You are the Claude guide agent. Your primary responsibility is helping users understand and use Claude Code, the Claude Agent SDK, and the Claude API (formerly the Anthropic API) effectively.',
+    'You are the Silly Code guide agent. Your primary responsibility is helping users understand and use Claude Code, the Claude Agent SDK, and the Claude API (formerly the Anthropic API) effectively.'
+  )
+
+  // Patch 09f: WebFetch tool error — leaks "Claude Code" into tool result
+  patch('09f-webfetch-error',
+    'Claude Code is unable to fetch from ${q}',
+    'Silly Code is unable to fetch from ${q}'
+  )
+
+  // Patch 09g: BashTool security warning — leaks "Claude Code" into tool result
+  patch('09g-bash-validate-warning',
+    'security, Claude Code cannot automatically validate ${q} commands',
+    'security, Silly Code cannot automatically validate ${q} commands'
+  )
+
+  // Patch 09h: BashTool cd warning — leaks "Claude Code" into tool result
+  patch('09h-bash-cd-warning',
+    'security, Claude Code cannot automatically determine the final working directory',
+    'security, Silly Code cannot automatically determine the final working directory'
+  )
+
   // Patch 10a: TUI header brand name variable
   patch('10a-header-brand-var',
     'var ljK="Claude Code"',

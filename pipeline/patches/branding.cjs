@@ -86,6 +86,60 @@ module.exports = function applyBranding({ patch, patchAll }) {
     'You are an agent for Silly Code, a multi-provider AI coding assistant.'
   )
 
+  // Patch 09b: Plan agent identity
+  patch('09b-plan-agent-identity',
+    'You are a software architect and planning specialist for Claude Code. Your role is to explore the codebase and design implementation plans.',
+    'You are a software architect and planning specialist for Silly Code. Your role is to explore the codebase and design implementation plans.'
+  )
+
+  // Patch 09i: Auto-mode classifier reviewer
+  patch('09i-classifier-reviewer-identity',
+    'You are an expert reviewer of auto mode classifier rules for Claude Code.',
+    'You are an expert reviewer of auto mode classifier rules for Silly Code.'
+  )
+
+  // Patch 09j: Hook condition evaluator
+  patch('09j-hook-condition-identity',
+    'You are evaluating a hook condition in Claude Code.',
+    'You are evaluating a hook condition in Silly Code.'
+  )
+
+  // Patch 09k: Stop-condition hook evaluator
+  patch('09k-stop-hook-identity',
+    'You are evaluating a stop-condition hook in Claude Code.',
+    'You are evaluating a stop-condition hook in Silly Code.'
+  )
+
+  // Patch 09l: Stop condition verifier
+  patch('09l-stop-verifier-identity',
+    'You are verifying a stop condition in Claude Code.',
+    'You are verifying a stop condition in Silly Code.'
+  )
+
+  // Patch 09m: Onboarding guide generator
+  patch('09m-onboarding-identity',
+    'You are helping a power user generate an onboarding guide for teammates who are new to Claude Code.',
+    'You are helping a power user generate an onboarding guide for teammates who are new to Silly Code.'
+  )
+
+  // Patch 09n: Remote agent scheduler
+  patch('09n-remote-agent-identity',
+    'You are helping the user schedule, update, list, or run **remote** Claude Code agents.',
+    'You are helping the user schedule, update, list, or run **remote** Silly Code agents.'
+  )
+
+  // Patch 09o: Session search agent
+  patch('09o-session-search-identity',
+    'You are searching for past Claude Code conversation sessions on behalf of the user.',
+    'You are searching for past Silly Code conversation sessions on behalf of the user.'
+  )
+
+  // Patch 09p: Memory selector agent
+  patch('09p-memory-selector-identity',
+    'You are selecting memories that will be useful to Claude Code as it processes',
+    'You are selecting memories that will be useful to Silly Code as it processes'
+  )
+
   // 09b skipped: CWD context is part of SIMPLE_ID match, handled by patch 63a in provider-engine.cjs
 
   // Patch 09c: Verification agent — "You are Claude, and you are bad"

@@ -5,7 +5,7 @@
  * Nothing leaves the machine except the actual API calls you make.
  */
 
-module.exports = function applyPrivacy({ patch }) {
+module.exports = function applyPrivacy({ patch, patchAll }) {
   // Patch 30: Block Statsig telemetry
   patch('30-statsig-block',
     'return nU.fetch(`${K}/api/eval/${_}`',
@@ -48,8 +48,8 @@ module.exports = function applyPrivacy({ patch }) {
     'localhost:0/growthbook-disabled'
   )
 
-  // Patch 37: Block auto-update check
-  patch('37-autoupdate-block',
+  // Patch 37: Block auto-update check (appears twice in upstream)
+  patchAll('37-autoupdate-block',
     'storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases',
     'localhost:0/autoupdate-disabled'
   )

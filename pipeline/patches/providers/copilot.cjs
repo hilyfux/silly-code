@@ -74,8 +74,14 @@ async function _copilotAdapter(url, init) {
   // Clean Claude-specific identity and tame aggressive skill instructions
   const _clean = (t) => cleanIdentityForProvider(tameSkillPrompts(t), _provName);
   if (_b.system) {
-    if (typeof _b.system === 'string') _b.system = _clean(_b.system);
-    else if (Array.isArray(_b.system)) _b.system = _b.system.map(p => p.text ? { ...p, text: _clean(p.text) } : p);
+    if (typeof _b.system === 'string') _b.system = enforceContinuation(_clean(_b.system));
+    else if (Array.isArray(_b.system)) {
+      _b.system = _b.system.map(p => p.text ? { ...p, text: _clean(p.text) } : p);
+      if (_b.system.length) {
+        const _last = _b.system.length - 1;
+        _b.system[_last] = { ..._b.system[_last], text: enforceContinuation(_b.system[_last].text || '') };
+      }
+    }
   }
   for (const m of (_b.messages || [])) {
     if (typeof m.content === 'string') m.content = _clean(m.content);

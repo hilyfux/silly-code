@@ -357,4 +357,22 @@ function cleanIdentityForProvider(text, providerName) {
   return text;
 }
 
-module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider };
+/**
+ * Inject a continuation-discipline block into the system prompt so third-party
+ * models (Codex / Copilot) don't stop mid-task with narration-only responses.
+ *
+ * Observed pattern: GPT writes "我下一步继续 X" or "I'll do Y next" then emits
+ * finish_reason=stop without calling the next tool. Agent loop respects the
+ * stop → user has to manually say "continue". This block tells the model to
+ * act instead of narrating future actions.
+ *
+ * Append-only (doesn't alter upstream prompt semantics).
+ */
+function enforceContinuation(text) {
+  if (!text || typeof text !== 'string') return text;
+  if (text.includes('<continuation-discipline>')) return text;
+  const block = '\n\n<continuation-discipline>\nWhen work remains (open todos, planned steps you just announced, partially-finished edits):\n- DO NOT end your response with narration of future actions. Phrases like "next I will...", "下一步我会...", "接下来继续...", "I\'ll now...", "Let me then..." MUST be immediately followed by the actual tool call in the same turn.\n- A response that describes a plan and then stops without executing it wastes the user\'s turn.\n- Only stop when: (a) all announced work is actually done, (b) you genuinely need user input to proceed, or (c) the user explicitly told you to stop.\n- Before ending a turn, ask yourself: "Did I actually run the tool calls I just described?" If not, do them now.\n</continuation-discipline>';
+  return text + block;
+}
+
+module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation };

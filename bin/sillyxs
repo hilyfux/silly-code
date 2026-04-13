@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# sillyxs — sillyx with --dangerously-skip-permissions (bypass mode)
+exec "$(dirname "${BASH_SOURCE[0]}")/sillyx" --dangerously-skip-permissions "$@"

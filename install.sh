@@ -128,14 +128,14 @@ fi
 
 # ── Install commands ─────────────────────────────────────────
 mkdir -p "$BIN_DIR"
-for cmd in silly sillyt sillyx sillye; do
+for cmd in silly sillyt sillyx sillye sillyts sillyxs sillyes; do
   cat > "$BIN_DIR/$cmd" << WRAPPER
 #!/bin/bash
 exec "$INSTALL_DIR/bin/$cmd" "\$@"
 WRAPPER
   chmod +x "$BIN_DIR/$cmd"
 done
-ok "Commands: $BIN_DIR/{silly,sillyt,sillyx,sillye}"
+ok "Commands: $BIN_DIR/{silly,sillyt,sillyx,sillye,sillyts,sillyxs,sillyes}"
 
 # ── PATH check ───────────────────────────────────────────────
 if ! echo "$PATH" | tr ':' '\n' | grep -q "^$BIN_DIR$"; then
@@ -248,6 +248,7 @@ echo -e "  ${B}Launch:${N}"
 echo -e "    ${G}sillyt${N}                # GitHub Copilot (GPT)"
 echo -e "    ${G}sillyx${N}                # OpenAI Codex (GPT)"
 echo -e "    ${G}sillye${N}                # Claude (Anthropic)"
+echo -e "    ${G}sillyts/xs/es${N}         # same providers, --dangerously-skip-permissions"
 echo ""
 # ── Save dep check state ────────────────────────────────────
 DATA_DIR="${SILLY_CODE_DATA:-$HOME/.silly-code}"

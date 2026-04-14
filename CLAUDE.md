@@ -6,23 +6,28 @@ silly-code is a multi-provider AI coding assistant built on top of the upstream 
 
 **This is NOT a source-code fork.** We patch the upstream compiled binary (`cli.js`), not the source.
 
-## Dual mission — every change serves one of these
+## Three tracks — every change serves one of these, in sync
 
-Every iteration (patch, feature, fix) falls into one of two lanes. Both are first-class, neither is secondary:
+silly-code's iteration is a **three-track problem**, not a monolith. Every patch / feature / fix maps to exactly one track, but because they share `_base.cjs` (protocol translation), each change propagates to all three and is verified by a single test sweep (`tests/providers.test.cjs`). That's what "synchronized iteration" means: one edit, three checks, all green or all reverted.
 
-**Lane A — Track upstream, stay clean**
-- Follow @anthropic-ai/claude-code releases (CI checks npm every 2h)
-- **Privacy** — zero telemetry, zero phone-home (10 endpoints blocked, patch 30-40)
-- **Purity** — no identity bleed through for non-firstParty providers (patches 11*, 60-67)
-- **Equality** — no tier gating; every user sees every feature (patches 20-24)
+**Track 1 — Claude (firstParty): follow upstream, stay clean**
+- Follow @anthropic-ai/claude-code releases (local launchd + CI fallback)
+- **Privacy** — zero telemetry, 10 endpoints blocked (patches 30-40)
+- **Purity** — no Claude-Code identity bleed through non-firstParty providers (patches 11*, 60-67)
+- **Equality** — no tier gating (patches 20-24)
 
-**Lane B — Be the best Codex for ChatGPT Pro users**
-- Treat "a better-than-Codex-CLI experience for OpenAI GPT" as a product goal, not a side effect
-- Aggressively fix OpenAI Responses API adapter issues (session resume, stop-mid-task, thinking-block leaks — see `pipeline/patches/providers/_base.cjs` + `openai.cjs`)
+**Track 2 — Codex (OpenAI): best-in-class UX for ChatGPT Pro**
+- "Better than Codex CLI" is a product goal, not a side effect
+- Proactively fix Responses API + Chat Completions adapter issues (session resume, stop-mid-task, thinking-block leaks, etc. — see `pipeline/patches/providers/_base.cjs` + `openai.cjs`)
 - Prompt-level help for GPT's quirks (continuation-discipline, tameSkillPrompts)
-- SILLY_DEBUG_DUMP + `silly report` feed the optimization loop — dumps → diagnosis → adapter patch
+- `SILLY_DEBUG_DUMP` + `silly report` feed the optimization loop — dumps → diagnosis → adapter patch
 
-When scoping a change, ask: **"is this Lane A (tracking) or Lane B (Codex UX)?"** If neither, reconsider.
+**Track 3 — Copilot: regression-free**
+- Not a focus of proactive feature work; `pipeline/patches/providers/copilot.cjs` stays small
+- `tests/providers.test.cjs` is the guard — every `_base.cjs` change sweeps Copilot too
+- If a Copilot-only regression surfaces in CI and can't be fixed in <30 min, escalate to deprecation
+
+When scoping a change, identify its track **and** verify the other two don't silently break.
 
 ## Architecture
 

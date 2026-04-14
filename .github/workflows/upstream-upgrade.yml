@@ -13,8 +13,8 @@ name: upstream-upgrade
 
 on:
   schedule:
-    - cron: '17 3 * * *'  # every day at 03:17 UTC
-  workflow_dispatch:       # manual trigger: "Run workflow" button
+    - cron: '17 */2 * * *'  # every 2 hours at :17 past
+  workflow_dispatch:         # manual trigger: "Run workflow" button
 
 permissions:
   contents: write

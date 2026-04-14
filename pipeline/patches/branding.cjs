@@ -6,8 +6,8 @@
 
 module.exports = function applyBranding({ patch, patchAll }) {
   patchAll('01-version',
-    'VERSION:"2.1.104"',
-    'VERSION:"2.1.104-silly"'
+    'VERSION:"2.1.105"',
+    'VERSION:"2.1.105-silly"'
   )
 
   patchAll('02-package-url',
@@ -58,7 +58,7 @@ module.exports = function applyBranding({ patch, patchAll }) {
   // Patch 08: Environment section — Claude model family info
   // This leaks Claude model IDs into the system prompt for all providers
   patch('08-model-family',
-    'The most recent Claude model family is Claude 4.6 and 4.5. Model IDs — Opus 4.6: \'${$j7.opus}\', Sonnet 4.6: \'${$j7.sonnet}\', Haiku 4.5: \'${$j7.haiku}\'. When building AI applications, default to the latest and most capable Claude models.',
+    'The most recent Claude model family is Claude 4.6 and 4.5. Model IDs — Opus 4.6: \'${BH7.opus}\', Sonnet 4.6: \'${BH7.sonnet}\', Haiku 4.5: \'${BH7.haiku}\'. When building AI applications, default to the latest and most capable Claude models.',
     'The most recent model family is Claude 4.6 and 4.5. When building AI applications, default to the latest and most capable models.'
   )
 
@@ -183,14 +183,14 @@ module.exports = function applyBranding({ patch, patchAll }) {
 
   // Patch 10a: TUI header brand name variable
   patch('10a-header-brand-var',
-    'var njK="Claude Code"',
-    'var njK="Silly Code"'
+    'var mOK="Claude Code"',
+    'var mOK="Silly Code"'
   )
 
   // Patch 10b: TUI header themed render — status bar "Claude Code vX.X.X"
   patch('10b-header-themed-render',
-    '"claude",n)("Claude Code")',
-    '"claude",n)("Silly Code")'
+    '"claude",l)("Claude Code")',
+    '"claude",l)("Silly Code")'
   )
 
   // Patch 10c: TUI header bold render — cache sentinel fallback

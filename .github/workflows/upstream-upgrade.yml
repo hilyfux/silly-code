@@ -13,7 +13,7 @@ name: upstream-upgrade
 
 on:
   schedule:
-    - cron: '17 */2 * * *'  # every 2 hours at :17 past
+    - cron: '17 */4 * * *'  # every 4h at :17 past (fallback watchdog — local launchd is primary)
   workflow_dispatch:         # manual trigger: "Run workflow" button
 
 permissions:

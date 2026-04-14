@@ -180,6 +180,57 @@ case "${1:-}" in
     echo ""
     exit 0
     ;;
+  cron)
+    # Manage the local Claude-Code-driven upgrade loop (launchd/cron).
+    # Unlike the GitHub-Actions fallback, this one actually wakes Claude to
+    # read the new binary, diagnose renames, patch, test, commit, push.
+    case "${2:-status}" in
+      install)
+        exec bash "$ROOT_DIR/bin/install-upgrade-cron.sh"
+        ;;
+      uninstall)
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+          PLIST="$HOME/Library/LaunchAgents/com.silly-code.upgrade-check.plist"
+          launchctl unload "$PLIST" 2>/dev/null || true
+          rm -f "$PLIST"
+          ok "launchd agent removed"
+        else
+          crontab -l 2>/dev/null | grep -v "upgrade-check.sh" | crontab -
+          ok "cron entry removed"
+        fi
+        exit 0
+        ;;
+      status)
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+          if launchctl list com.silly-code.upgrade-check >/dev/null 2>&1; then
+            ok "launchd agent installed (fires every 4h when Mac is awake)"
+            echo "  recent runs:"
+            ls -t "$HOME/.silly-code/logs"/upgrade-*.log 2>/dev/null | head -3 | while read f; do
+              echo "    $(basename "$f")"
+            done
+          else
+            warn "not installed — run: silly cron install"
+          fi
+        else
+          if crontab -l 2>/dev/null | grep -q "upgrade-check.sh"; then
+            ok "cron entry installed"
+          else
+            warn "not installed — run: silly cron install"
+          fi
+        fi
+        exit 0
+        ;;
+      run)
+        info "running upgrade-check now..."
+        exec bash "$ROOT_DIR/bin/upgrade-check.sh"
+        ;;
+      *)
+        err "Unknown cron subcommand: ${2:-}"
+        echo "Usage: silly cron {install|uninstall|status|run}"
+        exit 1
+        ;;
+    esac
+    ;;
   update)
     echo ""
     echo -e "  ${B}silly-code update${N}"
@@ -419,6 +470,10 @@ Bundle path: \`$BUNDLE\`
     echo "    silly doctor          Check prerequisites"
     echo "    silly update          Check for updates"
     echo "    silly update apply    Apply available updates"
+    echo "    silly cron install    Install local Claude-Code-driven upgrade loop (4h)"
+    echo "    silly cron status     Show auto-upgrade loop status + recent logs"
+    echo "    silly cron run        Run upgrade-check now (one-shot)"
+    echo "    silly cron uninstall  Remove auto-upgrade loop"
     echo "    silly report          Bundle debug dumps for a bug report"
     echo "    silly report --submit Additionally open GitHub issue (needs gh)"
     echo "    silly uninstall       Remove silly-code completely"

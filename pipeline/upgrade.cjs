@@ -403,47 +403,46 @@ function generatePatchUpdate(newVars) {
   log(C.dim, '  Then run: node pipeline/patch.cjs to verify')
 }
 
-// ══════════════════════════════════════════════════════════════
-// Main
-// ══════════════════════════════════════════════════════════════
+module.exports = { scan, verify, LANDMARKS, getPatchPatterns, PIPELINE, UPSTREAM_DIR }
 
-const cmd = process.argv[2]
+if (require.main === module) {
+  const cmd = process.argv[2]
 
-switch (cmd) {
-  case 'scan': {
-    const target = process.argv[3] || path.join(UPSTREAM_DIR, 'package/cli.js')
-    const save = process.argv.includes('--save')
-    const { vars } = scan(target)
-    if (save) {
-      const mapFile = path.join(PIPELINE, `varmap-${vars.version || 'unknown'}.json`)
-      fs.writeFileSync(mapFile, JSON.stringify(vars, null, 2))
-      log(C.dim, `  Variable map saved: ${mapFile}`)
-    }
-    break
-  }
-
-  case 'verify': {
-    const target = process.argv[3] || path.join(UPSTREAM_DIR, 'package/cli.js')
-    const { vars, src } = scan(target)
-    verify(src, vars)
-    break
-  }
-
-  case 'fetch': {
-    fetchAndUpgrade()
-    break
-  }
-
-  default: {
-    // Default: scan + verify current upstream
-    const target = path.join(UPSTREAM_DIR, 'package/cli.js')
-    if (!fs.existsSync(target)) {
-      log(C.red, `\n  No upstream found at: ${target}`)
-      log(C.dim, '  Run: node pipeline/upgrade.cjs fetch')
+  switch (cmd) {
+    case 'scan': {
+      const target = process.argv[3] || path.join(UPSTREAM_DIR, 'package/cli.js')
+      const save = process.argv.includes('--save')
+      const { vars } = scan(target)
+      if (save) {
+        const mapFile = path.join(PIPELINE, `varmap-${vars.version || 'unknown'}.json`)
+        fs.writeFileSync(mapFile, JSON.stringify(vars, null, 2))
+        log(C.dim, `  Variable map saved: ${mapFile}`)
+      }
       break
     }
-    const { vars, src } = scan(target)
-    verify(src, vars)
-    break
+
+    case 'verify': {
+      const target = process.argv[3] || path.join(UPSTREAM_DIR, 'package/cli.js')
+      const { vars, src } = scan(target)
+      verify(src, vars)
+      break
+    }
+
+    case 'fetch': {
+      fetchAndUpgrade()
+      break
+    }
+
+    default: {
+      const target = path.join(UPSTREAM_DIR, 'package/cli.js')
+      if (!fs.existsSync(target)) {
+        log(C.red, `\n  No upstream found at: ${target}`)
+        log(C.dim, '  Run: node pipeline/upgrade.cjs fetch')
+        break
+      }
+      const { vars, src } = scan(target)
+      verify(src, vars)
+      break
+    }
   }
 }

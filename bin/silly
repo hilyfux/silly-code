@@ -181,9 +181,6 @@ case "${1:-}" in
     exit 0
     ;;
   cron)
-    # Manage the local Claude-Code-driven upgrade loop (launchd/cron).
-    # Unlike the GitHub-Actions fallback, this one actually wakes Claude to
-    # read the new binary, diagnose renames, patch, test, commit, push.
     case "${2:-status}" in
       install)
         exec bash "$ROOT_DIR/bin/install-upgrade-cron.sh"

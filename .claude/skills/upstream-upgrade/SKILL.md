@@ -355,27 +355,14 @@ Every time this skill runs end-to-end, update the file you are reading **before*
 
 ### What to capture
 
-1. **New column in the rename history table** — add `2.1.N` column. Fill every row. Bold the cells that changed from the previous version. If a row was stable, copy the previous value unchanged (that's signal too).
-2. **New probe in the grep battery** — if a failing patch needed a regex that wasn't in the battery, add it. Name the probe after the failing patch (`X-patch-name`). Prefer the shortest unique suffix anchor.
-3. **New chain in "chained rename trap"** — if you hit a slot-reuse (like `d74→c74` + `c74→l74`), list it as a concrete example under that section.
-4. **New entry in troubleshooting** — if you hit a CI / build / git error that burned more than 5 minutes, add one row with Symptom / Cause / Fix.
-5. **New feature scar** — if upstream added content that SUBSUMES one of our MATCH strings (like the new `case"team":` before `case"max":`), note it under "New feature scars" with observable side-effect.
-6. **Delete stale advice** — if a trick stopped being relevant (e.g., a rename has been stable for 3+ versions, move it out of the "active" list). Skills rot when they only grow.
+1. **Rename history** — add a `2.1.N` column, fill every row (stable values are signal too).
+2. **Grep battery** — if a failing patch needed a probe not in the battery, add it with the shortest unique suffix anchor.
+3. **Chained renames** — list new slot-reuse chains (`d74→c74` + `c74→l74` style) as concrete examples.
+4. **Troubleshooting** — any CI/build/git error that burned >5 min gets a row (Symptom / Cause / Fix).
+5. **Feature scars** — upstream additions that subsume a MATCH substring (like `case"team":` before `case"max":`) — note the observable side-effect.
+6. **Delete stale advice** — a trick stable for 3+ versions moves out of the active list. Skills rot when they only grow.
 
-### How to commit the skill update
-
-`.claude/` is gitignored — the skill lives locally only. So **do not** try to git add it. Just write the file in place. The auto-memory system and the Skill tool both pick up edits immediately on next invocation.
-
-If the rename history has grown beyond ~8 versions, trim the oldest columns and keep only what's still referenced as context for chains.
-
-### Self-review checklist (2 min)
-
-Before closing the turn, ask yourself:
-- Would **next-me**, cold-reading this skill after 3 months of Claude Code updates, have the exact grep/sed commands to reproduce today's fix?
-- Is there duplicated guidance anywhere that could collapse into one paragraph?
-- Does the troubleshooting table still match current tooling (ci-upgrade.cjs features, release.yml behavior)?
-
-If the answer to any is "no" — fix it now, not later.
+Skill lives at `.claude/skills/upstream-upgrade/SKILL.md` (tracked in git — commit the update alongside the upgrade). Trim the oldest rename-history columns if the table exceeds ~8 versions.
 
 ---
 

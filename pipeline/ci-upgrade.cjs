@@ -1,22 +1,12 @@
 #!/usr/bin/env node
 /**
- * ci-upgrade.cjs — unattended upstream upgrade for GitHub Actions.
+ * ci-upgrade.cjs — unattended upstream upgrade.
  *
- * Exit codes (GitHub workflow branches on these):
- *   0 = already current, no action needed
- *   1 = upgraded successfully, changes staged (CI opens PR)
- *   2 = new version available but auto-upgrade failed (CI opens Issue)
- *   3 = unexpected error (CI fails workflow)
- *
- * Pipeline:
- *   1. `npm pack` latest @anthropic-ai/claude-code
- *   2. If version unchanged → exit 0
- *   3. Stage new cli.js + package.json
- *   4. Bump version refs in deps.json / branding.cjs / provider-engine.cjs
- *   5. Apply renames from varmap diff (old → new) to patch files
- *   6. Content-anchored auto-rename for failing identity-style patches
- *   7. Rebuild + run tests
- *   8. Exit 1 if green, 2 if still failing
+ * Exit codes (watched by upstream-upgrade.yml):
+ *   0 = already current
+ *   1 = upgraded cleanly
+ *   2 = new version found but auto-fix couldn't finish
+ *   3 = unexpected error
  */
 
 'use strict';
@@ -24,12 +14,15 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync, spawnSync } = require('child_process');
+const { scan } = require('./upgrade.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE = __dirname;
 const UPSTREAM_DIR = path.join(PIPELINE, 'upstream');
 const PATCHES_DIR = path.join(PIPELINE, 'patches');
 const PKG = '@anthropic-ai/claude-code';
+const PATCH_FILES = ['branding.cjs', 'provider-engine.cjs', 'equality.cjs', 'privacy.cjs']
+  .map(f => path.join(PATCHES_DIR, f));
 
 function log(msg) { process.stderr.write(`[ci-upgrade] ${msg}\n`); }
 function die(code, msg) { log('ERR: ' + msg); process.exit(code); }
@@ -92,145 +85,18 @@ function loadVarmap(version) {
 }
 
 function regenerateVarmap() {
-  try {
-    execSync(
-      `node ${path.join(PIPELINE, 'upgrade.cjs')} scan ${path.join(UPSTREAM_DIR, 'package/cli.js')} --save`,
-      { cwd: ROOT, stdio: ['pipe', 'pipe', 'pipe'] }
-    );
-  } catch (e) {
-    log('scan --save failed: ' + (e.message || '').slice(0, 200));
-  }
-}
-
-function applyVarRenames(oldMap, newMap) {
-  if (!oldMap || !newMap) return 0;
-  const renames = [];
-  for (const k of Object.keys(newMap)) {
-    if (k === 'version') continue;
-    if (oldMap[k] && newMap[k] && oldMap[k] !== newMap[k]) {
-      renames.push([oldMap[k], newMap[k], k]);
-    }
-  }
-  if (!renames.length) { log('  no varmap renames to apply'); return 0; }
-
-  log(`  applying ${renames.length} varmap renames: ${renames.map(r => `${r[0]}→${r[1]}(${r[2]})`).join(', ')}`);
-
-  // Order: longer names first to avoid partial hits (A14 before A)
-  renames.sort((a, b) => b[0].length - a[0].length);
-
-  const patchFiles = [
-    path.join(PATCHES_DIR, 'branding.cjs'),
-    path.join(PATCHES_DIR, 'provider-engine.cjs'),
-    path.join(PATCHES_DIR, 'equality.cjs'),
-    path.join(PATCHES_DIR, 'privacy.cjs'),
-  ];
-  let totalChanges = 0;
-  for (const f of patchFiles) {
-    if (!fs.existsSync(f)) continue;
-    let src = fs.readFileSync(f, 'utf8');
-    const orig = src;
-    for (const [oldN, newN] of renames) {
-      // Word-boundary aware replace. $ counts as word char in JS regex so custom boundary needed.
-      const re = new RegExp('(?<![\\w$])' + escapeRe(oldN) + '(?![\\w$])', 'g');
-      src = src.replace(re, newN);
-    }
-    if (src !== orig) {
-      fs.writeFileSync(f, src);
-      totalChanges++;
-    }
-  }
-  log(`  rewrote ${totalChanges} patch file(s)`);
-  return renames.length;
+  const { vars } = scan(path.join(UPSTREAM_DIR, 'package/cli.js'));
+  const mapFile = path.join(PIPELINE, `varmap-${vars.version || 'unknown'}.json`);
+  fs.writeFileSync(mapFile, JSON.stringify(vars, null, 2));
 }
 
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-// ── 6. Content-anchored auto-rename for failing patches ─────
-function contentAnchorRename(oldVer, newVer) {
-  // Look at MATCH constants in provider-engine.cjs and branding.cjs.
-  // For each match that still fails, try to find the "new name" that prefixes
-  // a distinctive literal (identity strings, function bodies with fixed
-  // argument signatures, etc.) in the current upstream cli.js.
-
-  const newSrc = fs.readFileSync(path.join(UPSTREAM_DIR, 'package/cli.js'), 'utf8');
-  const engine = fs.readFileSync(path.join(PATCHES_DIR, 'provider-engine.cjs'), 'utf8');
-  const branding = fs.readFileSync(path.join(PATCHES_DIR, 'branding.cjs'), 'utf8');
-
-  // Candidate patterns: `IDENT="literal..."` or `function IDENT(q){...` etc.
-  // For each, extract the literal suffix and search new binary for matching tail.
-
-  const tryAnchor = (matchStr) => {
-    // Case 1: IDENT="..."
-    let m = matchStr.match(/^([A-Za-z_$][\w$]*)(="[^"]*")/);
-    if (m) {
-      const [_, oldName, suffix] = m;
-      const re = new RegExp('([A-Za-z_$][\\w$]*)' + escapeRe(suffix));
-      const hit = newSrc.match(re);
-      if (hit && hit[1] !== oldName) return { oldName, newName: hit[1] };
-    }
-    // Case 2: function IDENT(args){body} — take first ~40 chars of body as anchor
-    m = matchStr.match(/^function ([A-Za-z_$][\w$]*)(\([^)]*\)\{[^}]{8,40})/);
-    if (m) {
-      const [_, oldName, anchor] = m;
-      const re = new RegExp('function ([A-Za-z_$][\\w$]*)' + escapeRe(anchor));
-      const hit = newSrc.match(re);
-      if (hit && hit[1] !== oldName) return { oldName, newName: hit[1] };
-    }
-    // Case 3: var IDENT="literal" (minified `var X="..."`)
-    m = matchStr.match(/^var ([A-Za-z_$][\w$]*)(="[^"]*")/);
-    if (m) {
-      const [_, oldName, suffix] = m;
-      const re = new RegExp('var ([A-Za-z_$][\\w$]*)' + escapeRe(suffix));
-      const hit = newSrc.match(re);
-      if (hit && hit[1] !== oldName) return { oldName, newName: hit[1] };
-    }
-    return null;
-  };
-
-  // Extract all literal MATCH strings from provider-engine.cjs's MATCH object
-  const mObjStart = engine.indexOf('const MATCH = {');
-  if (mObjStart < 0) return 0;
-  const mObjEnd = engine.indexOf('};', mObjStart);
-  const mBlock = engine.slice(mObjStart, mObjEnd);
-  const literalRe = /[A-Z_]+:\s+'((?:[^'\\]|\\.)*)'/g;
-  const literals = [];
-  let m;
-  while ((m = literalRe.exec(mBlock)) !== null) {
-    literals.push(m[1].replace(/\\'/g, "'").replace(/\\\\/g, '\\'));
-  }
-
-  // Also grep 2-5 character identifier-prefixed literals from branding patches
-  const brandingStrings = Array.from(branding.matchAll(/'([A-Za-z_$][\w$]{0,8}=".{5,}")/g)).map(x => x[1]);
-  const brandingStrings2 = Array.from(branding.matchAll(/'(var [A-Za-z_$][\w$]{0,8}="[^"]+")/g)).map(x => x[1]);
-
-  const candidates = [...literals, ...brandingStrings, ...brandingStrings2];
-  const renames = [];
-  const seen = new Set();
-  for (const s of candidates) {
-    const r = tryAnchor(s);
-    if (r && !seen.has(r.oldName + '->' + r.newName)) {
-      // Skip "common" names; only accept if newName appears in newSrc but oldName doesn't (in the same anchor role)
-      seen.add(r.oldName + '->' + r.newName);
-      // Verify oldName doesn't still anchor in newSrc (otherwise we'd be breaking valid usage)
-      if (!newSrc.includes(s)) {
-        renames.push([r.oldName, r.newName]);
-      }
-    }
-  }
-
+function applyRenamesAcrossPatches(renames) {
   if (!renames.length) return 0;
-
-  log(`  content-anchor found ${renames.length} rename(s): ${renames.map(r => `${r[0]}→${r[1]}`).join(', ')}`);
-
   renames.sort((a, b) => b[0].length - a[0].length);
-
-  const patchFiles = [
-    path.join(PATCHES_DIR, 'branding.cjs'),
-    path.join(PATCHES_DIR, 'provider-engine.cjs'),
-    path.join(PATCHES_DIR, 'equality.cjs'),
-    path.join(PATCHES_DIR, 'privacy.cjs'),
-  ];
-  for (const f of patchFiles) {
+  let changed = 0;
+  for (const f of PATCH_FILES) {
     if (!fs.existsSync(f)) continue;
     let src = fs.readFileSync(f, 'utf8');
     const orig = src;
@@ -238,8 +104,59 @@ function contentAnchorRename(oldVer, newVer) {
       const re = new RegExp('(?<![\\w$])' + escapeRe(oldN) + '(?![\\w$])', 'g');
       src = src.replace(re, newN);
     }
-    if (src !== orig) fs.writeFileSync(f, src);
+    if (src !== orig) { fs.writeFileSync(f, src); changed++; }
   }
+  return changed;
+}
+
+function applyVarRenames(oldMap, newMap) {
+  if (!oldMap || !newMap) return 0;
+  const renames = Object.keys(newMap)
+    .filter(k => k !== 'version' && oldMap[k] && oldMap[k] !== newMap[k])
+    .map(k => [oldMap[k], newMap[k], k]);
+  if (!renames.length) { log('  no varmap renames to apply'); return 0; }
+  log(`  applying ${renames.length} varmap renames: ${renames.map(r => `${r[0]}→${r[1]}(${r[2]})`).join(', ')}`);
+  log(`  rewrote ${applyRenamesAcrossPatches(renames.map(r => [r[0], r[1]]))} patch file(s)`);
+  return renames.length;
+}
+
+// Extract IDENT="..." and var IDENT="..." match strings from our patches, then
+// search the new binary for the same literal tail preceded by a different
+// identifier. This catches identity-style vars (Fh1 / qb1 etc.) that the
+// varmap's LANDMARKS miss. Function-body anchoring was attempted and removed
+// — minifiers change body contents too often to make it reliable.
+function contentAnchorRename() {
+  const newSrc = fs.readFileSync(path.join(UPSTREAM_DIR, 'package/cli.js'), 'utf8');
+  const engine = fs.readFileSync(path.join(PATCHES_DIR, 'provider-engine.cjs'), 'utf8');
+  const branding = fs.readFileSync(path.join(PATCHES_DIR, 'branding.cjs'), 'utf8');
+
+  const tryAnchor = (matchStr) => {
+    const m = matchStr.match(/^(?:var )?([A-Za-z_$][\w$]*)(="[^"]*")/);
+    if (!m) return null;
+    const [prefix, oldName, suffix] = [m[0].startsWith('var ') ? 'var ' : '', m[1], m[2]];
+    const re = new RegExp(prefix + '([A-Za-z_$][\\w$]*)' + escapeRe(suffix));
+    const hit = newSrc.match(re);
+    return (hit && hit[1] !== oldName) ? { oldName, newName: hit[1] } : null;
+  };
+
+  const mBlock = engine.slice(engine.indexOf('const MATCH = {'), engine.indexOf('};', engine.indexOf('const MATCH = {')));
+  const literals = Array.from(mBlock.matchAll(/[A-Z_]+:\s+'((?:[^'\\]|\\.)*)'/g))
+    .map(x => x[1].replace(/\\'/g, "'").replace(/\\\\/g, '\\'));
+  const brandingLits = Array.from(branding.matchAll(/'((?:var )?[A-Za-z_$][\w$]{0,8}="[^"]+")/g))
+    .map(x => x[1]);
+
+  const renames = [];
+  const seen = new Set();
+  for (const s of [...literals, ...brandingLits]) {
+    const r = tryAnchor(s);
+    if (!r || seen.has(r.oldName + '->' + r.newName)) continue;
+    seen.add(r.oldName + '->' + r.newName);
+    if (!newSrc.includes(s)) renames.push([r.oldName, r.newName]);
+  }
+
+  if (!renames.length) return 0;
+  log(`  content-anchor found ${renames.length} rename(s): ${renames.map(r => `${r[0]}→${r[1]}`).join(', ')}`);
+  applyRenamesAcrossPatches(renames);
   return renames.length;
 }
 
@@ -314,7 +231,7 @@ function writeOutput(kv) {
   if (!r.ok && r.fails.length) {
     log(`first build failed: ${r.fails.length} patches broken [${r.fails.slice(0, 10).join(', ')}${r.fails.length > 10 ? ', ...' : ''}]`);
     log('running content-anchor rename sweep...');
-    const n = contentAnchorRename(current, latest);
+    const n = contentAnchorRename();
     if (n > 0) {
       log('retrying build after content-anchor...');
       r = runPatch();

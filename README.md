@@ -8,7 +8,7 @@
 
 ## English
 
-Multi-provider AI assistant built on the latest Claude Code 2.1.105 via patch pipeline. Three pillars: **privacy** (zero telemetry), **purity** (no upstream residue), **equality** (all features unlocked for every user).
+Multi-provider AI assistant built on the latest Claude Code 2.1.107 via patch pipeline. Three pillars: **privacy** (zero telemetry), **purity** (no upstream residue), **equality** (all features unlocked for every user).
 
 ```
 sillyx    → OpenAI Codex (ChatGPT Pro)
@@ -64,7 +64,7 @@ silly uninstall
 
 ## 中文
 
-基于最新 Claude Code 2.1.105，通过补丁流水线构建的多供应商 AI 助手。三大基石：**隐私保护**（零遥测）、**纯净优化**（清除上游残留）、**技术平权**（所有功能对所有用户开放）。
+基于最新 Claude Code 2.1.107，通过补丁流水线构建的多供应商 AI 助手。三大基石：**隐私保护**（零遥测）、**纯净优化**（清除上游残留）、**技术平权**（所有功能对所有用户开放）。
 
 ```
 sillyx    → OpenAI Codex（ChatGPT Pro）
@@ -114,7 +114,7 @@ silly uninstall       # 完全卸载
 
 ## 日本語
 
-最新の Claude Code 2.1.105 をパッチパイプラインで再構築したマルチプロバイダー AI アシスタント。3つの柱：**プライバシー保護**（ゼロテレメトリ）、**純粋化**（上流の痕跡を除去）、**技術の平等**（すべての機能をすべてのユーザーに開放）。
+最新の Claude Code 2.1.107 をパッチパイプラインで再構築したマルチプロバイダー AI アシスタント。3つの柱：**プライバシー保護**（ゼロテレメトリ）、**純粋化**（上流の痕跡を除去）、**技術の平等**（すべての機能をすべてのユーザーに開放）。
 
 ```
 sillyx    → OpenAI Codex（ChatGPT Pro）
@@ -164,7 +164,7 @@ silly uninstall       # 完全アンインストール
 
 ## Français
 
-Assistant IA multi-fournisseur construit sur la dernière version de Claude Code 2.1.105 via un pipeline de patchs. Trois piliers : **protection de la vie privée** (zéro télémétrie), **pureté** (aucun résidu amont), **égalité technologique** (toutes les fonctionnalités débloquées pour chaque utilisateur).
+Assistant IA multi-fournisseur construit sur la dernière version de Claude Code 2.1.107 via un pipeline de patchs. Trois piliers : **protection de la vie privée** (zéro télémétrie), **pureté** (aucun résidu amont), **égalité technologique** (toutes les fonctionnalités débloquées pour chaque utilisateur).
 
 ```
 sillyx    → OpenAI Codex (ChatGPT Pro)

@@ -6,8 +6,8 @@
 
 module.exports = function applyBranding({ patch, patchAll }) {
   patchAll('01-version',
-    'VERSION:"2.1.105"',
-    'VERSION:"2.1.105-silly"'
+    'VERSION:"2.1.107"',
+    'VERSION:"2.1.107-silly"'
   )
 
   patchAll('02-package-url',
@@ -183,8 +183,8 @@ module.exports = function applyBranding({ patch, patchAll }) {
 
   // Patch 10a: TUI header brand name variable
   patch('10a-header-brand-var',
-    'var mOK="Claude Code"',
-    'var mOK="Silly Code"'
+    'var FOK="Claude Code"',
+    'var FOK="Silly Code"'
   )
 
   // Patch 10b: TUI header themed render — status bar "Claude Code vX.X.X"

@@ -84,23 +84,23 @@ function validate(providers) {
   if (defaultCount !== 1) throw new Error(`Exactly one provider must have envKey: null (found ${defaultCount})`);
 }
 
-// ── Match string constants (upstream v2.1.105) ──
+// ── Match string constants (upstream v2.1.107) ──
 const MATCH = {
   DETECT:      'return B6(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"',
-  INJECT:      'P=rX(_);if(P==="bedrock")',
+  INJECT:      'P=oX(_);if(P==="bedrock")',
   RESOLVE:     'function P$(q=iq()){return q==="firstParty"||q==="anthropicAws"}',
   FAMILY:      'function $Q(q=iq()){return q==="firstParty"||q==="anthropicAws"||q==="foundry"||q==="mantle"}',
   CONTEXT_DEFAULT: 'qh1=200000',
-  DISPLAY:     'function xW(q){if(iq()==="foundry")return;',
+  DISPLAY:     'function mW(q){if(iq()==="foundry")return;',
   IDENTITY:    'qb1="You are Claude Code, Anthropic\'s official CLI for Claude."',
-  SDK_ID:      'd74="You are Claude Code, Anthropic\'s official CLI for Claude, running within the Claude Agent SDK."',
-  AGENT_ID:    'c74="You are a Claude agent, built on Anthropic\'s Claude Agent SDK."',
+  SDK_ID:      'c74="You are Claude Code, Anthropic\'s official CLI for Claude, running within the Claude Agent SDK."',
+  AGENT_ID:    'l74="You are a Claude agent, built on Anthropic\'s Claude Agent SDK."',
   MODEL_ID:    'You are powered by the model named ${$}. The exact model ID is ${q}.',
   MODEL_ID_2:  'You are powered by the model named ${H}. The exact model ID is ${q}.',
   SIMPLE_ID:   '?"You are Claude Code, Anthropic\'s official CLI for Claude.":`You are Claude Code, Anthropic\'s official CLI for Claude.',
   TIER:        'case"max":return"Claude Max";case"pro":return"Claude Pro";default:return"Claude API"',
   CONSTRUCTOR: 'gL',
-  VERSION:     '// Version: 2.1.105',
+  VERSION:     '// Version: 2.1.107',
 };
 
 // ── Serialization safeguards ──
@@ -117,7 +117,7 @@ function checkSerialization(code, label) {
     const mockFetch = () => Promise.resolve(new Response('{}', { status: 200 }));
     new Function('fetch', code)(mockFetch);
   } catch (e) {
-    // ReferenceErrors during execution are expected (missing runtime vars like iq, rX)
+    // ReferenceErrors during execution are expected (missing runtime vars like iq, oX)
     // Only fail on SyntaxError or TypeError indicating broken code structure
     if (e instanceof SyntaxError || e instanceof TypeError) {
       throw new Error(`${label}: execution verification failed — ${e.message}`);
@@ -184,7 +184,7 @@ module.exports = function applyProviders({ patch }) {
 
   patch('11-12-provider-adapters',
     MATCH.INJECT,
-    `P=rX(_);${injectionCode};${adapterBranches}if(P==="bedrock")`
+    `P=oX(_);${injectionCode};${adapterBranches}if(P==="bedrock")`
   );
 
   // ── Patch 15: Model defaults ──
@@ -247,7 +247,7 @@ module.exports = function applyProviders({ patch }) {
 
     patch('60-model-display-name',
       MATCH.DISPLAY,
-      `function xW(q){${displayBranches}if(iq()==="foundry")return;`
+      `function mW(q){${displayBranches}if(iq()==="foundry")return;`
     );
   }
 
@@ -276,7 +276,7 @@ module.exports = function applyProviders({ patch }) {
     .join('');
   patch('62-sdk-identity',
     MATCH.SDK_ID,
-    `d74=(()=>{const _p=typeof iq==="function"?iq():"firstParty";${sdkBranches}return"${originalSdk}";})()`
+    `c74=(()=>{const _p=typeof iq==="function"?iq():"firstParty";${sdkBranches}return"${originalSdk}";})()`
   );
 
   // ── Patch 64: Model ID in prompt (two occurrences with different var names) ──
@@ -299,7 +299,7 @@ module.exports = function applyProviders({ patch }) {
   const originalAgent = "You are a Claude agent, built on Anthropic\\'s Claude Agent SDK.";
   patch('65-agent-identity',
     MATCH.AGENT_ID,
-    `c74=(()=>{const _p=typeof iq==="function"?iq():"firstParty";${agentBranches}return"${originalAgent}";})()`
+    `l74=(()=>{const _p=typeof iq==="function"?iq():"firstParty";${agentBranches}return"${originalAgent}";})()`
   );
 
   // ── Patch 63a: Simple identity ──
@@ -340,7 +340,7 @@ module.exports = function applyProviders({ patch }) {
   // already provider-aware from Patch 60.
   patch('67-public-model-display',
     'function wq6(q){let K=q.endsWith("[1m]")?" (1M context)":"";switch',
-    'function wq6(q){if(typeof iq==="function"&&iq()!=="firstParty"){let _n=xW(q);if(_n)return _n;}let K=q.endsWith("[1m]")?" (1M context)":"";switch'
+    'function wq6(q){if(typeof iq==="function"&&iq()!=="firstParty"){let _n=mW(q);if(_n)return _n;}let K=q.endsWith("[1m]")?" (1M context)":"";switch'
   );
 
   // ── Patch 66: Fast mode display name ──

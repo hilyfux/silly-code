@@ -338,6 +338,28 @@ For each issue, ask: does a fix in `pipeline/patches/providers/_base.cjs` (proto
 - stop-mid-task narration → `enforceContinuation` prompt block (47a6455, 7770e68)
 - SILLY_DEBUG_DUMP diagnostic channel → adapter instrumentation + `silly report` CLI (7770e68, 6d32082)
 
+### 7. Proactive Lane B — Codex UX hunt
+
+Lane B doesn't only mean reacting to regressions; every upgrade cycle is an opportunity to **actively make Codex better** for ChatGPT Pro users. Run this battery even when Lane A is clean:
+
+**a) Review real-use dumps** — any `/tmp/silly-debug/*.json` from the user's recent sessions + any `.silly-code/reports/` bundles. Look for:
+- `function_call_output` bodies that start with `<tool_use_error>` — pattern of cancelled parallel tool calls → adapter could coalesce or retry
+- Assistant text that ends mid-sentence with no tool_call → stop-mid-task residue; check if `enforceContinuation` needs sharpening
+- Large `input_text` blobs re-sent turn after turn → cache_control optimization opportunity (OpenAI prompt caching)
+- Empty `function_call_output.output` → tool_result content translation dropping data
+- Unknown block types in recent assistant turns — cross-reference with Check 4 (Session-resume durability)
+
+**b) Responses API drift** — does OpenAI's Responses API have new fields we're not translating to/from? Quick check against their changelog / openapi spec — specifically: `reasoning_tokens`, `cache_read_tokens`, new content types. Any we emit from `msgsToResponsesInput` that are wrong for current API spec?
+
+**c) Codex CLI feature parity** — `gh release list --repo openai/codex --limit 3` (if accessible). For each new Codex CLI feature, ask: *is this a thing sillyx should have?* (approval modes, image-gen, shell auto-fix, project rules, etc.). Candidates worth evaluating get a row in `docs/codex-parity.md` — don't implement blindly, just track.
+
+**d) GPT-5.4 model-specific tuning** — reasoning_effort, extended thinking, cache hints. Audit `pipeline/patches/providers/openai.cjs` — are we passing the optimal params for the current model? Are we setting `reasoning_effort` at all?
+
+Convert findings to concrete action:
+- One-liner adapter fix that reduces token waste → batch into upgrade commit
+- Non-trivial new adapter feature → open separate Issue + label `lane-b`
+- Insight that doesn't yet have an action → write to "Lane B lessons" at the bottom of this skill
+
 ### When to escalate
 
 Some optimizations warrant a dedicated commit separate from the upgrade:
@@ -355,12 +377,19 @@ Every time this skill runs end-to-end, update the file you are reading **before*
 
 ### What to capture
 
+Lane A (tracking):
 1. **Rename history** — add a `2.1.N` column, fill every row (stable values are signal too).
 2. **Grep battery** — if a failing patch needed a probe not in the battery, add it with the shortest unique suffix anchor.
 3. **Chained renames** — list new slot-reuse chains (`d74→c74` + `c74→l74` style) as concrete examples.
 4. **Troubleshooting** — any CI/build/git error that burned >5 min gets a row (Symptom / Cause / Fix).
 5. **Feature scars** — upstream additions that subsume a MATCH substring (like `case"team":` before `case"max":`) — note the observable side-effect.
-6. **Delete stale advice** — a trick stable for 3+ versions moves out of the active list. Skills rot when they only grow.
+
+Lane B (Codex UX):
+6. **Lane B lessons** — observations from Check 7 probes that don't yet have an action. Append to the "Lane B lessons" list at the bottom of this skill (create the list if missing). Keep each entry <= 2 lines: what-was-observed / where-to-look-next. Future upgrades harvest this list.
+7. **Codex-parity tracker** — if a notable Codex CLI feature landed, add to `docs/codex-parity.md` (Have / Missing / Considered-not-worth).
+
+Housekeeping:
+8. **Delete stale advice** — a trick stable for 3+ versions moves out of the active list. Skills rot when they only grow.
 
 Skill lives at `.claude/skills/upstream-upgrade/SKILL.md` (tracked in git — commit the update alongside the upgrade). Trim the oldest rename-history columns if the table exceeds ~8 versions.
 
@@ -376,3 +405,11 @@ Skill lives at `.claude/skills/upstream-upgrade/SKILL.md` (tracked in git — co
 | `Upstream version mismatch` | `deps.json` doesn't match `upstream/package/package.json` | Run the sed battery in **Version bumps** |
 | Tag already exists but binary didn't rebuild | Release workflow skipped due to path filter | Manually tag + `gh release create` |
 | `gh label not found` during CI | Labels missing on repo | `gh label create auto-upgrade` + `gh label create upstream` |
+
+---
+
+## Lane B lessons
+
+Running log of Codex-UX observations captured during upgrades that don't yet have actions. Each entry: what was seen / where to look next. Future upgrades harvest this list.
+
+_(empty — add first entry after next upgrade)_

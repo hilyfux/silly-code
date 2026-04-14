@@ -70,6 +70,8 @@ jobs:
       - name: Create tag
         if: steps.diff.outputs.changed == 'true' && steps.tag_check.outputs.exists == 'false'
         run: |
+          git config user.name "silly-code-bot"
+          git config user.email "silly-code-bot@users.noreply.github.com"
           git tag "v${{ steps.diff.outputs.new }}" -m "upstream ${{ steps.diff.outputs.new }}"
           git push origin "v${{ steps.diff.outputs.new }}"
 

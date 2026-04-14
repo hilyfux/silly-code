@@ -9,9 +9,13 @@ dist/
 cli
 cli-dev
 .DS_Store
-.claude/
+# .claude/: ignore personal state, but track team-shared skills + settings.json
+.claude/*
+!.claude/skills/
+!.claude/settings.json
+.claude/settings.local.json
+.claude/worktrees/
 .knowledge-graph/
 .mcp.json
 .playwright/
 .playwright-mcp/
-skills/

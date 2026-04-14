@@ -31,9 +31,29 @@ ls -t "$LOG_DIR"/upgrade-*.log 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/nu
     exit 0
   fi
 
-  # Pull latest from origin first so we don't re-do work already pushed
+  # Safety: abort if the working tree has uncommitted changes or untracked
+  # non-trivial files. Better to skip this slot than to clobber WIP.
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "uncommitted changes present — skipping this slot to protect WIP"
+    echo "run 'git status' to inspect; commit / stash to let the next slot proceed"
+    exit 0
+  fi
+  # Untracked files are allowed (agent will ignore them) — but warn for visibility
+  UNTRACKED=$(git ls-files --others --exclude-standard | head -3)
+  if [ -n "$UNTRACKED" ]; then
+    echo "untracked files present (agent will leave them alone):"
+    echo "$UNTRACKED" | sed 's/^/  /'
+  fi
+
+  # Pull latest from origin
   git fetch origin main --quiet 2>&1 || true
-  git reset --hard origin/main --quiet 2>&1 || true
+  LOCAL_SHA=$(git rev-parse HEAD 2>/dev/null)
+  REMOTE_SHA=$(git rev-parse origin/main 2>/dev/null)
+  if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
+    # Local has commits ahead of or diverged from origin/main — also abort
+    echo "local HEAD ($LOCAL_SHA) != origin/main ($REMOTE_SHA) — skipping"
+    exit 0
+  fi
 
   CURRENT=$(node -p "require('./deps.json').deps.upstream.version" 2>/dev/null)
   LATEST=$(npm view @anthropic-ai/claude-code version 2>/dev/null || echo "")
@@ -65,6 +85,8 @@ ls -t "$LOG_DIR"/upgrade-*.log 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/nu
   # Dangerously skip permissions because launchd runs headless — no human to
   # approve file edits mid-flight. The agent operates inside this repo only.
   PROMPT="Upstream @anthropic-ai/claude-code released $LATEST (we are on $CURRENT).
+
+This is a mechanical, playbook-driven task — do NOT invoke brainstorming, AskUserQuestion, or any skill that requires user input. The user is not watching. Follow the upstream-upgrade skill directly and make concrete decisions yourself.
 
 Use the upstream-upgrade skill to handle the full upgrade end-to-end:
 1. Run node pipeline/ci-upgrade.cjs — if it exits 1 (upgraded cleanly), verify tests and skip to step 4

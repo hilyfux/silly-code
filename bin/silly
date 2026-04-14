@@ -296,6 +296,117 @@ case "${1:-}" in
       exit 1
     fi
     ;;
+  report)
+    # Bundle recent debug dumps for a bug report.
+    # Usage: silly report          # create local bundle, print instructions
+    #        silly report --submit # additionally open a GitHub issue via gh CLI
+    SILLY_CODE_DATA="${SILLY_CODE_DATA:-$HOME/.silly-code}"
+    DEBUG_DIR="/tmp/silly-debug"
+    REPORTS_DIR="$SILLY_CODE_DATA/reports"
+
+    if [ ! -d "$DEBUG_DIR" ] || [ -z "$(ls -A "$DEBUG_DIR" 2>/dev/null)" ]; then
+      warn "No debug dumps found in $DEBUG_DIR"
+      echo ""
+      echo "  To capture one:"
+      echo "    SILLY_DEBUG_DUMP=1 sillyx    # or sillyt/sillye"
+      echo ""
+      echo "  Reproduce the issue, then re-run 'silly report'."
+      exit 1
+    fi
+
+    mkdir -p "$REPORTS_DIR"
+    STAMP="$(date +%Y%m%d-%H%M%S)"
+    STAGE="$REPORTS_DIR/$STAMP"
+    mkdir -p "$STAGE"
+
+    info "Collecting dumps from $DEBUG_DIR..."
+    cp "$DEBUG_DIR"/*.json "$STAGE/" 2>/dev/null || true
+    COUNT=$(ls "$STAGE"/*.json 2>/dev/null | wc -l | tr -d ' ')
+
+    # Anonymize: strip $HOME paths, username, OAuth-shaped tokens
+    # Keep message shapes + tool call names so the bug is diagnosable.
+    info "Anonymizing $COUNT file(s)..."
+    USERNAME=$(whoami)
+    for f in "$STAGE"/*.json; do
+      [ -f "$f" ] || continue
+      # Replace $HOME with REDACTED_HOME, username tokens, and likely secrets
+      node -e "
+        const fs=require('fs');
+        let s=fs.readFileSync('$f','utf8');
+        s=s.split(process.env.HOME).join('REDACTED_HOME');
+        s=s.split('$USERNAME').join('REDACTED_USER');
+        // Bearer tokens / sk- API keys / eyJ JWTs
+        s=s.replace(/Bearer\s+[A-Za-z0-9._\-]{10,}/g,'Bearer REDACTED_TOKEN');
+        s=s.replace(/sk-[A-Za-z0-9_\-]{10,}/g,'REDACTED_SK');
+        s=s.replace(/eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+/g,'REDACTED_JWT');
+        s=s.replace(/gho_[A-Za-z0-9]{30,}/g,'REDACTED_GH_TOKEN');
+        s=s.replace(/ghp_[A-Za-z0-9]{30,}/g,'REDACTED_GH_PAT');
+        fs.writeFileSync('$f',s);
+      " 2>/dev/null || warn "  failed to anonymize $(basename "$f")"
+    done
+
+    # Add context: version, git HEAD, OS
+    cat > "$STAGE/context.txt" <<CTX
+silly-code report
+=================
+timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+version: $(cd "$ROOT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo unknown)
+upstream: $(node -p "require('$ROOT_DIR/deps.json').deps.upstream.version" 2>/dev/null || echo unknown)
+node: $(node --version 2>/dev/null || echo unknown)
+os: $(uname -srv)
+dumps: $COUNT
+CTX
+
+    BUNDLE="$REPORTS_DIR/silly-report-$STAMP.tar.gz"
+    (cd "$REPORTS_DIR" && tar -czf "$(basename "$BUNDLE")" "$STAMP")
+    SIZE=$(du -h "$BUNDLE" | awk '{print $1}')
+
+    ok "Report bundle ready: $BUNDLE ($SIZE)"
+    echo ""
+    echo "  Contains:"
+    echo "    - $COUNT anonymized debug dump(s)"
+    echo "    - context.txt (version, OS, no PII)"
+    echo ""
+
+    if [ "${2:-}" = "--submit" ]; then
+      if ! command -v gh >/dev/null 2>&1; then
+        warn "'gh' CLI not installed — falling back to manual"
+      elif ! gh auth status >/dev/null 2>&1; then
+        warn "'gh' not authenticated — run 'gh auth login' first"
+      else
+        info "Opening issue on hilyfux/silly-code..."
+        TITLE="bug report ($STAMP)"
+        BODY="Auto-generated report from \`silly report --submit\`.
+
+Attach the bundle manually after the issue opens — GitHub's API doesn't allow file uploads to issues.
+
+\`\`\`
+$(cat "$STAGE/context.txt")
+\`\`\`
+
+Bundle path: \`$BUNDLE\`
+"
+        URL=$(gh issue create \
+          --repo hilyfux/silly-code \
+          --title "$TITLE" \
+          --body "$BODY" \
+          --label "bug,user-report" 2>/dev/null)
+        if [ -n "$URL" ]; then
+          ok "Issue opened: $URL"
+          echo "  Next: drag $BUNDLE into the issue comments to attach."
+        else
+          warn "gh issue create failed — see below for manual steps"
+        fi
+      fi
+    fi
+
+    echo "  Manual submission:"
+    echo "    1. Open https://github.com/hilyfux/silly-code/issues/new"
+    echo "    2. Drag $BUNDLE into the comment to attach"
+    echo "    3. Describe what you expected vs what happened"
+    echo ""
+    exit 0
+    ;;
   help|--help|-h)
     echo ""
     echo -e "  ${B}silly-code${N} — Multi-Provider AI Coding Assistant"
@@ -308,6 +419,8 @@ case "${1:-}" in
     echo "    silly doctor          Check prerequisites"
     echo "    silly update          Check for updates"
     echo "    silly update apply    Apply available updates"
+    echo "    silly report          Bundle debug dumps for a bug report"
+    echo "    silly report --submit Additionally open GitHub issue (needs gh)"
     echo "    silly uninstall       Remove silly-code completely"
     echo ""
     echo "  Launch:"

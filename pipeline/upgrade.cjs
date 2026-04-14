@@ -412,7 +412,13 @@ const cmd = process.argv[2]
 switch (cmd) {
   case 'scan': {
     const target = process.argv[3] || path.join(UPSTREAM_DIR, 'package/cli.js')
-    scan(target)
+    const save = process.argv.includes('--save')
+    const { vars } = scan(target)
+    if (save) {
+      const mapFile = path.join(PIPELINE, `varmap-${vars.version || 'unknown'}.json`)
+      fs.writeFileSync(mapFile, JSON.stringify(vars, null, 2))
+      log(C.dim, `  Variable map saved: ${mapFile}`)
+    }
     break
   }
 

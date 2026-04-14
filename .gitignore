@@ -2,7 +2,7 @@ node_modules/
 pipeline/build/
 # pipeline/upstream/ is tracked — clone includes it, no npm pack needed
 pipeline/.upgrade-tmp/
-pipeline/varmap-*.json
+# varmap-*.json kept tracked — ci-upgrade diffs old vs new for rename sweep
 *.tgz
 .env
 dist/

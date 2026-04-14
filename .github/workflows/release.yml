@@ -1,0 +1,126 @@
+name: release
+
+# Fires on push to main. If deps.json's upstream.version changed vs the
+# previous commit, cut a GitHub release tagged v<upstream-version>.
+#
+# Releases are markers only — users install via `git clone` + local rebuild,
+# so we don't ship the 13 MB patched binary as a release asset. The release
+# notes link to the varmap diff and to the upstream Claude Code changelog.
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'deps.json'
+      - 'pipeline/upstream/package/cli.js'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # need HEAD^ to diff
+
+      - name: Detect version change
+        id: diff
+        run: |
+          OLD=$(git show HEAD^:deps.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).deps.upstream.version" 2>/dev/null || echo "")
+          NEW=$(node -p "require('./deps.json').deps.upstream.version")
+          echo "old=$OLD" >> $GITHUB_OUTPUT
+          echo "new=$NEW" >> $GITHUB_OUTPUT
+          if [ "$OLD" = "$NEW" ] || [ -z "$NEW" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.diff.outputs.changed == 'true'
+        with:
+          node-version: '20'
+
+      - name: Verify build + tests before tagging
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          node pipeline/patch.cjs
+          node tests/base.test.cjs
+          node tests/schema.test.cjs
+
+      - name: Check tag does not already exist
+        if: steps.diff.outputs.changed == 'true'
+        id: tag_check
+        run: |
+          TAG="v${{ steps.diff.outputs.new }}"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists — skipping release"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create tag
+        if: steps.diff.outputs.changed == 'true' && steps.tag_check.outputs.exists == 'false'
+        run: |
+          git tag "v${{ steps.diff.outputs.new }}" -m "upstream ${{ steps.diff.outputs.new }}"
+          git push origin "v${{ steps.diff.outputs.new }}"
+
+      - name: Create GitHub release
+        if: steps.diff.outputs.changed == 'true' && steps.tag_check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW="${{ steps.diff.outputs.new }}"
+          OLD="${{ steps.diff.outputs.old }}"
+          CHANGELOG_URL="https://github.com/anthropics/claude-code/releases/tag/v${NEW}"
+
+          NOTES="$(cat <<EOF
+          **Upstream: Claude Code \`${OLD}\` → \`${NEW}\`**
+
+          Patched downstream by [silly-code](https://github.com/hilyfux/silly-code) with:
+          - 3 providers (Claude / OpenAI Codex / GitHub Copilot)
+          - zero telemetry (10 endpoints blocked)
+          - zero tier gating
+          - identity purity for third-party providers
+
+          ### Install / upgrade
+
+          \`\`\`bash
+          # New install
+          curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
+
+          # Existing install
+          silly update apply
+          \`\`\`
+
+          ### Variable map
+          See \`pipeline/varmap-${NEW}.json\` for the minified identifier snapshot.
+
+          ### Upstream notes
+          [Claude Code ${NEW} release notes](${CHANGELOG_URL})
+          EOF
+          )"
+
+          gh release create "v${NEW}" \
+            --title "silly-code v${NEW}" \
+            --notes "$NOTES"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Old version | \`${{ steps.diff.outputs.old }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| New version | \`${{ steps.diff.outputs.new }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Changed? | ${{ steps.diff.outputs.changed }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag existed? | ${{ steps.tag_check.outputs.exists || 'n/a' }} |" >> $GITHUB_STEP_SUMMARY

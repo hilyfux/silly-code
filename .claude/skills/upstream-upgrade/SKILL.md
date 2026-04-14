@@ -223,7 +223,12 @@ If CI opened an Issue, reference `Closes #N` in the commit message so it auto-cl
 
 ## Optimization scan (run on EVERY successful bump)
 
-After the 82-patch build goes green, don't stop — run these checks on the new binary. Each one catches a class of regression or newly-introduced leak.
+After the 82-patch build goes green, don't stop — run these checks. They serve the project's **dual mission** (see root `CLAUDE.md`):
+
+- **Lane A (tracking)**: checks 1–3 catch new leaks / telemetry / scars introduced upstream
+- **Lane B (Codex UX)**: checks 4–6 catch provider-adapter regressions and discover fixes that make sillyx/GPT work better
+
+A bump is not done until both lanes have been walked.
 
 ### 1. Identity leak re-scan
 

@@ -6,6 +6,24 @@ silly-code is a multi-provider AI coding assistant built on top of the upstream 
 
 **This is NOT a source-code fork.** We patch the upstream compiled binary (`cli.js`), not the source.
 
+## Dual mission — every change serves one of these
+
+Every iteration (patch, feature, fix) falls into one of two lanes. Both are first-class, neither is secondary:
+
+**Lane A — Track upstream, stay clean**
+- Follow @anthropic-ai/claude-code releases (CI checks npm every 2h)
+- **Privacy** — zero telemetry, zero phone-home (10 endpoints blocked, patch 30-40)
+- **Purity** — no identity bleed through for non-firstParty providers (patches 11*, 60-67)
+- **Equality** — no tier gating; every user sees every feature (patches 20-24)
+
+**Lane B — Be the best Codex for ChatGPT Pro users**
+- Treat "a better-than-Codex-CLI experience for OpenAI GPT" as a product goal, not a side effect
+- Aggressively fix OpenAI Responses API adapter issues (session resume, stop-mid-task, thinking-block leaks — see `pipeline/patches/providers/_base.cjs` + `openai.cjs`)
+- Prompt-level help for GPT's quirks (continuation-discipline, tameSkillPrompts)
+- SILLY_DEBUG_DUMP + `silly report` feed the optimization loop — dumps → diagnosis → adapter patch
+
+When scoping a change, ask: **"is this Lane A (tracking) or Lane B (Codex UX)?"** If neither, reconsider.
+
 ## Architecture
 
 ```

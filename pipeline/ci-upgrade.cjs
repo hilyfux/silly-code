@@ -176,7 +176,7 @@ function runPatch() {
 }
 
 function runTests() {
-  for (const t of ['tests/base.test.cjs', 'tests/schema.test.cjs']) {
+  for (const t of ['tests/base.test.cjs', 'tests/schema.test.cjs', 'tests/providers.test.cjs']) {
     const r = spawnSync('node', [t], { cwd: ROOT, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
     if (r.status !== 0) return { ok: false, which: t, out: (r.stdout || '') + (r.stderr || '') };
   }

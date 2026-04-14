@@ -1,0 +1,11 @@
+{
+  "model": "claude-opus-4-6",
+  "system": [
+    { "type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude.\nYou help with coding tasks." }
+  ],
+  "messages": [
+    { "role": "user", "content": "hi" }
+  ],
+  "stream": false,
+  "max_tokens": 512
+}

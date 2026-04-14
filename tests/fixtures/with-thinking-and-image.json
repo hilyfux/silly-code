@@ -1,0 +1,17 @@
+{
+  "model": "claude-opus-4-6",
+  "system": "You are helpful.",
+  "messages": [
+    { "role": "assistant", "content": [
+      { "type": "thinking", "thinking": "INTERNAL_REASONING_TOKEN_XYZ private chain-of-thought the user never sees", "signature": "FAKE_SIG_BASE64_AAAAAAAAAAAAAAAAAAAAAAAA" },
+      { "type": "text", "text": "I'll look at the screenshot." }
+    ]},
+    { "role": "user", "content": [
+      { "type": "text", "text": "here is the image:" },
+      { "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" } },
+      { "type": "text", "text": "what do you see?" }
+    ]}
+  ],
+  "stream": true,
+  "max_tokens": 1024
+}

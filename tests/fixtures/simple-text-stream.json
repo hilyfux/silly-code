@@ -1,0 +1,9 @@
+{
+  "model": "claude-opus-4-6",
+  "system": "You are helpful.",
+  "messages": [
+    { "role": "user", "content": "say hi" }
+  ],
+  "stream": true,
+  "max_tokens": 1024
+}

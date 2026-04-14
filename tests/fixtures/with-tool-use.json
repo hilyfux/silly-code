@@ -1,0 +1,19 @@
+{
+  "model": "claude-opus-4-6",
+  "system": "You can run bash.",
+  "messages": [
+    { "role": "user", "content": "list the files" },
+    { "role": "assistant", "content": [
+      { "type": "text", "text": "I'll check." },
+      { "type": "tool_use", "id": "call_prev", "name": "bash", "input": { "command": "ls" } }
+    ]},
+    { "role": "user", "content": [
+      { "type": "tool_result", "tool_use_id": "call_prev", "content": "a.txt\nb.txt" }
+    ]}
+  ],
+  "tools": [
+    { "name": "bash", "description": "run shell", "input_schema": { "type": "object", "properties": { "command": { "type": "string" } } } }
+  ],
+  "stream": false,
+  "max_tokens": 1024
+}

@@ -37,7 +37,6 @@ case "${1:-}" in
     echo -e "  ${B}silly-code${N} — Multi-Provider AI Coding Assistant"
     echo ""
     check_provider "Codex   (sillyx)" "$CODEX_OAUTH" || true
-    check_provider "Copilot (sillyt)" "$COPILOT_OAUTH" || true
     check_claude || true
     echo ""
     exit 0
@@ -47,9 +46,6 @@ case "${1:-}" in
     case "$PROVIDER" in
       codex)
         node "$ROOT_DIR/pipeline/login.mjs" codex
-        ;;
-      copilot)
-        node "$ROOT_DIR/pipeline/login.mjs" copilot
         ;;
       claude)
         info "Launching Silly Code — use /login inside the TUI to sign in to claude.ai"
@@ -62,7 +58,7 @@ case "${1:-}" in
         ;;
       "")
         echo "Usage: silly login <provider>"
-        echo "Providers: codex, copilot, claude"
+        echo "Providers: codex, claude"
         exit 1
         ;;
       *)
@@ -75,10 +71,9 @@ case "${1:-}" in
   logout)
     PROVIDER="${2:-}"
     case "$PROVIDER" in
-      codex)   rm -f "$DATA_DIR/$CODEX_OAUTH" "$DATA_DIR/$CODEX_AUTH";     ok "Codex tokens removed" ;;
-      copilot) rm -f "$DATA_DIR/$COPILOT_OAUTH" "$DATA_DIR/$COPILOT_AUTH"; ok "Copilot tokens removed" ;;
-      claude)  rm -f "$DATA_DIR/$CLAUDE_OAUTH";  ok "Claude tokens removed" ;;
-      "") err "Usage: silly logout <codex|copilot|claude>"; exit 1 ;;
+      codex)   rm -f "$DATA_DIR/$CODEX_OAUTH" "$DATA_DIR/$CODEX_AUTH"; ok "Codex tokens removed" ;;
+      claude)  rm -f "$DATA_DIR/$CLAUDE_OAUTH"; ok "Claude tokens removed" ;;
+      "") err "Usage: silly logout <codex|claude>"; exit 1 ;;
       *) err "Unknown provider: $PROVIDER"; exit 1 ;;
     esac
     exit 0
@@ -91,11 +86,6 @@ case "${1:-}" in
     echo "    gpt-5.4              1M context (272k practical)"
     echo "    gpt-5.4-mini         Fast mini model"
     echo "    gpt-5.3-codex        Industry-leading coding"
-    echo ""
-    echo "  Copilot (sillyt):"
-    echo "    claude-opus-4-6      128k context (Copilot cap)"
-    echo "    claude-sonnet-4      200k context"
-    echo "    o3                   200k context"
     echo ""
     echo "  Claude (sillye):"
     echo "    claude-opus-4-6      1M context"
@@ -136,7 +126,6 @@ case "${1:-}" in
     # Provider auth
     echo ""
     check_provider "Codex   (sillyx)" "$CODEX_OAUTH" || true
-    check_provider "Copilot (sillyt)" "$COPILOT_OAUTH" || true
     check_claude || true
 
     # Defaults
@@ -164,7 +153,6 @@ case "${1:-}" in
     # Fallback
     AUTHED=0
     { [ -f "$DATA_DIR/$CODEX_AUTH" ] || [ -f "$DATA_DIR/$CODEX_OAUTH" ]; } && AUTHED=$((AUTHED+1))
-    { [ -f "$DATA_DIR/$COPILOT_AUTH" ] || [ -f "$DATA_DIR/$COPILOT_OAUTH" ]; } && AUTHED=$((AUTHED+1))
     [ -f "$CLAUDE_CRED" ] && AUTHED=$((AUTHED+1))
     if [ "$AUTHED" -ge 2 ]; then
       ok "Provider fallback: active ($AUTHED providers)"
@@ -357,7 +345,7 @@ case "${1:-}" in
       warn "No debug dumps found in $DEBUG_DIR"
       echo ""
       echo "  To capture one:"
-      echo "    SILLY_DEBUG_DUMP=1 sillyx    # or sillyt/sillye"
+      echo "    SILLY_DEBUG_DUMP=1 sillyx    # or sillye"
       echo ""
       echo "  Reproduce the issue, then re-run 'silly report'."
       exit 1
@@ -474,7 +462,6 @@ Bundle path: \`$BUNDLE\`
     echo ""
     echo "  Launch:"
     echo "    sillyx                Start with Codex"
-    echo "    sillyt                Start with Copilot"
     echo "    sillye                Start with Claude"
     echo ""
     exit 0
@@ -484,15 +471,13 @@ Bundle path: \`$BUNDLE\`
     echo -e "  ${B}silly-code${N} — Multi-Provider AI Coding Assistant"
     echo ""
     check_provider "Codex   (sillyx)" "$CODEX_OAUTH" || true
-    check_provider "Copilot (sillyt)" "$COPILOT_OAUTH" || true
     check_claude || true
     echo ""
     echo "  Get started:"
     echo "    silly login codex     Login to ChatGPT Pro / Codex"
-    echo "    silly login copilot   Login to GitHub Copilot"
     echo "    silly login claude    Login to Claude Pro/Max"
     echo ""
-    echo "  Then launch: sillyx / sillyt / sillye"
+    echo "  Then launch: sillyx / sillye"
     echo ""
     exit 0
     ;;

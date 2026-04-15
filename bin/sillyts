@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-# sillyts — sillyt with --dangerously-skip-permissions (bypass mode)
-exec "$(dirname "${BASH_SOURCE[0]}")/sillyt" --dangerously-skip-permissions "$@"

@@ -3,8 +3,7 @@
  * login.mjs — silly-code OAuth 登录工具
  *
  * 用法：
- *   node pipeline/login.mjs copilot    # GitHub Copilot 登录
- *   node pipeline/login.mjs codex      # OpenAI Codex 登录（TODO）
+ *   node pipeline/login.mjs codex      # OpenAI Codex 登录
  *   node pipeline/login.mjs status     # 查看所有 token 状态
  *
  * Token 存储在 ~/.silly-code/ 目录下。
@@ -27,128 +26,6 @@ function log(color, msg) { console.log(`${color}${msg}${C.reset}`) }
 
 function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 })
-}
-
-// ── GitHub Copilot OAuth (Device Flow) ──────────────────────
-
-// VS Code GitHub Copilot client ID (public, used by all Copilot clients)
-const COPILOT_CLIENT_ID = 'Iv1.b507a08c87ecfe98'
-
-async function loginCopilot() {
-  log(C.bold, '\n  🔑 GitHub Copilot 登录\n')
-
-  // Step 1: Request device code
-  log(C.dim, '  请求设备码...')
-  const codeResp = await fetch('https://github.com/login/device/code', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    body: JSON.stringify({
-      client_id: COPILOT_CLIENT_ID,
-      scope: 'read:user',
-    }),
-  })
-
-  if (!codeResp.ok) {
-    log(C.red, `  错误: ${codeResp.status} ${await codeResp.text()}`)
-    process.exit(1)
-  }
-
-  const codeData = await codeResp.json()
-  const { device_code, user_code, verification_uri, expires_in, interval } = codeData
-
-  // Step 2: Show user the code
-  log(C.cyan, `  ────────────────────────────────────`)
-  log(C.bold, `  打开浏览器访问: ${C.cyan}${verification_uri}`)
-  log(C.bold, `  输入验证码:     ${C.yellow}${user_code}`)
-  log(C.cyan, `  ────────────────────────────────────`)
-  log(C.dim, `  有效期 ${Math.floor(expires_in / 60)} 分钟，等待授权...\n`)
-
-  // Step 3: Poll for token
-  const pollInterval = (interval || 5) * 1000
-  const deadline = Date.now() + expires_in * 1000
-
-  while (Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, pollInterval))
-
-    const tokenResp = await fetch('https://github.com/login/oauth/access_token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        client_id: COPILOT_CLIENT_ID,
-        device_code,
-        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-      }),
-    })
-
-    const tokenData = await tokenResp.json()
-
-    if (tokenData.access_token) {
-      // Step 4: Exchange for Copilot token
-      log(C.green, '  ✓ GitHub 授权成功，获取 Copilot token...')
-
-      const copilotResp = await fetch('https://api.github.com/copilot_internal/v2/token', {
-        headers: {
-          'Authorization': `Bearer ${tokenData.access_token}`,
-          'Editor-Version': 'vscode/1.85.0',
-          'Copilot-Integration-Id': 'vscode-chat',
-          'Accept': 'application/json',
-        },
-      })
-
-      if (!copilotResp.ok) {
-        log(C.red, `  Copilot token 获取失败: ${copilotResp.status}`)
-        log(C.red, `  ${await copilotResp.text()}`)
-        log(C.yellow, '  确认你的 GitHub 账号有 Copilot 订阅')
-        process.exit(1)
-      }
-
-      const copilotData = await copilotResp.json()
-
-      // Step 5: Save
-      ensureDir()
-      const tokenFile = path.join(DATA_DIR, 'copilot-oauth.json')
-      const saved = {
-        githubToken: tokenData.access_token,
-        copilotToken: copilotData.token,
-        copilotExpiresAt: (copilotData.expires_at || 0) * 1000,
-        savedAt: new Date().toISOString(),
-      }
-      fs.writeFileSync(tokenFile, JSON.stringify(saved, null, 2), { mode: 0o600 })
-
-      log(C.green, `  ✓ Copilot token 已保存到 ${tokenFile}`)
-      log(C.green, `  ✓ Token 有效期至 ${new Date(saved.copilotExpiresAt).toLocaleString()}`)
-      log(C.dim, `  运行时会自动刷新 Copilot token\n`)
-      log(C.bold, `  测试: CLAUDE_CODE_USE_COPILOT=1 node pipeline/build/cli-patched.js -p "say hello"\n`)
-      return
-    }
-
-    if (tokenData.error === 'authorization_pending') {
-      process.stdout.write('.')
-      continue
-    }
-
-    if (tokenData.error === 'slow_down') {
-      await new Promise(r => setTimeout(r, 5000))
-      continue
-    }
-
-    if (tokenData.error === 'expired_token') {
-      log(C.red, '\n  验证码已过期，请重新运行')
-      process.exit(1)
-    }
-
-    log(C.red, `\n  未知错误: ${JSON.stringify(tokenData)}`)
-    process.exit(1)
-  }
-
-  log(C.red, '\n  超时，请重新运行')
-  process.exit(1)
 }
 
 // ── OpenAI Codex OAuth (PKCE Browser Flow) ───────────────────
@@ -338,7 +215,6 @@ function showStatus() {
   log(C.bold, '\n  silly-code token 状态\n')
 
   const tokens = [
-    { name: 'Copilot', file: 'copilot-oauth.json', check: (d) => d.githubToken ? '✓ GitHub token' : '✗' },
     { name: 'Codex', file: 'codex-oauth.json', check: (d) => d.access_token ? '✓ token' : '✗' },
   ]
 
@@ -365,9 +241,6 @@ function showStatus() {
 const cmd = process.argv[2]
 
 switch (cmd) {
-  case 'copilot':
-    await loginCopilot()
-    break
   case 'codex':
     await loginCodex()
     break
@@ -377,8 +250,7 @@ switch (cmd) {
   default:
     log(C.bold, '\n  silly-code login\n')
     log(C.dim, '  用法:')
-    log(C.dim, '    node pipeline/login.mjs copilot   — GitHub Copilot 登录')
-    log(C.dim, '    node pipeline/login.mjs codex     — OpenAI Codex 登录 (WIP)')
+    log(C.dim, '    node pipeline/login.mjs codex     — OpenAI Codex 登录')
     log(C.dim, '    node pipeline/login.mjs status    — 查看 token 状态\n')
     break
 }

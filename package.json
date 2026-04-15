@@ -2,14 +2,15 @@
   "name": "silly-code",
   "version": "0.1.0",
   "private": true,
-  "description": "Multi-provider AI coding assistant — Codex, Copilot, Claude",
+  "description": "Multi-provider AI coding assistant — Codex, Claude",
   "type": "module",
   "packageManager": "npm@10.0.0",
   "bin": {
-    "silly": "./bin/silly",
-    "sillyx": "./bin/sillyx",
-    "sillyt": "./bin/sillyt",
-    "sillye": "./bin/sillye"
+    "silly": "./bin/silly.js",
+    "sillyx": "./bin/sillyx.js",
+    "sillye": "./bin/sillye.js",
+    "sillyxs": "./bin/sillyxs.js",
+    "sillyes": "./bin/sillyes.js"
   },
   "engines": {
     "node": ">=20"

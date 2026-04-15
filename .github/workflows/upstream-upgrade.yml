@@ -88,7 +88,7 @@ jobs:
 
           ### Next steps
           1. Review the varmap diff in \`pipeline/varmap-${{ steps.up.outputs.latest }}.json\`
-          2. Smoke-test \`sillyx -p 'hello'\` / \`sillyt\` / \`sillye\` locally
+          2. Smoke-test \`sillyx -p 'hello'\` / \`sillye\` locally
           3. Merge to trigger the release workflow
 
           _Workflow: upstream-upgrade.yml · re-run: \`gh workflow run upstream-upgrade\`_"
@@ -106,7 +106,7 @@ jobs:
 
           ### Next steps
           1. Review the varmap diff in \`pipeline/varmap-${{ steps.up.outputs.latest }}.json\`
-          2. Smoke-test \`sillyx -p 'hello'\` / \`sillyt\` / \`sillye\` locally
+          2. Smoke-test \`sillyx -p 'hello'\` / \`sillye\` locally
           3. Merge to trigger the release workflow
 
           _Workflow: upstream-upgrade.yml_"

@@ -11,7 +11,7 @@
 - upgrade-check.sh shell fast-path vs agent path → see ci-upgrade.cjs exit codes (f28e5c0)
 ## Conventions
 - silly = management CLI (status/login/logout/doctor/update/report/cron)
-- sillyx/sillyt/sillye = provider launchers, source silly-common.sh
+- sillyx/sillye = provider launchers, source silly-common.sh
 - upgrade-check.sh = launchd/cron trigger; fast-paths clean upgrades, falls back to claude agent
 - install-upgrade-cron.sh = writes StartCalendarInterval plist; prefers ~/.local/share/silly-code
 - Shared functions go in silly-common.sh (ensure_patched_binary, logging, update banner)

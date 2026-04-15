@@ -12,25 +12,34 @@ Multi-provider AI assistant built on the latest Claude Code 2.1.109 via patch pi
 
 ```
 sillyx    → OpenAI Codex (ChatGPT Pro)
-sillyt    → GitHub Copilot
 sillye    → Claude (claude.ai)
 
-sillyxs / sillyts / sillyes   → same providers, --dangerously-skip-permissions
+sillyxs / sillyes   → same providers, --dangerously-skip-permissions
 ```
 
 ### Quick Start
 
+**macOS / Linux**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
 silly doctor
-sillyt    # or sillyx / sillye
+sillyx    # or sillye
+```
+
+**Windows PowerShell**
+
+```powershell
+irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex
+silly doctor
+sillyx    # or sillye
 ```
 
 ### What's Different from Claude Code
 
 | | Claude Code | Silly Code |
 |---|---|---|
-| Providers | Claude only | Claude + Codex + Copilot |
+| Providers | Claude only | Claude + Codex |
 | Telemetry | 10+ endpoints | All blocked |
 | Feature locks | Tier-gated | Max tier + `/loop` unlocked |
 | Identity leaks | Brand baked in | Scrubbed from LLM prompts |
@@ -40,7 +49,7 @@ sillyt    # or sillyx / sillye
 
 ```bash
 silly status          # Provider auth status
-silly login <prov>    # Login (codex/copilot/claude)
+silly login <prov>    # Login (codex/claude)
 silly logout <prov>   # Remove tokens
 silly doctor          # Full diagnostic
 silly uninstall       # Remove completely
@@ -48,9 +57,10 @@ silly uninstall       # Remove completely
 
 ### Requirements
 
-- macOS or Linux (Windows via WSL)
-- At least one subscription: ChatGPT Pro, GitHub Copilot, or Claude Pro/Max
-- [Bun](https://bun.sh) >= 1.3.11 and [ripgrep](https://github.com/BurntSushi/ripgrep) — both auto-installed
+- macOS, Linux, or Windows PowerShell 7+
+- At least one subscription: ChatGPT Pro or Claude Pro/Max
+- [Node.js](https://nodejs.org/) >= 20 and Git
+- [ripgrep](https://github.com/BurntSushi/ripgrep) is auto-installed when missing on supported platforms
 
 ### Uninstall
 
@@ -68,25 +78,34 @@ silly uninstall
 
 ```
 sillyx    → OpenAI Codex（ChatGPT Pro）
-sillyt    → GitHub Copilot
 sillye    → Claude（claude.ai）
 
-sillyxs / sillyts / sillyes   → 对应 provider，默认跳过权限确认（--dangerously-skip-permissions）
+sillyxs / sillyes   → 对应 provider，默认跳过权限确认（--dangerously-skip-permissions）
 ```
 
 ### 快速开始
 
+**macOS / Linux**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
 silly doctor
-sillyt    # 或 sillyx / sillye
+sillyx    # 或 sillye
+```
+
+**Windows PowerShell**
+
+```powershell
+irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex
+silly doctor
+sillyx    # 或 sillye
 ```
 
 ### 与 Claude Code 的区别
 
 | | Claude Code | Silly Code |
 |---|---|---|
-| 供应商 | 仅 Claude | Claude + Codex + Copilot |
+| 供应商 | 仅 Claude | Claude + Codex |
 | 遥测 | 10+ 端点 | 全部封堵 |
 | 功能限制 | 按等级限制 | Max 等级 + `/loop` 全解锁 |
 | 身份泄漏 | 品牌烙印 | 从 LLM 提示词中清除 |
@@ -96,7 +115,7 @@ sillyt    # 或 sillyx / sillye
 
 ```bash
 silly status          # 查看供应商认证状态
-silly login <prov>    # 登录（codex/copilot/claude）
+silly login <prov>    # 登录（codex/claude）
 silly logout <prov>   # 删除认证令牌
 silly doctor          # 完整系统诊断
 silly uninstall       # 完全卸载
@@ -104,9 +123,10 @@ silly uninstall       # 完全卸载
 
 ### 环境要求
 
-- macOS 或 Linux（Windows 通过 WSL）
-- 至少一个订阅：ChatGPT Pro、GitHub Copilot 或 Claude Pro/Max
-- [Bun](https://bun.sh) >= 1.3.11 和 [ripgrep](https://github.com/BurntSushi/ripgrep)（安装时自动安装）
+- macOS、Linux，或 Windows PowerShell 7+
+- 至少一个订阅：ChatGPT Pro 或 Claude Pro/Max
+- [Node.js](https://nodejs.org/) >= 20 和 Git
+- [ripgrep](https://github.com/BurntSushi/ripgrep) 在受支持平台缺失时会自动安装
 
 ---
 
@@ -118,25 +138,34 @@ silly uninstall       # 完全卸载
 
 ```
 sillyx    → OpenAI Codex（ChatGPT Pro）
-sillyt    → GitHub Copilot
 sillye    → Claude（claude.ai）
 
-sillyxs / sillyts / sillyes   → 同じプロバイダー、権限確認をスキップ（--dangerously-skip-permissions）
+sillyxs / sillyes   → 同じプロバイダー、権限確認をスキップ（--dangerously-skip-permissions）
 ```
 
 ### クイックスタート
 
+**macOS / Linux**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
 silly doctor
-sillyt    # または sillyx / sillye
+sillyx    # または sillye
+```
+
+**Windows PowerShell**
+
+```powershell
+irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex
+silly doctor
+sillyx    # または sillye
 ```
 
 ### Claude Code との違い
 
 | | Claude Code | Silly Code |
 |---|---|---|
-| プロバイダー | Claude のみ | Claude + Codex + Copilot |
+| プロバイダー | Claude のみ | Claude + Codex |
 | テレメトリ | 10+ エンドポイント | すべて遮断 |
 | 機能制限 | ティア別制限 | Max ティア + `/loop` 解放 |
 | アイデンティティ漏洩 | ブランドが焼き込み | LLM プロンプトから除去 |
@@ -146,7 +175,7 @@ sillyt    # または sillyx / sillye
 
 ```bash
 silly status          # プロバイダー認証状態
-silly login <prov>    # ログイン（codex/copilot/claude）
+silly login <prov>    # ログイン（codex/claude）
 silly logout <prov>   # トークン削除
 silly doctor          # 完全診断
 silly uninstall       # 完全アンインストール
@@ -154,9 +183,10 @@ silly uninstall       # 完全アンインストール
 
 ### 動作要件
 
-- macOS または Linux（Windows は WSL 経由）
-- 少なくとも1つのサブスクリプション：ChatGPT Pro、GitHub Copilot、または Claude Pro/Max
-- [Bun](https://bun.sh) >= 1.3.11 と [ripgrep](https://github.com/BurntSushi/ripgrep)（自動インストール）
+- macOS、Linux、または Windows PowerShell 7+
+- 少なくとも1つのサブスクリプション：ChatGPT Pro、または Claude Pro/Max
+- [Node.js](https://nodejs.org/) >= 20 と Git
+- [ripgrep](https://github.com/BurntSushi/ripgrep) は対応プラットフォームで未導入時に自動インストール
 
 ---
 
@@ -168,25 +198,34 @@ Assistant IA multi-fournisseur construit sur la dernière version de Claude Code
 
 ```
 sillyx    → OpenAI Codex (ChatGPT Pro)
-sillyt    → GitHub Copilot
 sillye    → Claude (claude.ai)
 
-sillyxs / sillyts / sillyes   → mêmes fournisseurs, --dangerously-skip-permissions
+sillyxs / sillyes   → mêmes fournisseurs, --dangerously-skip-permissions
 ```
 
 ### Démarrage rapide
 
+**macOS / Linux**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
 silly doctor
-sillyt    # ou sillyx / sillye
+sillyx    # ou sillye
+```
+
+**Windows PowerShell**
+
+```powershell
+irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex
+silly doctor
+sillyx    # ou sillye
 ```
 
 ### Différences avec Claude Code
 
 | | Claude Code | Silly Code |
 |---|---|---|
-| Fournisseurs | Claude uniquement | Claude + Codex + Copilot |
+| Fournisseurs | Claude uniquement | Claude + Codex |
 | Télémétrie | 10+ endpoints | Tous bloqués |
 | Verrouillage | Par niveau | Max + `/loop` déverrouillés |
 | Fuites d'identité | Marque incrustée | Retirées des prompts LLM |
@@ -196,7 +235,7 @@ sillyt    # ou sillyx / sillye
 
 ```bash
 silly status          # État d'authentification des fournisseurs
-silly login <prov>    # Connexion (codex/copilot/claude)
+silly login <prov>    # Connexion (codex/claude)
 silly logout <prov>   # Supprimer les jetons
 silly doctor          # Diagnostic complet
 silly uninstall       # Désinstallation complète
@@ -204,9 +243,10 @@ silly uninstall       # Désinstallation complète
 
 ### Prérequis
 
-- macOS ou Linux (Windows via WSL)
-- Au moins un abonnement : ChatGPT Pro, GitHub Copilot ou Claude Pro/Max
-- [Bun](https://bun.sh) >= 1.3.11 et [ripgrep](https://github.com/BurntSushi/ripgrep) (auto-installés)
+- macOS, Linux ou Windows PowerShell 7+
+- Au moins un abonnement : ChatGPT Pro ou Claude Pro/Max
+- [Node.js](https://nodejs.org/) >= 20 et Git
+- [ripgrep](https://github.com/BurntSushi/ripgrep) est auto-installé s'il manque sur les plateformes prises en charge
 
 ---
 

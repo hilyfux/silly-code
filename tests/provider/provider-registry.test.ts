@@ -7,13 +7,13 @@ import {
 
 describe('provider registry', () => {
   it('returns canonical supported provider ids', () => {
-    expect(getSupportedProviderIds()).toEqual(['claude', 'codex', 'copilot'])
+    expect(getSupportedProviderIds()).toEqual(['claude', 'codex'])
   })
 
-  it('returns expected copilot descriptor', () => {
-    expect(getProviderDescriptor('copilot')).toMatchObject({
-      id: 'copilot',
-      name: 'GitHub Copilot',
+  it('returns expected codex descriptor', () => {
+    expect(getProviderDescriptor('codex')).toMatchObject({
+      id: 'codex',
+      name: 'OpenAI Codex',
     })
   })
 })

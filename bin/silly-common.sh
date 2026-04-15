@@ -111,8 +111,6 @@ _silly_check_update 2>/dev/null || true
 #       can't share modules) and login.mjs. Keep them in sync manually.
 CODEX_AUTH="codex-auth.json"
 CODEX_OAUTH="codex-oauth.json"
-COPILOT_AUTH="copilot-auth.json"
-COPILOT_OAUTH="copilot-oauth.json"
 CLAUDE_OAUTH="claude-oauth.json"
 CLAUDE_CRED="$HOME/.claude/.credentials.json"
 

@@ -5,7 +5,7 @@
 ## When Changing
 - _base.cjs protocol functions → update base.test.cjs
 - Provider schema/validation → update schema.test.cjs
-- openai.cjs / copilot.cjs adapter glue → update providers.test.cjs (+ fixtures if new shape)
+- openai.cjs adapter glue → update providers.test.cjs (+ fixtures if new shape)
 ## Conventions
 - base.test.cjs — _base.cjs unit tests (mapModel, msgToOai, msgsToResponsesInput, SSE streams)
 - schema.test.cjs — provider schema validation + engine load

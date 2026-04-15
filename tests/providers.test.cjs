@@ -1,5 +1,5 @@
 /**
- * providers.test.cjs — adapter-level tests for openai + copilot.
+ * providers.test.cjs — adapter-level tests for openai.
  *
  * Each provider adapter is invoked inside a sandbox where _base.cjs
  * helpers are hoisted and `fetch` / `auth` are stubbed. We assert on
@@ -19,7 +19,6 @@ const path = require('path');
 
 const base = require('../pipeline/patches/providers/_base.cjs');
 const openai = require('../pipeline/patches/providers/openai.cjs');
-const copilot = require('../pipeline/patches/providers/copilot.cjs');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 
@@ -97,7 +96,7 @@ function loadFixture(name) {
   };
   const pass = (label) => { console.log(`  ✓ ${label}`); passed++; };
 
-  // Scenario 1 — simple text, Chat Completions path (copilot + openai apikey)
+  // Scenario 1 — simple text, Chat Completions path (openai apikey)
   {
     const fx = loadFixture('simple-text-nonstream');
     const oaiPlan = [{
@@ -110,7 +109,6 @@ function loadFixture(name) {
     }];
 
     for (const [label, provider, authStub] of [
-      ['copilot / chat-completions', copilot, { headers: { 'Authorization': 'Bearer fake', 'Copilot-Integration-Id': 'vscode-chat' }, kind: 'oauth' }],
       ['openai / chat-completions (apikey)', openai, { headers: { 'Authorization': 'Bearer sk-fake' }, kind: 'apikey' }],
     ]) {
       try {
@@ -123,10 +121,6 @@ function loadFixture(name) {
         assert.strictEqual(calls.length, 1, `expected 1 upstream call, got ${calls.length}`);
         assert.ok(calls[0].url.includes('chat/completions'), 'wrong upstream URL: ' + calls[0].url);
 
-        // copilot-specific header invariants
-        if (provider === copilot) {
-          assert.ok(calls[0].url.includes('githubcopilot.com'), 'copilot should hit api.githubcopilot.com');
-        }
         if (provider === openai) {
           assert.ok(calls[0].url.includes('api.openai.com'), 'openai apikey path should hit api.openai.com');
         }
@@ -181,47 +175,6 @@ function loadFixture(name) {
     } catch (e) { fail('openai oauth / responses-api — streaming text', e); }
   }
 
-  // Scenario 3 — tool_use + tool_result round-trip (Chat Completions, copilot)
-  {
-    const fx = loadFixture('with-tool-use');
-    const plan = [{
-      urlPart: 'chat/completions',
-      body: {
-        id: 'chatcmpl-2',
-        choices: [{
-          message: {
-            role: 'assistant',
-            content: null,
-            tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'bash', arguments: '{"command":"ls"}' } }],
-          },
-          finish_reason: 'tool_calls',
-        }],
-        usage: { prompt_tokens: 20, completion_tokens: 10 },
-      },
-    }];
-    try {
-      const fetch = makeMockFetch(plan);
-      const adapter = buildAdapter(copilot, { headers: { 'Authorization': 'Bearer t' }, kind: 'oauth' })(fetch);
-      const resp = await adapter('https://api.anthropic.com/v1/messages', {
-        body: JSON.stringify(fx),
-      });
-      const [call] = fetch._calls();
-      assert.ok(Array.isArray(call.body.tools), 'should forward tools[]');
-      assert.strictEqual(call.body.tool_choice, 'auto');
-
-      // Verify the tool_result from the fixture round-tripped into an OAI `role:"tool"` message
-      const toolResultMsgs = call.body.messages.filter(m => m.role === 'tool');
-      assert.ok(toolResultMsgs.length >= 1, 'tool_result should become role:tool msg');
-
-      const respJson = JSON.parse(await resp.text());
-      assert.strictEqual(respJson.stop_reason, 'tool_use');
-      assert.strictEqual(respJson.content[0].type, 'tool_use');
-      assert.strictEqual(respJson.content[0].name, 'bash');
-      assert.deepStrictEqual(respJson.content[0].input, { command: 'ls' });
-      pass('copilot — tool_use round-trip');
-    } catch (e) { fail('copilot — tool_use round-trip', e); }
-  }
-
   // Scenario 4 — thinking + image blocks must not leak (Responses API)
   //   Regression guard for c862cdb — signature bleed / base64 image stringify.
   {
@@ -270,7 +223,6 @@ function loadFixture(name) {
       },
     }];
     for (const [label, provider, authStub] of [
-      ['copilot — identity cleaned', copilot, { headers: {}, kind: 'oauth' }],
       ['openai apikey — identity cleaned', openai, { headers: {}, kind: 'apikey' }],
     ]) {
       try {

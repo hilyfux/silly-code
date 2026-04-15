@@ -11,9 +11,7 @@ const path = require('path');
 // ── Load providers ──
 const PROVIDERS_DIR = path.join(__dirname, 'providers');
 const base = require(path.join(PROVIDERS_DIR, '_base.cjs'));
-const providerFiles = fs.readdirSync(PROVIDERS_DIR)
-  .filter(f => f.endsWith('.cjs') && f !== '_base.cjs')
-  .sort();
+const providerFiles = ['claude.cjs', 'openai.cjs'];
 const providers = providerFiles.map(f => {
   const p = require(path.join(PROVIDERS_DIR, f));
   // Normalize contextWindow shorthand

@@ -20,8 +20,7 @@ describe('provider contract', () => {
     const ids = getSupportedProviderIds()
     expect(ids).toContain('claude')
     expect(ids).toContain('codex')
-    expect(ids).toContain('copilot')
-    expect(ids.length).toBe(3)
+    expect(ids.length).toBe(2)
   })
 
   it('PROVIDER_REGISTRY is consistent with accessor functions', () => {

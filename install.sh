@@ -128,14 +128,14 @@ fi
 
 # ── Install commands ─────────────────────────────────────────
 mkdir -p "$BIN_DIR"
-for cmd in silly sillyt sillyx sillye sillyts sillyxs sillyes; do
+for cmd in silly sillyx sillye sillyxs sillyes; do
   cat > "$BIN_DIR/$cmd" << WRAPPER
 #!/bin/bash
 exec "$INSTALL_DIR/bin/$cmd" "\$@"
 WRAPPER
   chmod +x "$BIN_DIR/$cmd"
 done
-ok "Commands: $BIN_DIR/{silly,sillyt,sillyx,sillye,sillyts,sillyxs,sillyes}"
+ok "Commands: $BIN_DIR/{silly,sillyx,sillye,sillyxs,sillyes}"
 
 # ── PATH check ───────────────────────────────────────────────
 if ! echo "$PATH" | tr ':' '\n' | grep -q "^$BIN_DIR$"; then
@@ -179,8 +179,7 @@ fi
 
 if [ "$CAN_INTERACT" = true ]; then
   SELECTED=0
-  OPTIONS=("GitHub Copilot     (GitHub Copilot subscription)"
-           "OpenAI Codex       (ChatGPT Pro subscription)"
+  OPTIONS=("OpenAI Codex       (ChatGPT Pro subscription)"
            "Claude             (Claude Pro/Max subscription)"
            "Skip for now")
   NUM_OPTIONS=${#OPTIONS[@]}
@@ -233,9 +232,8 @@ if [ "$CAN_INTERACT" = true ]; then
 
   echo ""
   case "$SELECTED" in
-    0) "$INSTALL_DIR/bin/silly" login copilot ;;
-    1) "$INSTALL_DIR/bin/silly" login codex ;;
-    2) "$INSTALL_DIR/bin/silly" login claude ;;
+    0) "$INSTALL_DIR/bin/silly" login codex ;;
+    1) "$INSTALL_DIR/bin/silly" login claude ;;
     *) info "Skipped. Run 'silly login <provider>' anytime." ;;
   esac
   echo ""
@@ -245,10 +243,9 @@ else
 fi
 
 echo -e "  ${B}Launch:${N}"
-echo -e "    ${G}sillyt${N}                # GitHub Copilot (GPT)"
 echo -e "    ${G}sillyx${N}                # OpenAI Codex (GPT)"
 echo -e "    ${G}sillye${N}                # Claude (Anthropic)"
-echo -e "    ${G}sillyts/xs/es${N}         # same providers, --dangerously-skip-permissions"
+echo -e "    ${G}sillyxs/es${N}            # same providers, --dangerously-skip-permissions"
 echo ""
 # ── Save dep check state ────────────────────────────────────
 DATA_DIR="${SILLY_CODE_DATA:-$HOME/.silly-code}"

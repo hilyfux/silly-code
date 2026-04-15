@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { AUTH_FILES, CLAUDE_MACOS_KEYCHAIN, authState } from './silly-auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,8 +36,8 @@ async function runOnWindows() {
   const patched = path.join(rootDir, 'pipeline', 'build', 'cli-patched.js');
 
   const providers = {
-    sillyx: { env: 'CLAUDE_CODE_USE_OPENAI', label: 'OpenAI Codex', authFiles: ['codex-auth.json', 'codex-oauth.json'] },
-    sillye: { env: null, label: 'Claude', authFiles: ['claude-oauth.json'], extraAuth: [path.join(os.homedir(), '.claude', '.credentials.json')] },
+    sillyx: { env: 'CLAUDE_CODE_USE_OPENAI', label: 'OpenAI Codex', authKey: 'codex' },
+    sillye: { env: null, label: 'Claude', authKey: 'claude' },
   };
 
   if (providers[command]) {
@@ -61,24 +62,19 @@ function ensurePatched(patched) {
   }
 }
 
-function isLoggedIn(info, dataDir) {
-  for (const f of info.authFiles || []) {
-    if (fs.existsSync(path.join(dataDir, f))) return true;
-  }
-  for (const f of info.extraAuth || []) {
-    if (fs.existsSync(f)) return true;
-  }
-  return false;
+function providerLoggedIn(authKey, dataDir) {
+  const { hasCodex, hasClaude } = authState(dataDir);
+  return authKey === 'codex' ? hasCodex : authKey === 'claude' ? hasClaude : false;
 }
 
 function launchProvider(name, info, dataDir, patched, userArgs) {
   if (info.env) process.env[info.env] = '1';
-  if (!isLoggedIn(info, dataDir) && info.authFiles && info.authFiles.length) {
+  if (!providerLoggedIn(info.authKey, dataDir)) {
     if (name === 'sillyx') {
       console.log(`\n  ${name} — ${info.label}\n`);
       console.log('[silly] Not logged in. Starting login now...\n');
       const r = spawnSync(process.execPath, [path.join(rootDir, 'pipeline', 'login.mjs'), 'codex'], { stdio: 'inherit' });
-      if (r.status !== 0 || !isLoggedIn(info, dataDir)) {
+      if (r.status !== 0 || !providerLoggedIn(info.authKey, dataDir)) {
         console.log('\n[silly] Login was cancelled. Run the command again when ready.');
         process.exit(1);
       }
@@ -124,14 +120,17 @@ async function handleSilly(args, dataDir, patched) {
   }
 }
 
+function renderAuthLines(dataDir) {
+  const { hasCodex, hasClaude } = authState(dataDir);
+  console.log(`  ${hasCodex ? '✓' : '✗'} Codex   (sillyx): ${hasCodex ? 'logged in' : 'not logged in'}`);
+  console.log(`  ${hasClaude ? '✓' : '✗'} Claude  (sillye): ${hasClaude ? 'logged in' : 'not logged in'}`);
+}
+
 function cmdStatus(dataDir, showHints) {
-  const hasCodex = fs.existsSync(path.join(dataDir, 'codex-auth.json')) || fs.existsSync(path.join(dataDir, 'codex-oauth.json'));
-  const hasClaude = fs.existsSync(path.join(dataDir, 'claude-oauth.json')) || fs.existsSync(path.join(os.homedir(), '.claude', '.credentials.json'));
   console.log('');
   console.log('  silly-code — Codex + Claude');
   console.log('');
-  console.log(`  ${hasCodex ? '✓' : '✗'} Codex   (sillyx): ${hasCodex ? 'logged in' : 'not logged in'}`);
-  console.log(`  ${hasClaude ? '✓' : '✗'} Claude  (sillye): ${hasClaude ? 'logged in' : 'not logged in'}`);
+  renderAuthLines(dataDir);
   console.log('');
   if (showHints) {
     console.log('  Get started:');
@@ -160,17 +159,15 @@ function cmdModels() {
 }
 
 function cmdDoctor(dataDir, patched) {
+  const patchedOk = fs.existsSync(patched);
   console.log('');
   console.log('  silly-code doctor');
   console.log('');
   console.log(`  ✓ Node: ${process.version}`);
   console.log(`  ✓ Platform: ${process.platform} ${process.arch}`);
-  console.log(`  ${fs.existsSync(patched) ? '✓' : '✗'} Patched binary: ${fs.existsSync(patched) ? 'found' : 'missing (run: silly login claude OR sillyx)'}`);
-  const hasCodex = fs.existsSync(path.join(dataDir, 'codex-auth.json')) || fs.existsSync(path.join(dataDir, 'codex-oauth.json'));
-  const hasClaude = fs.existsSync(path.join(dataDir, 'claude-oauth.json')) || fs.existsSync(path.join(os.homedir(), '.claude', '.credentials.json'));
+  console.log(`  ${patchedOk ? '✓' : '✗'} Patched binary: ${patchedOk ? 'found' : 'missing (run: silly login claude OR sillyx)'}`);
   console.log('');
-  console.log(`  ${hasCodex ? '✓' : '✗'} Codex   (sillyx): ${hasCodex ? 'logged in' : 'not logged in'}`);
-  console.log(`  ${hasClaude ? '✓' : '✗'} Claude  (sillye): ${hasClaude ? 'logged in' : 'not logged in'}`);
+  renderAuthLines(dataDir);
   console.log('');
   console.log('  Mode: patched binary (upstream + silly-code patches)');
   console.log('');
@@ -195,27 +192,31 @@ function cmdLogin(provider, patched) {
 
 function cmdLogout(provider, dataDir) {
   const rm = (p) => { if (fs.existsSync(p)) fs.unlinkSync(p); };
-  if (provider === 'codex') {
-    rm(path.join(dataDir, 'codex-auth.json'));
-    rm(path.join(dataDir, 'codex-oauth.json'));
-    console.log('[silly] Codex tokens removed');
-    return;
+  const files = AUTH_FILES[provider];
+  if (!files) {
+    console.error('Usage: silly logout <codex|claude>');
+    process.exit(1);
   }
+  for (const f of files) rm(path.join(dataDir, f));
   if (provider === 'claude') {
-    rm(path.join(dataDir, 'claude-oauth.json'));
     console.log('[silly] Claude tokens removed (macOS keychain entries and .claude/.credentials.json may need manual cleanup)');
-    return;
+  } else {
+    console.log('[silly] Codex tokens removed');
   }
-  console.error('Usage: silly logout <codex|claude>');
-  process.exit(1);
 }
 
 function cmdUpdate() {
-  const r = spawnSync('git', ['-C', rootDir, 'pull', '--ff-only', 'origin', 'main'], { stdio: 'inherit' });
+  const r = spawnSync('git', ['-C', rootDir, 'pull', '--ff-only', 'origin', 'main'], { stdio: ['inherit', 'pipe', 'inherit'] });
   if (r.status !== 0) {
     console.error('[silly] git pull failed. Re-run the installer to recover:');
     console.error('  irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex');
     process.exit(r.status ?? 1);
+  }
+  const out = (r.stdout?.toString() || '').trim();
+  if (out) process.stdout.write(out + '\n');
+  if (out.includes('Already up to date') || out.includes('Already up-to-date')) {
+    console.log('[silly] Already up to date — skipping patch rebuild.');
+    return;
   }
   const patchR = spawnSync(process.execPath, [path.join(rootDir, 'pipeline', 'patch.cjs')], { stdio: 'inherit', cwd: rootDir });
   if (patchR.status !== 0) {

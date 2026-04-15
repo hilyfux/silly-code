@@ -72,11 +72,9 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
     '/api/event_logging/batch_disabled'
   )
 
-  // Patch 41-44: Silence upstream noise banners that are irrelevant or
-  // actively misleading for silly-code users (proxies / third-party tokens /
-  // IDE plugin marketing). Each patch force-returns false from isActive for a
-  // specific banner ID while keeping the original body under a dead field so
-  // symbol renames never silently drop too much.
+  // Patch 41-44: Force isActive -> false for banners irrelevant to silly-code
+  // (external tokens, API-key / dual-auth conflicts, IDE upsell). Original
+  // body is preserved as _origIsActive so future upstream diffs stay readable.
 
   patch('41-suppress-auth-banner-external',
     '{id:"claude-ai-external-token",type:"warning",isActive:()=>',

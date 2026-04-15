@@ -134,16 +134,21 @@ async function loginCodex() {
   log(C.dim, `  等待浏览器授权回调...\n`)
 
   const { spawn } = await import('node:child_process')
+  let browserOpened = false
   try {
-    if (process.platform === 'win32') {
-      spawn('rundll32', ['url.dll,FileProtocolHandler', authUrl], { detached: true, stdio: 'ignore' }).unref()
-    } else if (process.platform === 'darwin') {
-      spawn('open', [authUrl], { detached: true, stdio: 'ignore' }).unref()
-    } else {
-      spawn('xdg-open', [authUrl], { detached: true, stdio: 'ignore' }).unref()
-    }
+    const [cmd, args] = process.platform === 'win32'
+      ? ['rundll32', ['url.dll,FileProtocolHandler', authUrl]]
+      : process.platform === 'darwin'
+        ? ['open', [authUrl]]
+        : ['xdg-open', [authUrl]]
+    spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref()
+    browserOpened = true
   } catch (_) {
-    // silent: user can still copy URL manually
+    // fall through to the manual-URL message below
+  }
+  if (!browserOpened) {
+    log(C.yellow, '  无法自动打开浏览器，请手动访问以下 URL:')
+    log(C.bold, `  ${authUrl}`)
   }
 
   // Wait for callback

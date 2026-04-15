@@ -277,26 +277,124 @@ module.exports = function applyBranding({ patch, patchAll }) {
     "Review Silly Code's changes"
   )
 
-  // Patch 12a-e: Cuter mascot — swap bulky L-corners (▛▜/▟/▙) at head top
-  // for tiny dot-pixels (▘▝▖▗) so the creature reads as 呆萌 baby-blob
-  // instead of a blocky robot. Two rows × 4 poses (default/look-left/
-  // look-right/arms-up). ▛███▜ appears in both default+arms-up poses.
+  // Patches 12a-f: Silly-blob face — swap blocky robot eyes for expressive
+  // 5-char emoticon faces. The pose axis (default / look-L / look-R / arms-up)
+  // already carries direction via arm glyphs, so arms-up reuses the default
+  // face for simplicity. Both NuY (standard) and EuY (Apple Terminal) get it.
   patchAll('12a-mascot-eyes-default',
     'r1E:"▛███▜"',
-    'r1E:"▘███▝"'
+    'r1E:"(•_•)"'
   )
   patch('12b-mascot-eyes-look-left',
     'r1E:"▟███▟"',
-    'r1E:"▘███▘"'
+    'r1E:"(<_<)"'
   )
   patch('12c-mascot-eyes-look-right',
     'r1E:"▙███▙"',
-    'r1E:"▝███▝"'
+    'r1E:"(>_>)"'
   )
-
-  // Patch 12d: Apple Terminal variant — eyes up-outward for wide-eyed cute
   patchAll('12d-mascot-apple-default',
     '" ▗   ▖ "',
-    '" ▘   ▝ "'
+    '" (•_•) "'
+  )
+  patch('12e-mascot-apple-look-left',
+    '" ▘   ▘ "',
+    '" (<_<) "'
+  )
+  patch('12f-mascot-apple-look-right',
+    '" ▝   ▝ "',
+    '" (>_>) "'
+  )
+
+  // Patches 13a-l: Multi-color mascot — saturated rainbow plushie
+  // Aesthetic: 90s plush toy — bold pastels, intentional L/R asymmetry
+  // (different arm/foot colors like a hand-sewn creature), deep indigo belly
+  // for self-glow depth. Navy eyes on soft pink face for kawaii expression.
+  // 14 distinct color uses across 1 creature, harmonized via rainbow order
+  // (pink-magenta → orange-gold → emerald → sky → violet).
+  const PINK_FACE = '#fbcfe8'  // face bg (kept pastel so navy eyes contrast)
+  const NAVY = '#1e1b4b'       // eye text
+  const ROSE = '#f472b6'       // r1L (left head-arm)
+  const ORANGE = '#fb923c'     // r1R (right head-arm)
+  const EMERALD = '#10b981'    // r2L (left leg), body-block #4
+  const VIOLET = '#8b5cf6'     // r2R (right leg), right feet
+  const INDIGO_BG = '#312e81'  // body-bar background (deep belly)
+  const B1 = '#ec4899'         // body block 1 — magenta
+  const B2 = '#f97316'         // body block 2 — orange
+  const B3 = '#eab308'         // body block 3 — gold
+  const B4 = '#10b981'         // body block 4 — emerald (= EMERALD)
+  const B5 = '#0ea5e9'         // body block 5 — sky
+  const FOOT_L = '#ec4899'     // left feet (matches block 1)
+
+  // NuY (standard render, 7 spans)
+  patch('13a-mascot-r1L',
+    'createElement(T,{color:"clawd_body"},A.r1L)',
+    `createElement(T,{color:"${ROSE}"},A.r1L)`
+  )
+  patch('13b-mascot-r1E-face',
+    'createElement(T,{color:"clawd_body",backgroundColor:"clawd_background"},A.r1E)',
+    `createElement(T,{color:"${NAVY}",backgroundColor:"${PINK_FACE}"},A.r1E)`
+  )
+  patch('13c-mascot-r1R',
+    'createElement(T,{color:"clawd_body"},A.r1R)',
+    `createElement(T,{color:"${ORANGE}"},A.r1R)`
+  )
+  patch('13d-mascot-r2L',
+    'createElement(T,{color:"clawd_body"},A.r2L)',
+    `createElement(T,{color:"${EMERALD}"},A.r2L)`
+  )
+  // Body bar: split "█████" into 5 individually-colored blocks on indigo.
+  patch('13e-mascot-body-bar',
+    'createElement(T,{color:"clawd_body",backgroundColor:"clawd_background"},"█████")',
+    `createElement(T,{backgroundColor:"${INDIGO_BG}"},` +
+      `lz.createElement(T,{color:"${B1}"},"█"),` +
+      `lz.createElement(T,{color:"${B2}"},"█"),` +
+      `lz.createElement(T,{color:"${B3}"},"█"),` +
+      `lz.createElement(T,{color:"${B4}"},"█"),` +
+      `lz.createElement(T,{color:"${B5}"},"█")` +
+    `)`
+  )
+  patch('13f-mascot-r2R',
+    'createElement(T,{color:"clawd_body"},A.r2R)',
+    `createElement(T,{color:"${VIOLET}"},A.r2R)`
+  )
+  // Feet: split "▘▘ ▝▝" so L-pair and R-pair render in different colors
+  // (pink ▘▘ + violet ▝▝) — asymmetric hand-sewn plushie feel.
+  patch('13g-mascot-feet',
+    'createElement(T,{color:"clawd_body"},"  ","▘▘ ▝▝","  ")',
+    `createElement(T,null,` +
+      `lz.createElement(T,null,"  "),` +
+      `lz.createElement(T,{color:"${FOOT_L}"},"▘▘"),` +
+      `lz.createElement(T,null," "),` +
+      `lz.createElement(T,{color:"${VIOLET}"},"▝▝"),` +
+      `lz.createElement(T,null,"  ")` +
+    `)`
+  )
+
+  // yuY (Apple Terminal variant, 5 spans — anchored via Symbol.for prefix)
+  patch('13h-mascot-apple-left',
+    'Symbol.for("react.memo_cache_sentinel"))z=lz.createElement(T,{color:"clawd_body"},"▗")',
+    `Symbol.for("react.memo_cache_sentinel"))z=lz.createElement(T,{color:"${ROSE}"},"▗")`
+  )
+  patch('13i-mascot-apple-face',
+    '!==Y)A=lz.createElement(T,{color:"clawd_background",backgroundColor:"clawd_body"},Y)',
+    `!==Y)A=lz.createElement(T,{color:"${NAVY}",backgroundColor:"${PINK_FACE}"},Y)`
+  )
+  patch('13j-mascot-apple-right',
+    'Symbol.for("react.memo_cache_sentinel"))O=lz.createElement(T,{color:"clawd_body"},"▖")',
+    `Symbol.for("react.memo_cache_sentinel"))O=lz.createElement(T,{color:"${ORANGE}"},"▖")`
+  )
+  patch('13k-mascot-apple-body',
+    'lz.createElement(T,{backgroundColor:"clawd_body"}," ".repeat(7))',
+    `lz.createElement(T,{backgroundColor:"${INDIGO_BG}"}," ".repeat(7))`
+  )
+  // Apple feet: same asymmetric split as NuY.
+  patch('13l-mascot-apple-feet',
+    'lz.createElement(T,{color:"clawd_body"},"▘▘ ▝▝")',
+    `lz.createElement(T,null,` +
+      `lz.createElement(T,{color:"${FOOT_L}"},"▘▘"),` +
+      `lz.createElement(T,null," "),` +
+      `lz.createElement(T,{color:"${VIOLET}"},"▝▝")` +
+    `)`
   )
 }

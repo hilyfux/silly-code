@@ -36,4 +36,14 @@ module.exports = function applyEquality({ patch }) {
     'if(Q04&&q.name===Q04){if((OR8(),u7(AR8)).isLoopDynamicEnabled())return!1}return q.shouldDefer===!0}',
     'if(Q04&&q.name===Q04){if((OR8(),u7(AR8)).isLoopDynamicEnabled())return!1}if(typeof Uq==="function"&&Uq()!=="firstParty")return!1;return q.shouldDefer===!0}'
   )
+
+  // Patch 25: Force Sonnet as the default model for firstParty Claude.
+  // Upstream Vv() returns Opus when tier == "max"/"team" (our patch 20 forces
+  // "max" to unlock tier-gated features), which would otherwise auto-select
+  // Opus 4.6 by default and burn ~5× Sonnet's token budget. Users who want
+  // Opus can still flip with /model opus; the tier unlocks remain intact.
+  patch('25-sonnet-default',
+    'function Vv(){if(dh())return ZE()+(oJ()?"[1m]":"");if(U76())return ZE()+(oJ()?"[1m]":"");return Of()}',
+    'function Vv(){return Of()+(oJ()?"[1m]":"")}'
+  )
 }

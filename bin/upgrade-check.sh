@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Fires from launchd/cron; delegates to the upstream-upgrade skill via `claude -p`.
+# Fires from launchd/cron; delegates to the upstream-upgrade skill via `sillyx -p`
+# (falls back to `claude -p` if sillyx is not installed) so scheduled upgrades
+# consume the Codex quota instead of the user's Claude subscription.
 
 set -euo pipefail
 
@@ -84,16 +86,20 @@ no Claude agent needed. All 96 patches + unit tests passed before commit."
       exit 0
       ;;
     2)
-      # auto-fix incomplete — ask the agent to take over
-      if ! command -v claude >/dev/null 2>&1; then
-        echo "ci-upgrade exit 2 (manual attention needed) but no 'claude' binary — stopping"
+      # auto-fix incomplete — ask the agent to take over via sillyx (Codex)
+      # so the scheduled upgrade drains the ChatGPT Pro quota instead of the
+      # user's Claude subscription.
+      AGENT_CMD="$(command -v sillyx 2>/dev/null || true)"
+      [ -z "$AGENT_CMD" ] && AGENT_CMD="$(command -v claude 2>/dev/null || true)"
+      if [ -z "$AGENT_CMD" ]; then
+        echo "ci-upgrade exit 2 (manual attention needed) but no 'sillyx' or 'claude' binary — stopping"
         exit 1
       fi
-      echo "ci-upgrade couldn't fully resolve — invoking claude agent..."
+      echo "ci-upgrade couldn't fully resolve — invoking $(basename "$AGENT_CMD") agent..."
       # Reset any partial state from ci-upgrade so agent starts clean
       git reset --hard HEAD --quiet
       PROMPT="Upstream @anthropic-ai/claude-code released $LATEST (current: $CURRENT). ci-upgrade.cjs just tried and exited 2 (partial failure). Invoke the upstream-upgrade skill to handle this: read the new binary, diagnose which patches still fail, apply manual renames, test, commit, push to main. Non-interactive: no brainstorming, no AskUserQuestion. If you can't confidently resolve, stop and open a GitHub issue via gh CLI. Working dir: $ROOT_DIR."
-      exec claude -p "$PROMPT" --dangerously-skip-permissions
+      exec "$AGENT_CMD" -p "$PROMPT" --dangerously-skip-permissions
       ;;
     *)
       echo "ci-upgrade exited $CI_EXIT (unexpected) — will retry next slot"

@@ -125,9 +125,34 @@ function checkSerialization(code, label) {
   }
 }
 
+// ── Silent-coupling guard (added 2026-04-15 after gL → aL silently broke 2.1.109)
+// CONSTRUCTOR is the only identifier we inject that isn't echoed in any `find`
+// MATCH string — every other ref (Uq/LW/b8/k_) is transitively gated via
+// MATCH.RESOLVE / FAMILY / DISPLAY. If CONSTRUCTOR renames without our
+// noticing, the injected `new X(...)` returns something without .messages
+// and the first API call throws "Cannot read properties of undefined".
+// This structural check verifies CONSTRUCTOR points to an Anthropic SDK
+// client class — one that assigns `.messages = new ...` in its body.
+function verifyConstructor(upstreamSrc) {
+  const ctor = MATCH.CONSTRUCTOR;
+  const structPat = new RegExp(
+    `class\\s+${ctor.replace(/[$]/g, '\\$')}\\s+extends[^{]*\\{[^}]*this\\.messages\\s*=\\s*new`,
+    's'
+  );
+  if (!structPat.test(upstreamSrc)) {
+    throw new Error(
+      `silent-coupling guard: MATCH.CONSTRUCTOR='${ctor}' is not an SDK ` +
+      `client class with .messages field in upstream. Injection will ` +
+      `succeed silently but runtime will break on first message send. ` +
+      `Find the new class name via: grep -n 'this.messages=new' upstream/package/cli.js`
+    );
+  }
+}
+
 // ── Patch generation ──
 module.exports = function applyProviders({ patch }) {
   validate(providers);
+  verifyConstructor(fs.readFileSync(path.join(__dirname, '..', 'upstream/package/cli.js'), 'utf8'));
 
   const sorted = providers
     .filter(p => p.priority != null)

@@ -115,6 +115,8 @@ async function handleSilly(args, dataDir, patched) {
       return cmdHelp();
     case 'uninstall':
       return cmdUninstall();
+    case 'update':
+      return cmdUpdate();
     default:
       console.error(`Unknown subcommand: ${sub}`);
       console.error("Run 'silly help' for usage.");
@@ -208,6 +210,21 @@ function cmdLogout(provider, dataDir) {
   process.exit(1);
 }
 
+function cmdUpdate() {
+  const r = spawnSync('git', ['-C', rootDir, 'pull', '--ff-only', 'origin', 'main'], { stdio: 'inherit' });
+  if (r.status !== 0) {
+    console.error('[silly] git pull failed. Re-run the installer to recover:');
+    console.error('  irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex');
+    process.exit(r.status ?? 1);
+  }
+  const patchR = spawnSync(process.execPath, [path.join(rootDir, 'pipeline', 'patch.cjs')], { stdio: 'inherit', cwd: rootDir });
+  if (patchR.status !== 0) {
+    console.error('[silly] Patch rebuild failed. Re-run the installer or file an issue.');
+    process.exit(patchR.status ?? 1);
+  }
+  console.log('[silly] Update complete.');
+}
+
 function cmdUninstall() {
   const ps1 = path.join(rootDir, 'uninstall.ps1');
   if (!fs.existsSync(ps1)) {
@@ -231,6 +248,8 @@ function cmdHelp() {
   console.log('    silly logout <prov>   Remove stored tokens');
   console.log('    silly models          List available models');
   console.log('    silly doctor          Check prerequisites');
+  console.log('    silly update          Pull latest and rebuild patched binary');
+  console.log('    silly uninstall       Remove silly-code completely');
   console.log('    silly help            Show this help');
   console.log('');
   console.log('  Launch:');

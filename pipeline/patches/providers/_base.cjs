@@ -349,7 +349,7 @@ function tameSkillPrompts(text) {
  * don't get confused about who they are.
  *
  * @param {string} text - System prompt or message text
- * @param {string} providerName - e.g. "OpenAI GPT", "GitHub Copilot"
+ * @param {string} providerName - e.g. "OpenAI GPT", "OpenAI Codex"
  * @returns {string}
  */
 function cleanIdentityForProvider(text, providerName) {
@@ -401,7 +401,7 @@ function findOpenTodos(messages) {
 
 /**
  * Inject a continuation-discipline block into the system prompt so third-party
- * models (Codex / Copilot) don't stop mid-task with narration-only responses.
+ * models (Codex) don't stop mid-task with narration-only responses.
  *
  * Observed pattern: GPT writes "我下一步继续 X" or "I'll do Y next" then emits
  * finish_reason=stop without calling the next tool. Agent loop respects the

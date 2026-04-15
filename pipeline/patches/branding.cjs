@@ -283,7 +283,7 @@ module.exports = function applyBranding({ patch, patchAll }) {
   // face for simplicity. Both NuY (standard) and EuY (Apple Terminal) get it.
   patchAll('12a-mascot-eyes-default',
     'r1E:"▛███▜"',
-    'r1E:"(•_•)"'
+    'r1E:"(o_o)"'
   )
   patch('12b-mascot-eyes-look-left',
     'r1E:"▟███▟"',
@@ -295,7 +295,7 @@ module.exports = function applyBranding({ patch, patchAll }) {
   )
   patchAll('12d-mascot-apple-default',
     '" ▗   ▖ "',
-    '" (•_•) "'
+    '" (o_o) "'
   )
   patch('12e-mascot-apple-look-left',
     '" ▘   ▘ "',

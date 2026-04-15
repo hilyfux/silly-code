@@ -44,7 +44,7 @@ done
 
 # ── Global commands (~/.local/bin) ──────────────────────────
 BIN_DIR="$HOME/.local/bin"
-for cmd in silly sillyt sillyx sillye; do
+for cmd in silly sillyx sillye sillyxs sillyes; do
   if [ -f "$BIN_DIR/$cmd" ]; then
     rm -f "$BIN_DIR/$cmd"
     ok "Removed $BIN_DIR/$cmd"

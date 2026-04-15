@@ -114,8 +114,7 @@ async function handleSilly(args, dataDir, patched) {
     case '-h':
       return cmdHelp();
     case 'uninstall':
-      console.log('On Windows, remove %USERPROFILE%\\.local\\share\\silly-code and %USERPROFILE%\\.local\\bin\\silly*.cmd / .ps1.');
-      return;
+      return cmdUninstall();
     default:
       console.error(`Unknown subcommand: ${sub}`);
       console.error("Run 'silly help' for usage.");
@@ -207,6 +206,19 @@ function cmdLogout(provider, dataDir) {
   }
   console.error('Usage: silly logout <codex|claude>');
   process.exit(1);
+}
+
+function cmdUninstall() {
+  const ps1 = path.join(rootDir, 'uninstall.ps1');
+  if (!fs.existsSync(ps1)) {
+    console.error('uninstall.ps1 missing. Reinstall first or remove files manually:');
+    console.error(`  ${path.join(os.homedir(), '.local', 'share', 'silly-code')}`);
+    console.error(`  ${path.join(os.homedir(), '.local', 'bin', 'silly*.{cmd,ps1}')}`);
+    process.exit(1);
+  }
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1], { stdio: 'inherit' });
+  child.on('exit', code => process.exit(code ?? 0));
+  child.on('error', err => { console.error(err.message); process.exit(1); });
 }
 
 function cmdHelp() {

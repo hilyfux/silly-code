@@ -1,0 +1,21 @@
+# KG Index (2026-04-15)
+.claude/CLAUDE.md: .claude/node
+.claude/skills/knowledge-graph/scripts/CLAUDE.md: scripts/scripts
+.claude/skills/knowledge-graph/SKILL.md: knowledge-graph
+.claude/skills/upstream-upgrade/SKILL.md: upstream-upgrad
+.github/CLAUDE.md: .github/github
+.github/workflows/CLAUDE.md: workflows/workf
+bin/CLAUDE.md: bin/launcher
+CLAUDE.md: root/sillycode
+docs/features/CLAUDE.md: features/featur
+docs/guide/CLAUDE.md: guide/user
+docs/memory/CLAUDE.md: memory/memory
+docs/reference/CLAUDE.md: reference/refer
+docs/superpowers/specs/CLAUDE.md: specs/architect
+pipeline/CLAUDE.md: pipeline/patch
+pipeline/patches/CLAUDE.md: patches/patch
+pipeline/patches/providers/CLAUDE.md: providers/provi
+skills/CLAUDE.md: skills/letting
+src/CLAUDE.md: src/legacy
+tests/CLAUDE.md: tests/test
+tests/provider/CLAUDE.md: provider/reintr

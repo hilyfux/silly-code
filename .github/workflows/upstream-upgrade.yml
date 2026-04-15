@@ -50,6 +50,20 @@ jobs:
         continue-on-error: true
         run: node pipeline/ci-upgrade.cjs
 
+      - name: Read knowledge-graph snapshot
+        id: kg
+        if: always()
+        run: |
+          if [ -f .knowledge-graph/work-snapshot.md ]; then
+            {
+              echo 'summary<<EOF'
+              cat .knowledge-graph/work-snapshot.md
+              echo 'EOF'
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo 'summary=' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Compute branch name
         if: steps.up.outputs.status == 'upgraded'
         id: branch
@@ -82,9 +96,13 @@ jobs:
             gh pr edit "$EXISTING" --body "Automated upgrade from \`${{ steps.up.outputs.current }}\` → \`${{ steps.up.outputs.latest }}\`.
 
           ### Verification
-          - 82/82 patches verified
+          - patched build green
           - \`tests/base.test.cjs\` passing
           - \`tests/schema.test.cjs\` passing
+          - \`tests/providers.test.cjs\` passing
+
+          ### Recent learnings
+          ${{ steps.kg.outputs.summary || 'No upgrade snapshot recorded yet.' }}
 
           ### Next steps
           1. Review the varmap diff in \`pipeline/varmap-${{ steps.up.outputs.latest }}.json\`
@@ -100,9 +118,13 @@ jobs:
               --body "Automated upgrade from \`${{ steps.up.outputs.current }}\` → \`${{ steps.up.outputs.latest }}\`.
 
           ### Verification
-          - 82/82 patches verified
+          - patched build green
           - \`tests/base.test.cjs\` passing
           - \`tests/schema.test.cjs\` passing
+          - \`tests/providers.test.cjs\` passing
+
+          ### Recent learnings
+          ${{ steps.kg.outputs.summary || 'No upgrade snapshot recorded yet.' }}
 
           ### Next steps
           1. Review the varmap diff in \`pipeline/varmap-${{ steps.up.outputs.latest }}.json\`
@@ -127,6 +149,9 @@ jobs:
           \`\`\`
           ${{ steps.up.outputs.failing_list }}
           \`\`\`
+
+          ### Recent learnings
+          ${{ steps.kg.outputs.summary || 'No upgrade snapshot recorded yet.' }}
 
           ### To reproduce locally
 

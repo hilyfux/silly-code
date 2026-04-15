@@ -11,7 +11,10 @@ cli-dev
 .DS_Store
 # .claude/ is maintainer-local — skills, settings, state never ship to users
 .claude/
-.knowledge-graph/
+.knowledge-graph/*
+!.knowledge-graph/knowledge-index.md
+!.knowledge-graph/work-snapshot.md
+!.knowledge-graph/graph-events.jsonl
 .mcp.json
 .playwright/
 .playwright-mcp/

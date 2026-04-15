@@ -1,8 +1,8 @@
 $ErrorActionPreference = 'Stop'
 
 $repo = 'https://github.com/hilyfux/silly-code.git'
-$installDir = if ($env:SILLY_CODE_HOME) { $env:SILLY_CODE_HOME } else { Join-Path $HOME '.local/share/silly-code' }
-$binDir = Join-Path $HOME '.local/bin'
+$installDir = if ($env:SILLY_CODE_HOME) { $env:SILLY_CODE_HOME } else { Join-Path $HOME '.local\share\silly-code' }
+$binDir = Join-Path $HOME '.local\bin'
 $dataDir = if ($env:SILLY_CODE_DATA) { $env:SILLY_CODE_DATA } else { Join-Path $HOME '.silly-code' }
 
 function Info($msg) { Write-Host "[silly] $msg" -ForegroundColor Cyan }
@@ -114,14 +114,17 @@ node "%INSTALL_DIR%\bin\$provider.js" --dangerously-skip-permissions %*
   Ok "Commands: $binDir\silly(.cmd/.ps1), sillyx(.cmd/.ps1), sillye(.cmd/.ps1)"
 
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+  $normalizedBinDir = ($binDir -replace '/','\').TrimEnd('\')
   $pathEntries = @()
-  if ($userPath) { $pathEntries = $userPath -split ';' }
-  if ($pathEntries -notcontains $binDir) {
+  if ($userPath) {
+    $pathEntries = ($userPath -split ';') | ForEach-Object { ($_ -replace '/','\').TrimEnd('\') }
+  }
+  if ($pathEntries -notcontains $normalizedBinDir) {
     $newUserPath = if ($userPath) { "$binDir;$userPath" } else { $binDir }
     [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
     $env:Path = "$binDir;$env:Path"
     Ok "Added $binDir to your user PATH"
-    Warn 'Restart PowerShell to pick up the new PATH in new terminals.'
+    Warn 'Open a NEW PowerShell or cmd window to pick up the updated PATH.'
   }
 
   New-Item -ItemType Directory -Force -Path $dataDir | Out-Null

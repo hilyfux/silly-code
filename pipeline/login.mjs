@@ -132,8 +132,18 @@ async function loginCodex() {
   log(C.cyan, `  ────────────────────────────────────`)
   log(C.dim, `  等待浏览器授权回调...\n`)
 
-  const { execFile } = await import('node:child_process')
-  execFile('open', [authUrl])
+  const { spawn } = await import('node:child_process')
+  try {
+    if (process.platform === 'win32') {
+      spawn('rundll32', ['url.dll,FileProtocolHandler', authUrl], { detached: true, stdio: 'ignore' }).unref()
+    } else if (process.platform === 'darwin') {
+      spawn('open', [authUrl], { detached: true, stdio: 'ignore' }).unref()
+    } else {
+      spawn('xdg-open', [authUrl], { detached: true, stdio: 'ignore' }).unref()
+    }
+  } catch (_) {
+    // silent: user can still copy URL manually
+  }
 
   // Wait for callback
   let code

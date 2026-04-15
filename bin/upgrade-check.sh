@@ -56,14 +56,49 @@ ls -t "$LOG_DIR"/upgrade-*.log 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/nu
     exit 0
   fi
 
-  if ! command -v claude >/dev/null 2>&1; then
-    echo "no 'claude' binary in PATH — install Claude Code first"
-    exit 1
-  fi
+  # Shell fast-path: try ci-upgrade.cjs first. If it upgrades cleanly (exit 1),
+  # commit + push directly without spawning a Claude agent. Only when
+  # ci-upgrade exits 2 (partial failure) do we wake the reasoning path.
+  echo "$CURRENT → $LATEST — trying ci-upgrade.cjs fast path..."
+  set +e
+  node pipeline/ci-upgrade.cjs
+  CI_EXIT=$?
+  set -e
 
-  echo "invoking claude to handle upgrade $CURRENT → $LATEST..."
+  case $CI_EXIT in
+    0)
+      # ci-upgrade saw current=latest (race: someone else upgraded just now)
+      echo "ci-upgrade says already current (race with another run) — done"
+      exit 0
+      ;;
+    1)
+      # clean upgrade, changes staged on working tree
+      echo "ci-upgrade handled $LATEST cleanly — committing without agent"
+      git add -A
+      git commit -m "Track 1: auto-upgrade upstream to $LATEST
 
-  PROMPT="Upstream @anthropic-ai/claude-code released $LATEST (current: $CURRENT). Invoke the upstream-upgrade skill to handle this end-to-end (ci-upgrade → fix → test → commit → push to main → post-run self-update). Non-interactive: no brainstorming, no AskUserQuestion, no skills that need user input. If you can't confidently resolve, stop and open a GitHub issue via gh CLI. Working dir: $ROOT_DIR."
-
-  exec claude -p "$PROMPT" --dangerously-skip-permissions
+Shell fast-path — varmap + content-anchor rename sweep applied cleanly,
+no Claude agent needed. All 96 patches + unit tests passed before commit."
+      git push origin main
+      echo "pushed $LATEST (fast-path, zero agent tokens)"
+      exit 0
+      ;;
+    2)
+      # auto-fix incomplete — ask the agent to take over
+      if ! command -v claude >/dev/null 2>&1; then
+        echo "ci-upgrade exit 2 (manual attention needed) but no 'claude' binary — stopping"
+        exit 1
+      fi
+      echo "ci-upgrade couldn't fully resolve — invoking claude agent..."
+      # Reset any partial state from ci-upgrade so agent starts clean
+      git reset --hard HEAD --quiet
+      PROMPT="Upstream @anthropic-ai/claude-code released $LATEST (current: $CURRENT). ci-upgrade.cjs just tried and exited 2 (partial failure). Invoke the upstream-upgrade skill to handle this: read the new binary, diagnose which patches still fail, apply manual renames, test, commit, push to main. Non-interactive: no brainstorming, no AskUserQuestion. If you can't confidently resolve, stop and open a GitHub issue via gh CLI. Working dir: $ROOT_DIR."
+      exec claude -p "$PROMPT" --dangerously-skip-permissions
+      ;;
+    *)
+      echo "ci-upgrade exited $CI_EXIT (unexpected) — will retry next slot"
+      git reset --hard HEAD --quiet 2>/dev/null || true
+      exit 1
+      ;;
+  esac
 } 2>&1 | tee "$LOG"

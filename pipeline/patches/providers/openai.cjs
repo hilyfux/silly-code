@@ -19,7 +19,8 @@
 async function _openaiAuth() {
   const { readFileSync, writeFileSync } = await import('node:fs');
   const { join } = await import('node:path');
-  const _dir = process.env.SILLY_CODE_DATA || join(process.env.HOME || '~', '.silly-code');
+  const { homedir } = await import('node:os');
+  const _dir = process.env.SILLY_CODE_DATA || join(homedir(), '.silly-code');
   if (!_openaiData) {
     // Try new filename first, fall back to legacy
     try {

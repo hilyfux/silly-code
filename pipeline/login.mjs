@@ -11,9 +11,10 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
 import readline from 'node:readline'
 
-const DATA_DIR = process.env.SILLY_CODE_DATA || path.join(process.env.HOME || '~', '.silly-code')
+const DATA_DIR = process.env.SILLY_CODE_DATA || path.join(os.homedir(), '.silly-code')
 
 // ── Colors ──
 const C = {

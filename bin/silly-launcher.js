@@ -29,6 +29,9 @@ if (!isWindows) {
 async function runOnWindows() {
   const dataDir = process.env.SILLY_CODE_DATA || path.join(os.homedir(), '.silly-code');
   fs.mkdirSync(dataDir, { recursive: true });
+  // Pin the resolved dataDir for every child process (login.mjs, cli-patched.js)
+  // so a bare HOME env or cwd change can never re-route tokens.
+  process.env.SILLY_CODE_DATA = dataDir;
   const patched = path.join(rootDir, 'pipeline', 'build', 'cli-patched.js');
 
   const providers = {

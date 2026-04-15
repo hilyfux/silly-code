@@ -306,6 +306,23 @@ module.exports = function applyBranding({ patch, patchAll }) {
     '" (>_>) "'
   )
 
+  // Patch 14a: Hide OAuth org name in welcome card for non-firstParty.
+  // OpenAI / Copilot users get the email-shaped orgName from their upstream
+  // provider ("user@x.com's Organization") — exposing it in the welcome card
+  // is an identity leak under our purity contract.
+  patch('14a-welcome-hide-org-non-firstParty',
+    '!process.env.IS_DEMO&&X.oauthAccount?.organizationName?`${c} · ${B} · ${X.oauthAccount.organizationName}`:`${c} · ${B}`',
+    '!process.env.IS_DEMO&&X.oauthAccount?.organizationName&&(typeof Uq!=="function"||Uq()==="firstParty")?`${c} · ${B} · ${X.oauthAccount.organizationName}`:`${c} · ${B}`'
+  )
+
+  // Patch 14b: Don't inject user's email into agent system prompt for non-firstParty.
+  // Upstream appends `The user's email address is X` to the prompt as user context.
+  // For non-Claude providers, this leaks account email into the conversation.
+  patch('14b-agent-prompt-hide-email',
+    "let z=k_()?.emailAddress;return{..._&&{claudeMd:_},...z&&{userEmail:`The user's email address is",
+    "let z=(typeof Uq==='function'&&Uq()!=='firstParty')?null:k_()?.emailAddress;return{..._&&{claudeMd:_},...z&&{userEmail:`The user's email address is"
+  )
+
   // Patches 13a-l: Multi-color mascot — saturated rainbow plushie
   // Aesthetic: 90s plush toy — bold pastels, intentional L/R asymmetry
   // (different arm/foot colors like a hand-sewn creature), deep indigo belly
@@ -384,9 +401,20 @@ module.exports = function applyBranding({ patch, patchAll }) {
     'Symbol.for("react.memo_cache_sentinel"))O=lz.createElement(T,{color:"clawd_body"},"▖")',
     `Symbol.for("react.memo_cache_sentinel"))O=lz.createElement(T,{color:"${ORANGE}"},"▖")`
   )
+  // Apple body bar: the original `" ".repeat(7)` on a bg color renders
+  // nothing visible when bg blends with the terminal theme. Replace with
+  // 7 actual block chars each in a distinct color — guaranteed to show up.
   patch('13k-mascot-apple-body',
     'lz.createElement(T,{backgroundColor:"clawd_body"}," ".repeat(7))',
-    `lz.createElement(T,{backgroundColor:"${INDIGO_BG}"}," ".repeat(7))`
+    `lz.createElement(T,null,` +
+      `lz.createElement(T,{color:"${B1}"},"█"),` +
+      `lz.createElement(T,{color:"${B2}"},"█"),` +
+      `lz.createElement(T,{color:"${B3}"},"█"),` +
+      `lz.createElement(T,{color:"${B3}"},"█"),` +
+      `lz.createElement(T,{color:"${B4}"},"█"),` +
+      `lz.createElement(T,{color:"${B5}"},"█"),` +
+      `lz.createElement(T,{color:"${VIOLET}"},"█")` +
+    `)`
   )
   // Apple feet: same asymmetric split as NuY.
   patch('13l-mascot-apple-feet',

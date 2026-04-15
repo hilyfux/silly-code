@@ -240,7 +240,8 @@ case "${1:-}" in
       exit 1
     fi
 
-    UPDATE_MODE="${2:-check}"
+    # Default: detect + apply. Pass `check` for probe-only.
+    UPDATE_MODE="${2:-apply}"
 
     # ── Check dependencies ──
     info "Checking dependencies..."
@@ -310,12 +311,12 @@ case "${1:-}" in
             warn "Check: https://github.com/hilyfux/silly-code/issues"
           fi
         else
-          warn "Pull failed — run 'silly update apply' again or reinstall"
+          warn "Pull failed — retry 'silly update' or reinstall"
           rm -f "$PATCHED.bak"
         fi
       else
         echo ""
-        echo "  Run 'silly update apply' to update"
+        echo "  (probe-only mode; run 'silly update' without args to apply)"
       fi
     fi
 
@@ -465,8 +466,8 @@ Bundle path: \`$BUNDLE\`
     echo "    silly logout <prov>   Remove stored tokens"
     echo "    silly models          List available models"
     echo "    silly doctor          Check prerequisites"
-    echo "    silly update          Check for updates"
-    echo "    silly update apply    Apply available updates"
+    echo "    silly update          Check + apply updates (then restart sillyx)"
+    echo "    silly update check    Probe only — don't apply"
     echo "    silly report          Bundle debug dumps for a bug report"
     echo "    silly report --submit Additionally open GitHub issue (needs gh)"
     echo "    silly uninstall       Remove silly-code completely"

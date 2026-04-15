@@ -71,4 +71,30 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
     '/api/event_logging/batch',
     '/api/event_logging/batch_disabled'
   )
+
+  // Patch 41-44: Silence upstream noise banners that are irrelevant or
+  // actively misleading for silly-code users (proxies / third-party tokens /
+  // IDE plugin marketing). Each patch force-returns false from isActive for a
+  // specific banner ID while keeping the original body under a dead field so
+  // symbol renames never silently drop too much.
+
+  patch('41-suppress-auth-banner-external',
+    '{id:"claude-ai-external-token",type:"warning",isActive:()=>',
+    '{id:"claude-ai-external-token",type:"warning",isActive:()=>false,_origIsActive:()=>'
+  )
+
+  patch('42-suppress-auth-banner-apikey',
+    '{id:"api-key-conflict",type:"warning",isActive:()=>',
+    '{id:"api-key-conflict",type:"warning",isActive:()=>false,_origIsActive:()=>'
+  )
+
+  patch('43-suppress-auth-banner-both',
+    '{id:"both-auth-methods",type:"warning",isActive:()=>',
+    '{id:"both-auth-methods",type:"warning",isActive:()=>false,_origIsActive:()=>'
+  )
+
+  patch('44-suppress-jetbrains-banner',
+    '{id:"jetbrains-plugin-install",type:"info",isActive:',
+    '{id:"jetbrains-plugin-install",type:"info",isActive:()=>false,_origIsActive:'
+  )
 }

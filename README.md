@@ -45,7 +45,7 @@ If you installed an earlier Windows build, run the installer again to refresh th
 | Telemetry | 10+ endpoints | All blocked |
 | Feature locks | Tier-gated | Max tier + `/loop` unlocked |
 | Identity leaks | Brand baked in | Scrubbed from LLM prompts |
-| Source | Compiled binary | 78 patches, fully inspectable |
+| Source | Compiled binary | 102 patches, fully inspectable |
 
 ### Management
 
@@ -113,7 +113,7 @@ sillyx    # 或 sillye
 | 遥测 | 10+ 端点 | 全部封堵 |
 | 功能限制 | 按等级限制 | Max 等级 + `/loop` 全解锁 |
 | 身份泄漏 | 品牌烙印 | 从 LLM 提示词中清除 |
-| 源码 | 编译二进制 | 78 个补丁，完全可审查 |
+| 源码 | 编译二进制 | 102 个补丁，完全可审查 |
 
 ### 管理命令
 
@@ -173,7 +173,7 @@ sillyx    # または sillye
 | テレメトリ | 10+ エンドポイント | すべて遮断 |
 | 機能制限 | ティア別制限 | Max ティア + `/loop` 解放 |
 | アイデンティティ漏洩 | ブランドが焼き込み | LLM プロンプトから除去 |
-| ソース | コンパイル済みバイナリ | 78 パッチ、完全検査可能 |
+| ソース | コンパイル済みバイナリ | 102 パッチ、完全検査可能 |
 
 ### 管理コマンド
 
@@ -233,7 +233,7 @@ sillyx    # ou sillye
 | Télémétrie | 10+ endpoints | Tous bloqués |
 | Verrouillage | Par niveau | Max + `/loop` déverrouillés |
 | Fuites d'identité | Marque incrustée | Retirées des prompts LLM |
-| Source | Binaire compilé | 78 patchs, entièrement vérifiable |
+| Source | Binaire compilé | 102 patchs, entièrement vérifiable |
 
 ### Commandes de gestion
 

@@ -200,7 +200,7 @@ case "${1:-}" in
       status)
         if [[ "$(uname -s)" == "Darwin" ]]; then
           if launchctl list com.silly-code.upgrade-check >/dev/null 2>&1; then
-            ok "launchd agent installed (fires every 4h when Mac is awake)"
+            ok "launchd agent installed (fires 06:07 + 14:07 local; catches-up after sleep)"
             echo "  recent runs:"
             ls -t "$HOME/.silly-code/logs"/upgrade-*.log 2>/dev/null | head -3 | while read f; do
               echo "    $(basename "$f")"

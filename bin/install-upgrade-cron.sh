@@ -43,7 +43,17 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     <string>-c</string>
     <string>$TRIGGER</string>
   </array>
-  <key>StartInterval</key><integer>14400</integer>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Hour</key><integer>14</integer>
+      <key>Minute</key><integer>7</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>6</integer>
+      <key>Minute</key><integer>7</integer>
+    </dict>
+  </array>
   <key>RunAtLoad</key><false/>
   <key>EnvironmentVariables</key>
   <dict>
@@ -61,7 +71,8 @@ EOF
   launchctl unload "$PLIST" 2>/dev/null || true
   launchctl load -w "$PLIST"
   echo "installed launchd agent: $PLIST"
-  echo "  fires every 4h while your Mac is awake (skipped while asleep, catches up on wake)"
+  echo "  fires at 06:07 and 14:07 local time — catches upstream's two release waves"
+  echo "  (00-05 UTC + 18-21 UTC). Missed fires during sleep catch up on wake."
   echo "  logs: $LOG_DIR/upgrade-*.log"
   echo ""
   echo "  status   : silly cron status"
@@ -71,11 +82,11 @@ EOF
 elif [[ "$(uname -s)" == "Linux" ]]; then
   TMPF=$(mktemp)
   crontab -l 2>/dev/null | grep -v "upgrade-check.sh" > "$TMPF" || true
-  echo "17 */4 * * * $TRIGGER" >> "$TMPF"
+  echo "7 6,22 * * * $TRIGGER" >> "$TMPF"
   crontab "$TMPF"
   rm -f "$TMPF"
-  echo "installed cron entry: '17 */4 * * * $TRIGGER'"
-  echo "  fires every 4h at :17 while the machine is running"
+  echo "installed cron entry: '7 6,22 * * * $TRIGGER'"
+  echo "  fires at 06:07 + 22:07 UTC — catches both upstream release waves"
 
 else
   echo "unsupported OS: $(uname -s)"

@@ -80,25 +80,38 @@ try {
   Ok 'Patched binary ready'
 
   New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-  $launcherTemplate = @'
+  $psLauncherTemplate = @'
 #!/usr/bin/env pwsh
 $installDir = '__INSTALL_DIR__'
 & node (Join-Path $installDir 'bin/__CMD__.js') @args
 '@
+  $cmdLauncherTemplate = @'
+@echo off
+set "INSTALL_DIR=__INSTALL_DIR__"
+node "%INSTALL_DIR%\bin\__CMD__.js" %*
+'@
   foreach ($cmd in @('silly','sillyx','sillye')) {
-    $content = $launcherTemplate.Replace('__INSTALL_DIR__', $installDir.Replace("'", "''")).Replace('__CMD__', $cmd)
-    $wrapperPath = Join-Path $binDir "$cmd.ps1"
-    Set-Content -Path $wrapperPath -Value $content -Encoding UTF8
+    $escapedInstallDir = $installDir.Replace("'", "''")
+    $psContent = $psLauncherTemplate.Replace('__INSTALL_DIR__', $escapedInstallDir).Replace('__CMD__', $cmd)
+    Set-Content -Path (Join-Path $binDir "$cmd.ps1") -Value $psContent -Encoding UTF8
+    $cmdContent = $cmdLauncherTemplate.Replace('__INSTALL_DIR__', $installDir).Replace('__CMD__', $cmd)
+    Set-Content -Path (Join-Path $binDir "$cmd.cmd") -Value $cmdContent -Encoding ASCII
   }
   foreach ($cmd in @('sillyxs','sillyes')) {
     $provider = $cmd.Substring(0, $cmd.Length - 1)
-    $content = @"
+    $psContent = @"
 #!/usr/bin/env pwsh
-& node '$($installDir.Replace("'", "''"))\\bin\\$provider.js' --dangerously-skip-permissions @args
+& node '$($installDir.Replace("'", "''"))\bin\$provider.js' --dangerously-skip-permissions @args
 "@
-    Set-Content -Path (Join-Path $binDir "$cmd.ps1") -Value $content -Encoding UTF8
+    Set-Content -Path (Join-Path $binDir "$cmd.ps1") -Value $psContent -Encoding UTF8
+    $cmdContent = @"
+@echo off
+set "INSTALL_DIR=$installDir"
+node "%INSTALL_DIR%\bin\$provider.js" --dangerously-skip-permissions %*
+"@
+    Set-Content -Path (Join-Path $binDir "$cmd.cmd") -Value $cmdContent -Encoding ASCII
   }
-  Ok "Commands: $binDir\silly.ps1, sillyx.ps1, sillye.ps1"
+  Ok "Commands: $binDir\silly(.cmd/.ps1), sillyx(.cmd/.ps1), sillye(.cmd/.ps1)"
 
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
   $pathEntries = @()
@@ -131,6 +144,7 @@ $installDir = '__INSTALL_DIR__'
   Write-Host ''
   Write-Host "Installed under: $installDir"
   Write-Host "Launchers under: $binDir"
+  Write-Host 'Windows shells will use the .cmd wrappers automatically.'
 } finally {
   Pop-Location
 }

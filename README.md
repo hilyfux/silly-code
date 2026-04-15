@@ -35,6 +35,8 @@ silly doctor
 sillyx    # or sillye
 ```
 
+If you installed an earlier Windows build, run the installer again to refresh the `.cmd` launchers.
+
 ### What's Different from Claude Code
 
 | | Claude Code | Silly Code |
@@ -100,6 +102,8 @@ irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex
 silly doctor
 sillyx    # 或 sillye
 ```
+
+如果你安装的是更早的 Windows 版本，请重新执行一次安装脚本以刷新 `.cmd` 启动器。
 
 ### 与 Claude Code 的区别
 

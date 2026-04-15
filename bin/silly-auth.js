@@ -9,7 +9,7 @@ export const AUTH_FILES = {
   claude: ['claude-oauth.json'],
 };
 
-export const CLAUDE_MACOS_KEYCHAIN = path.join(os.homedir(), '.claude', '.credentials.json');
+const CLAUDE_MACOS_KEYCHAIN = path.join(os.homedir(), '.claude', '.credentials.json');
 
 export function authState(dataDir) {
   const has = (rel) => fs.existsSync(path.join(dataDir, rel));

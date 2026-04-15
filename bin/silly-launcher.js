@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { AUTH_FILES, CLAUDE_MACOS_KEYCHAIN, authState } from './silly-auth.js';
+import { AUTH_FILES, authState } from './silly-auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -200,7 +200,7 @@ function cmdLogout(provider, dataDir) {
   for (const f of files) rm(path.join(dataDir, f));
   if (provider === 'claude') {
     console.log('[silly] Claude tokens removed (macOS keychain entries and .claude/.credentials.json may need manual cleanup)');
-  } else {
+  } else if (provider === 'codex') {
     console.log('[silly] Codex tokens removed');
   }
 }
@@ -214,7 +214,7 @@ function cmdUpdate() {
   }
   const out = (r.stdout?.toString() || '').trim();
   if (out) process.stdout.write(out + '\n');
-  if (out.includes('Already up to date') || out.includes('Already up-to-date')) {
+  if (/Already up.to.date/i.test(out)) {
     console.log('[silly] Already up to date — skipping patch rebuild.');
     return;
   }

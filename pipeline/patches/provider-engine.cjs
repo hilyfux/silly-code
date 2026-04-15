@@ -99,7 +99,7 @@ const MATCH = {
   MODEL_ID_2:  'You are powered by the model named ${H}. The exact model ID is ${q}.',
   SIMPLE_ID:   '?"You are Claude Code, Anthropic\'s official CLI for Claude.":`You are Claude Code, Anthropic\'s official CLI for Claude.',
   TIER:        'case"max":return"Claude Max";case"pro":return"Claude Pro";default:return"Claude API"',
-  CONSTRUCTOR: 'gL',
+  CONSTRUCTOR: 'aL',
   VERSION:     '// Version: 2.1.109',
 };
 

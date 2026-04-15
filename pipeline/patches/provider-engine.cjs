@@ -84,23 +84,23 @@ function validate(providers) {
   if (defaultCount !== 1) throw new Error(`Exactly one provider must have envKey: null (found ${defaultCount})`);
 }
 
-// ── Match string constants (upstream v2.1.107) ──
+// ── Match string constants (upstream v2.1.108) ──
 const MATCH = {
-  DETECT:      'return B6(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"',
-  INJECT:      'P=oX(_);if(P==="bedrock")',
-  RESOLVE:     'function P$(q=iq()){return q==="firstParty"||q==="anthropicAws"}',
-  FAMILY:      'function $Q(q=iq()){return q==="firstParty"||q==="anthropicAws"||q==="foundry"||q==="mantle"}',
-  CONTEXT_DEFAULT: 'qh1=200000',
-  DISPLAY:     'function mW(q){if(iq()==="foundry")return;',
-  IDENTITY:    'qb1="You are Claude Code, Anthropic\'s official CLI for Claude."',
-  SDK_ID:      'c74="You are Claude Code, Anthropic\'s official CLI for Claude, running within the Claude Agent SDK."',
-  AGENT_ID:    'l74="You are a Claude agent, built on Anthropic\'s Claude Agent SDK."',
+  DETECT:      'return R6(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"',
+  INJECT:      'P=aX(_);if(P==="bedrock")',
+  RESOLVE:     'function f2(q=gq()){return q==="firstParty"||q==="anthropicAws"}',
+  FAMILY:      'function iU(q=gq()){return q==="firstParty"||q==="anthropicAws"||q==="foundry"||q==="mantle"}',
+  CONTEXT_DEFAULT: 'Hh1=200000',
+  DISPLAY:     'function hW(q){if(gq()==="foundry")return;',
+  IDENTITY:    'XC1="You are Claude Code, Anthropic\'s official CLI for Claude."',
+  SDK_ID:      'r14="You are Claude Code, Anthropic\'s official CLI for Claude, running within the Claude Agent SDK."',
+  AGENT_ID:    'o14="You are a Claude agent, built on Anthropic\'s Claude Agent SDK."',
   MODEL_ID:    'You are powered by the model named ${$}. The exact model ID is ${q}.',
   MODEL_ID_2:  'You are powered by the model named ${H}. The exact model ID is ${q}.',
   SIMPLE_ID:   '?"You are Claude Code, Anthropic\'s official CLI for Claude.":`You are Claude Code, Anthropic\'s official CLI for Claude.',
   TIER:        'case"max":return"Claude Max";case"pro":return"Claude Pro";default:return"Claude API"',
   CONSTRUCTOR: 'gL',
-  VERSION:     '// Version: 2.1.107',
+  VERSION:     '// Version: 2.1.108',
 };
 
 // ── Serialization safeguards ──
@@ -117,7 +117,7 @@ function checkSerialization(code, label) {
     const mockFetch = () => Promise.resolve(new Response('{}', { status: 200 }));
     new Function('fetch', code)(mockFetch);
   } catch (e) {
-    // ReferenceErrors during execution are expected (missing runtime vars like iq, oX)
+    // ReferenceErrors during execution are expected (missing runtime vars like gq, aX)
     // Only fail on SyntaxError or TypeError indicating broken code structure
     if (e instanceof SyntaxError || e instanceof TypeError) {
       throw new Error(`${label}: execution verification failed — ${e.message}`);
@@ -137,7 +137,7 @@ module.exports = function applyProviders({ patch }) {
 
   // ── Patch 10: Provider detection ──
   const detectChain = sorted.map(p =>
-    `B6(process.env.${p.envKey})?"${p.runtimeId}"`
+    `R6(process.env.${p.envKey})?"${p.runtimeId}"`
   ).join(':');
   patch('10-provider-detection',
     MATCH.DETECT,
@@ -184,7 +184,7 @@ module.exports = function applyProviders({ patch }) {
 
   patch('11-12-provider-adapters',
     MATCH.INJECT,
-    `P=oX(_);${injectionCode};${adapterBranches}if(P==="bedrock")`
+    `P=aX(_);${injectionCode};${adapterBranches}if(P==="bedrock")`
   );
 
   // ── Patch 15: Model defaults ──
@@ -229,7 +229,7 @@ module.exports = function applyProviders({ patch }) {
     }).join(':');
     patch('51-default-context',
       MATCH.CONTEXT_DEFAULT,
-      `qh1=(${ctxChain}:200000)`
+      `Hh1=(${ctxChain}:200000)`
     );
   }
 
@@ -242,12 +242,12 @@ module.exports = function applyProviders({ patch }) {
       const checks = entries.map(([model, display]) =>
         `if(_m.includes("${model}"))return"${display}";`
       ).join('');
-      return `if(iq()==="${p.runtimeId}"){let _m=q.toLowerCase();${checks}return"${names.default}";}`;
+      return `if(gq()==="${p.runtimeId}"){let _m=q.toLowerCase();${checks}return"${names.default}";}`;
     }).join('');
 
     patch('60-model-display-name',
       MATCH.DISPLAY,
-      `function mW(q){${displayBranches}if(iq()==="foundry")return;`
+      `function hW(q){${displayBranches}if(gq()==="foundry")return;`
     );
   }
 
@@ -261,7 +261,7 @@ module.exports = function applyProviders({ patch }) {
   const originalIdentity = "You are Claude Code, Anthropic\\'s official CLI for Claude.";
   patch('61-system-identity',
     MATCH.IDENTITY,
-    `qb1=(()=>{const _p=typeof iq==="function"?iq():"firstParty";${identityBranches}return"${originalIdentity}";})()`
+    `XC1=(()=>{const _p=typeof gq==="function"?gq():"firstParty";${identityBranches}return"${originalIdentity}";})()`
   );
 
   // ── Patch 62: SDK identity ──
@@ -276,7 +276,7 @@ module.exports = function applyProviders({ patch }) {
     .join('');
   patch('62-sdk-identity',
     MATCH.SDK_ID,
-    `c74=(()=>{const _p=typeof iq==="function"?iq():"firstParty";${sdkBranches}return"${originalSdk}";})()`
+    `r14=(()=>{const _p=typeof gq==="function"?gq():"firstParty";${sdkBranches}return"${originalSdk}";})()`
   );
 
   // ── Patch 64: Model ID in prompt (two occurrences with different var names) ──
@@ -299,7 +299,7 @@ module.exports = function applyProviders({ patch }) {
   const originalAgent = "You are a Claude agent, built on Anthropic\\'s Claude Agent SDK.";
   patch('65-agent-identity',
     MATCH.AGENT_ID,
-    `l74=(()=>{const _p=typeof iq==="function"?iq():"firstParty";${agentBranches}return"${originalAgent}";})()`
+    `o14=(()=>{const _p=typeof gq==="function"?gq():"firstParty";${agentBranches}return"${originalAgent}";})()`
   );
 
   // ── Patch 63a: Simple identity ──
@@ -313,8 +313,8 @@ module.exports = function applyProviders({ patch }) {
   const fallbackFull = fallback.identity.systemPrompt;
   patch('63a-prompt-simple-identity',
     MATCH.SIMPLE_ID,
-    `?(()=>{const _p=typeof iq==="function"?iq():"firstParty";${simpleBranches}return"${fallbackSimple}";})()`
-    + `:((()=>{const _p=typeof iq==="function"?iq():"firstParty";${identityBranches}return"${fallbackFull}";})())+\``
+    `?(()=>{const _p=typeof gq==="function"?gq():"firstParty";${simpleBranches}return"${fallbackSimple}";})()`
+    + `:((()=>{const _p=typeof gq==="function"?gq():"firstParty";${identityBranches}return"${fallbackFull}";})())+\``
   );
 
   // ── Patch 63: Tier display ──
@@ -322,7 +322,7 @@ module.exports = function applyProviders({ patch }) {
   const tierCases = tierLevels.map((level) => {
     const branches = providers
       .filter(p => p.runtimeId !== 'firstParty')
-      .map(p => `(typeof iq==="function"&&iq()==="${p.runtimeId}")?"${p.tierNames[level]}"`)
+      .map(p => `(typeof gq==="function"&&gq()==="${p.runtimeId}")?"${p.tierNames[level]}"`)
       .join(':');
     const fallbackTier = fallback.tierNames[level];
     const prefix = level === 'api' ? 'default' : `case"${level}"`;
@@ -339,8 +339,8 @@ module.exports = function applyProviders({ patch }) {
   // always show Claude names. Fix: delegate to y0 (marketing name) which is
   // already provider-aware from Patch 60.
   patch('67-public-model-display',
-    'function wq6(q){let K=q.endsWith("[1m]")?" (1M context)":"";switch',
-    'function wq6(q){if(typeof iq==="function"&&iq()!=="firstParty"){let _n=mW(q);if(_n)return _n;}let K=q.endsWith("[1m]")?" (1M context)":"";switch'
+    'function p76(q){let K=q.endsWith("[1m]")?" (1M context)":"";switch',
+    'function p76(q){if(typeof gq==="function"&&gq()!=="firstParty"){let _n=hW(q);if(_n)return _n;}let K=q.endsWith("[1m]")?" (1M context)":"";switch'
   );
 
   // ── Patch 66: Fast mode display name ──
@@ -351,8 +351,8 @@ module.exports = function applyProviders({ patch }) {
       .map(p => `if(_p==="${p.runtimeId}")return"${p.identity.modelDisplayNames.default}";`)
       .join('');
     patch('66-fast-mode-display',
-      'var YB="Opus 4.6"',
-      `var YB=(()=>{const _p=typeof iq==="function"?iq():"firstParty";${branches}return"Opus 4.6";})()`
+      'var im="Opus 4.6"',
+      `var im=(()=>{const _p=typeof gq==="function"?gq():"firstParty";${branches}return"Opus 4.6";})()`
     );
   }
 

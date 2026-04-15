@@ -1,0 +1,15 @@
+{
+  "isEnvTruthy": "R6",
+  "isEnvTruthy_in_getAPIProvider": "R6",
+  "getAPIProvider": "gq",
+  "isFirstParty": "f2",
+  "providerFamily": "iU",
+  "modelAwareProviderResolver": "aX",
+  "subscriptionTier": "HK",
+  "isSubscriber": "r7",
+  "statsigTransport": "ig",
+  "AnthropicSDK": "K",
+  "configVar": "z",
+  "defaultContextWindow": "Hh1",
+  "version": "2.1.108"
+}

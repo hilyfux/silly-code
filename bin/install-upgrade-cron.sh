@@ -4,12 +4,25 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TRIGGER="$ROOT_DIR/bin/upgrade-check.sh"
+# macOS launchd agents can't read paths under ~/Desktop, ~/Documents, ~/Downloads
+# (TCC sandbox). Prefer the ~/.local/share/silly-code/ install copy — it's in
+# ~/Library territory and launchd reads it without "Full Disk Access" grants.
+INSTALL_ROOT="$HOME/.local/share/silly-code"
+SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ ! -x "$TRIGGER" ]; then
-  chmod +x "$TRIGGER"
+if [ -x "$INSTALL_ROOT/bin/upgrade-check.sh" ]; then
+  ROOT_DIR="$INSTALL_ROOT"
+elif [[ "$SRC_ROOT" == "$HOME/Desktop/"* || "$SRC_ROOT" == "$HOME/Documents/"* || "$SRC_ROOT" == "$HOME/Downloads/"* ]]; then
+  echo "error: source tree at $SRC_ROOT is under a TCC-protected directory."
+  echo "       run 'silly update apply' first so ~/.local/share/silly-code/ is populated,"
+  echo "       then retry 'silly cron install'." >&2
+  exit 1
+else
+  ROOT_DIR="$SRC_ROOT"
 fi
+
+TRIGGER="$ROOT_DIR/bin/upgrade-check.sh"
+[ -x "$TRIGGER" ] || chmod +x "$TRIGGER"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   LABEL="com.silly-code.upgrade-check"

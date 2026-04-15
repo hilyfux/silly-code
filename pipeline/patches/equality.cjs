@@ -9,42 +9,31 @@ module.exports = function applyEquality({ patch }) {
   // Patch 20: Tier bypass — always return "max" subscription
   // XK() returns subscription tier. "max" unlocks ULTRATHINK, ULTRAPLAN, etc.
   patch('20-tier-bypass',
-    'function GK(){if(kXq())return VXq();if(!KX())return null;let q=Kq();if(!q)return null;return q.subscriptionType??null}',
-    'function GK(){return"max"}'
+    'function HK(){if(yJq())return EJq();if(!tJ())return null;let q=a7();if(!q)return null;return q.subscriptionType??null}',
+    'function HK(){return"max"}'
   )
 
   // Patch 21: Subscriber check — always subscribed
-  // m7() checks if user is a Claude AI subscriber.
   patch('21-subscriber-bypass',
-    'function d7(){if(!KX())return!1;return Vb(Kq()?.scopes)',
-    'function d7(){return!0;if(!KX())return!1;return Vb(Kq()?.scopes)'
+    'function r7(){if(!tJ())return!1;return Wb(a7()?.scopes)',
+    'function r7(){return!0;if(!tJ())return!1;return Wb(a7()?.scopes)'
   )
 
-  // Patch 22: Enable /loop dynamic mode — bypass feature flag gate
-  // isLoopDynamicEnabled() checks statsig flag "tengu_kairos_loop_dynamic"
-  // which always returns false because privacy patches block statsig/growthbook.
-  // Without this, ScheduleWakeup stays deferred and its call() returns {scheduledFor:0}.
+  // Patch 22: Enable /loop dynamic mode — bypass statsig feature flag
   patch('22-loop-dynamic-enable',
-    'function l7z(){return h8("tengu_kairos_loop_dynamic",!1)}',
-    'function l7z(){return!0}'
+    'function n8z(){return b8("tengu_kairos_loop_dynamic",!1)}',
+    'function n8z(){return!0}'
   )
 
-  // Patch 24: Enable /loop prompt preamble — bypass feature flag gate
-  // s97() → h8("tengu_kairos_loop_prompt", false). Controls whether the
-  // loop preamble (execution guidance) is injected into /loop conversations.
-  // Without it, /loop tasks get less guidance and drift off-task.
+  // Patch 24: Enable /loop prompt preamble — bypass statsig feature flag
   patch('24-loop-prompt-enable',
-    'function s97(){return h8("tengu_kairos_loop_prompt",!1)}',
-    'function s97(){return!0}'
+    'function r37(){return b8("tengu_kairos_loop_prompt",!1)}',
+    'function r37(){return!0}'
   )
 
-  // Patch 23: Disable tool deferral for third-party providers
-  // GPT/Copilot models don't reliably use ToolSearch to load deferred tools,
-  // so cron tools (CronCreate/CronList/CronDelete) stay invisible and the
-  // model can't cancel a running /loop. Force non-MCP tools to load directly
-  // for non-firstParty providers. MCP tools stay deferred (can be numerous).
+  // Patch 23: Disable tool deferral for third-party providers — force direct load
   patch('23-no-defer-third-party',
-    'if(BZ4&&q.name===BZ4){if((ih8(),C7(nh8)).isLoopDynamicEnabled())return!1}return q.shouldDefer===!0}',
-    'if(BZ4&&q.name===BZ4){if((ih8(),C7(nh8)).isLoopDynamicEnabled())return!1}if(typeof iq==="function"&&iq()!=="firstParty")return!1;return q.shouldDefer===!0}'
+    'if(cD4&&q.name===cD4){if(($R8(),u7(wR8)).isLoopDynamicEnabled())return!1}return q.shouldDefer===!0}',
+    'if(cD4&&q.name===cD4){if(($R8(),u7(wR8)).isLoopDynamicEnabled())return!1}if(typeof gq==="function"&&gq()!=="firstParty")return!1;return q.shouldDefer===!0}'
   )
 }

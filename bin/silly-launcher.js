@@ -11,7 +11,9 @@ if (!command) {
   console.error('Missing SILLY_TARGET_COMMAND');
   process.exit(1);
 }
-const target = path.join(__dirname, command);
+const target = process.platform === 'win32'
+  ? path.join(__dirname, `${command}.cmd`)
+  : path.join(__dirname, command);
 const child = spawn(target, process.argv.slice(2), { stdio: 'inherit', shell: false });
 child.on('exit', code => process.exit(code ?? 0));
 child.on('error', err => {

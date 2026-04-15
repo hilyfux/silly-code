@@ -11,10 +11,13 @@ if (!command) {
   console.error('Missing SILLY_TARGET_COMMAND');
   process.exit(1);
 }
-const target = process.platform === 'win32'
+const isWindows = process.platform === 'win32';
+const target = isWindows
   ? path.join(__dirname, `${command}.cmd`)
   : path.join(__dirname, command);
-const child = spawn(target, process.argv.slice(2), { stdio: 'inherit', shell: false });
+const child = isWindows
+  ? spawn('cmd.exe', ['/d', '/s', '/c', `"${target}"`, ...process.argv.slice(2)], { stdio: 'inherit', shell: false })
+  : spawn(target, process.argv.slice(2), { stdio: 'inherit', shell: false });
 child.on('exit', code => process.exit(code ?? 0));
 child.on('error', err => {
   console.error(err.message);

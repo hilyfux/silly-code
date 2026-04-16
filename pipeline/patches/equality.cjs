@@ -9,41 +9,41 @@ module.exports = function applyEquality({ patch }) {
   // Patch 20: Tier bypass — always return "max" subscription
   // XK() returns subscription tier. "max" unlocks ULTRATHINK, ULTRAPLAN, etc.
   patch('20-tier-bypass',
-    'function jK(){if(NJq())return VJq();if(!eJ())return null;let q=a7();if(!q)return null;return q.subscriptionType??null}',
+    'function jK(){if(WXq())return PXq();if(!qX())return null;let q=o7();if(!q)return null;return q.subscriptionType??null}',
     'function jK(){return"max"}'
   )
 
   // Patch 21: Subscriber check — always subscribed
   patch('21-subscriber-bypass',
-    'function o7(){if(!eJ())return!1;return Zb(a7()?.scopes)',
-    'function o7(){return!0;if(!eJ())return!1;return Zb(a7()?.scopes)'
+    'function tX(){if(!aK())return!1;return vT6()===null}',
+    'function tX(){return!0;if(!aK())return!1;return vT6()===null}'
   )
 
   // Patch 22: Enable /loop dynamic mode — bypass statsig feature flag
   patch('22-loop-dynamic-enable',
-    'function o8z(){return b8("tengu_kairos_loop_dynamic",!1)}',
-    'function o8z(){return!0}'
+    'function I7z(){return I8("tengu_kairos_loop_dynamic",!1)}',
+    'function I7z(){return!0}'
   )
 
   // Patch 24: Enable /loop prompt preamble — bypass statsig feature flag
   patch('24-loop-prompt-enable',
-    'function c37(){return b8("tengu_kairos_loop_prompt",!1)}',
-    'function c37(){return!0}'
+    'function yi1(){return I8("tengu_kairos_loop_prompt",!1)}',
+    'function yi1(){return!0}'
   )
 
   // Patch 23: Disable tool deferral for third-party providers — force direct load
   patch('23-no-defer-third-party',
-    'if(Q04&&q.name===Q04){if((OR8(),u7(AR8)).isLoopDynamicEnabled())return!1}return q.shouldDefer===!0}',
-    'if(Q04&&q.name===Q04){if((OR8(),u7(AR8)).isLoopDynamicEnabled())return!1}if(typeof Uq==="function"&&Uq()!=="firstParty")return!1;return q.shouldDefer===!0}'
+    'if(jW4&&q.name===jW4){if((WR8(),u7(PR8)).isLoopDynamicEnabled())return!1}return q.shouldDefer===!0}',
+    'if(jW4&&q.name===jW4){if((WR8(),u7(PR8)).isLoopDynamicEnabled())return!1}if(typeof Uq==="function"&&Uq()!=="firstParty")return!1;return q.shouldDefer===!0}'
   )
 
   // Patch 25: Force Sonnet as the default model for firstParty Claude.
-  // Upstream Vv() returns Opus when tier == "max"/"team" (our patch 20 forces
+  // Upstream Nv() returns Opus when tier == "max"/"team" (our patch 20 forces
   // "max" to unlock tier-gated features), which would otherwise auto-select
   // Opus 4.6 by default and burn ~5× Sonnet's token budget. Users who want
   // Opus can still flip with /model opus; the tier unlocks remain intact.
   patch('25-sonnet-default',
-    'function Vv(){if(dh())return ZE()+(oJ()?"[1m]":"");if(U76())return ZE()+(oJ()?"[1m]":"");return Of()}',
-    'function Vv(){return Of()+(oJ()?"[1m]":"")}'
+    'function Nv(){if(Qh())return EE()+(aJ()?"[1m]":"");if(r76())return EE()+(aJ()?"[1m]":"");return $G()}',
+    'function Nv(){return $G()+(aJ()?"[1m]":"")}'
   )
 }

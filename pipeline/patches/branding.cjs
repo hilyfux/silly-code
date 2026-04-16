@@ -6,8 +6,8 @@
 
 module.exports = function applyBranding({ patch, patchAll }) {
   patchAll('01-version',
-    'VERSION:"2.1.109"',
-    'VERSION:"2.1.109-silly"'
+    'VERSION:"2.1.110"',
+    'VERSION:"2.1.110-silly"'
   )
 
   patchAll('02-package-url',
@@ -58,7 +58,7 @@ module.exports = function applyBranding({ patch, patchAll }) {
   // Patch 08: Environment section — Claude model family info
   // This leaks Claude model IDs into the system prompt for all providers
   patch('08-model-family',
-    'The most recent Claude model family is Claude 4.6 and 4.5. Model IDs — Opus 4.6: \'${uj7.opus}\', Sonnet 4.6: \'${uj7.sonnet}\', Haiku 4.5: \'${uj7.haiku}\'. When building AI applications, default to the latest and most capable Claude models.',
+    'The most recent Claude model family is Claude 4.6 and 4.5. Model IDs — Opus 4.6: \'${NH7.opus}\', Sonnet 4.6: \'${NH7.sonnet}\', Haiku 4.5: \'${NH7.haiku}\'. When building AI applications, default to the latest and most capable Claude models.',
     'The most recent model family is Claude 4.6 and 4.5. When building AI applications, default to the latest and most capable models.'
   )
 
@@ -183,8 +183,8 @@ module.exports = function applyBranding({ patch, patchAll }) {
 
   // Patch 10a: TUI header brand name variable
   patch('10a-header-brand-var',
-    'var PYK="Claude Code"',
-    'var PYK="Silly Code"'
+    'var _YK="Claude Code"',
+    'var _YK="Silly Code"'
   )
 
   // Patch 10b: TUI header themed render — status bar "Claude Code vX.X.X"
@@ -319,8 +319,8 @@ module.exports = function applyBranding({ patch, patchAll }) {
   // Upstream appends `The user's email address is X` to the prompt as user context.
   // For non-Claude providers, this leaks account email into the conversation.
   patch('14b-agent-prompt-hide-email',
-    "let z=k_()?.emailAddress;return{..._&&{claudeMd:_},...z&&{userEmail:`The user's email address is",
-    "let z=(typeof Uq==='function'&&Uq()!=='firstParty')?null:k_()?.emailAddress;return{..._&&{claudeMd:_},...z&&{userEmail:`The user's email address is"
+    "let z=V_()?.emailAddress;return{..._&&{claudeMd:_},...z&&{userEmail:`The user's email address is",
+    "let z=(typeof Uq==='function'&&Uq()!=='firstParty')?null:V_()?.emailAddress;return{..._&&{claudeMd:_},...z&&{userEmail:`The user's email address is"
   )
 
   // Patches 13a-l: Multi-color mascot — saturated rainbow plushie
@@ -390,39 +390,39 @@ module.exports = function applyBranding({ patch, patchAll }) {
 
   // yuY (Apple Terminal variant, 5 spans — anchored via Symbol.for prefix)
   patch('13h-mascot-apple-left',
-    'Symbol.for("react.memo_cache_sentinel"))z=lz.createElement(T,{color:"clawd_body"},"▗")',
-    `Symbol.for("react.memo_cache_sentinel"))z=lz.createElement(T,{color:"${ROSE}"},"▗")`
+    'Symbol.for("react.memo_cache_sentinel"))z=gz.createElement(T,{color:"clawd_body"},"▗")',
+    `Symbol.for("react.memo_cache_sentinel"))z=gz.createElement(T,{color:"${ROSE}"},"▗")`
   )
   patch('13i-mascot-apple-face',
-    '!==Y)A=lz.createElement(T,{color:"clawd_background",backgroundColor:"clawd_body"},Y)',
-    `!==Y)A=lz.createElement(T,{color:"${NAVY}",backgroundColor:"${PINK_FACE}"},Y)`
+    '!==Y)A=gz.createElement(T,{color:"clawd_background",backgroundColor:"clawd_body"},Y)',
+    `!==Y)A=gz.createElement(T,{color:"${NAVY}",backgroundColor:"${PINK_FACE}"},Y)`
   )
   patch('13j-mascot-apple-right',
-    'Symbol.for("react.memo_cache_sentinel"))O=lz.createElement(T,{color:"clawd_body"},"▖")',
-    `Symbol.for("react.memo_cache_sentinel"))O=lz.createElement(T,{color:"${ORANGE}"},"▖")`
+    'Symbol.for("react.memo_cache_sentinel"))O=gz.createElement(T,{color:"clawd_body"},"▖")',
+    `Symbol.for("react.memo_cache_sentinel"))O=gz.createElement(T,{color:"${ORANGE}"},"▖")`
   )
   // Apple body bar: the original `" ".repeat(7)` on a bg color renders
   // nothing visible when bg blends with the terminal theme. Replace with
   // 7 actual block chars each in a distinct color — guaranteed to show up.
   patch('13k-mascot-apple-body',
-    'lz.createElement(T,{backgroundColor:"clawd_body"}," ".repeat(7))',
-    `lz.createElement(T,null,` +
-      `lz.createElement(T,{color:"${B1}"},"█"),` +
-      `lz.createElement(T,{color:"${B2}"},"█"),` +
-      `lz.createElement(T,{color:"${B3}"},"█"),` +
-      `lz.createElement(T,{color:"${B3}"},"█"),` +
-      `lz.createElement(T,{color:"${B4}"},"█"),` +
-      `lz.createElement(T,{color:"${B5}"},"█"),` +
-      `lz.createElement(T,{color:"${VIOLET}"},"█")` +
+    'gz.createElement(T,{backgroundColor:"clawd_body"}," ".repeat(7))',
+    `gz.createElement(T,null,` +
+      `gz.createElement(T,{color:"${B1}"},"█"),` +
+      `gz.createElement(T,{color:"${B2}"},"█"),` +
+      `gz.createElement(T,{color:"${B3}"},"█"),` +
+      `gz.createElement(T,{color:"${B3}"},"█"),` +
+      `gz.createElement(T,{color:"${B4}"},"█"),` +
+      `gz.createElement(T,{color:"${B5}"},"█"),` +
+      `gz.createElement(T,{color:"${VIOLET}"},"█")` +
     `)`
   )
   // Apple feet: same asymmetric split as NuY.
   patch('13l-mascot-apple-feet',
-    'lz.createElement(T,{color:"clawd_body"},"▘▘ ▝▝")',
-    `lz.createElement(T,null,` +
-      `lz.createElement(T,{color:"${FOOT_L}"},"▘▘"),` +
-      `lz.createElement(T,null," "),` +
-      `lz.createElement(T,{color:"${VIOLET}"},"▝▝")` +
+    'gz.createElement(T,{color:"clawd_body"},"▘▘ ▝▝")',
+    `gz.createElement(T,null,` +
+      `gz.createElement(T,{color:"${FOOT_L}"},"▘▘"),` +
+      `gz.createElement(T,null," "),` +
+      `gz.createElement(T,{color:"${VIOLET}"},"▝▝")` +
     `)`
   )
 }

@@ -113,3 +113,26 @@
 {"e":"f","tool":"Read","err":"File does not exist. Note: your current working directory is /Users/wanglinqing/Desktop/workspace-de","t":1776250483}
 {"e":"f","tool":"Bash","err":"Exit code 1 ls: /Users/wanglinqing/Desktop/workspace-desktop/silly-code/.claude/worktrees/agent-a422","t":1776250491}
 {"e":"f","tool":"Bash","err":"Exit code 1 ls: /Users/wanglinqing/Desktop/workspace-desktop/silly-code/.claude/worktrees/agent-ab37","t":1776250638}
+{"e":"f","tool":"Bash","err":"Exit code 1 From https://github.com/hilyfux/silly-code  * branch            main       -> FETCH_HEAD","t":1776303930}
+{"e":"i","p":"tests/CLAUDE.md","t":1776304232}
+{"type":"upstream_upgrade_attempt","ts":"2026-04-16T01:51:22.577Z","runner":"local","workflow":"upstream-upgrade","current_version":"2.1.109","target_version":"2.1.110","result":"broken","ci_exit_code":2,"status":"broken","auto_fix":{"varmap_applied":true,"content_anchor_applied":true},"patch":{"build_ok":false,"failing_count":16,"failing_list":["08-model-family","14b-agent-prompt-hide-email","13h-mascot-apple-left","13i-mascot-apple-face","13j-mascot-apple-right","13k-mascot-apple-body","13l-mascot-apple-feet","60-model-display-name","67-public-model-display","66-fast-mode-display","20-tier-bypass","21-subscriber-bypass","22-loop-dynamic-enable","24-loop-prompt-enable","23-no-defer-third-party","25-sonnet-default"]},"tests":{"ok":true,"failed_test":null},"artifacts":{"varmap_file":"pipeline/varmap-2.1.110.json"},"lessons":[],"next_action":"manual_patch_review"}
+{"e":"f","tool":"Bash","err":"Exit code 2 [ci-upgrade] current=2.1.109 latest=2.1.110 [ci-upgrade] fetching tarball... npm notice ","t":1776304282}
+{"e":"f","tool":"Read","err":"EISDIR: illegal operation on a directory, read '/Users/wanglinqing/.claude/plugins/cache/pua-skills/","t":1776304366}
+{"e":"r","p":"pipeline/patches/equality.cjs","t":1776304496}
+{"e":"i","p":"pipeline/CLAUDE.md","t":1776304500}
+{"e":"i","p":"pipeline/patches/CLAUDE.md","t":1776304500}
+{"e":"r","p":"pipeline/patches/provider-engine.cjs","t":1776304618}
+{"e":"r","p":"pipeline/patches/provider-engine.cjs","t":1776304621}
+{"e":"r","p":"pipeline/patches/branding.cjs","t":1776304656}
+{"e":"r","p":"pipeline/patches/provider-engine.cjs","t":1776304679}
+{"e":"r","p":"pipeline/patches/branding.cjs","t":1776304682}
+{"e":"w:edit","p":"pipeline/patches/branding.cjs","t":1776304844}
+{"e":"w:edit","p":"pipeline/patches/branding.cjs","t":1776304853}
+{"e":"w:edit","p":"pipeline/patches/branding.cjs","t":1776304862}
+{"e":"w:edit","p":"pipeline/patches/branding.cjs","t":1776304873}
+{"e":"w:edit","p":"pipeline/patches/equality.cjs","t":1776304897}
+{"e":"w:edit","p":"pipeline/patches/provider-engine.cjs","t":1776304903}
+{"e":"w:edit","p":"pipeline/patches/provider-engine.cjs","t":1776304907}
+{"e":"w:edit","p":"pipeline/patches/provider-engine.cjs","t":1776304913}
+{"e":"w:edit","p":"pipeline/patches/provider-engine.cjs","t":1776304918}
+{"e":"f","tool":"Bash","err":"Exit code 1 The following paths are ignored by one of your .gitignore files: .claude hint: Use -f if","t":1776305142}

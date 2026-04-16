@@ -1,41 +1,19 @@
-# 工作快照 (04/15 19:04)
+# Upstream Upgrade Snapshot
 
-## 活跃模块
-- pipeline (r:12 w:16)
-- bin (r:6 w:12)
-- tests (r:3 w:5)
-- .github/workflows (r:1 w:3)
-- . (r:2 w:1)
-- skills (r:0 w:2)
-- src/utils/plugins (r:1 w:0)
-- src/cli (r:1 w:0)
+## Latest status
+- Current repo upstream version: 2.1.109
+- Last attempted target: 2.1.110
+- Last result: broken
+- Last timestamp: 2026-04-16T01:51:22.577Z
 
-## 修改的模块
-- bin
-- tests
-- .
-- skills
-- pipeline
-- .github/workflows
+## Recent attempts
+- 2.1.109 -> 2.1.110: broken (08-model-family, 14b-agent-prompt-hide-email, 13h-mascot-apple-left, 13i-mascot-apple-face, 13j-mascot-apple-right, 13k-mascot-apple-body, 13l-mascot-apple-feet, 60-model-display-name, 67-public-model-display, 66-fast-mode-display, 20-tier-bypass, 21-subscriber-bypass, 22-loop-dynamic-enable, 24-loop-prompt-enable, 23-no-defer-third-party, 25-sonnet-default)
 
-## 未提交变更 (work in progress)
--  M .github/workflows/upstream-upgrade.yml
--  M .gitignore
--  M bin/upgrade-check.sh
--  M pipeline/ci-upgrade.cjs
-- ?? .knowledge-graph/
-- ?? skills/
-- ?? tests/ci-upgrade-kg.test.cjs
-- ?? tests/upgrade-check.test.cjs
+## Known fragile areas
+- 08-model-family (1 recent failures)
+- 14b-agent-prompt-hide-email (1 recent failures)
+- 13h-mascot-apple-left (1 recent failures)
 
-## 遇到的问题
-- Bash: Exit code 1   ci-upgrade upgraded KG event: PASS node:assert:95   throw new AssertionError(obj);   ^
-- Bash: Exit code 1 ls: /Users/wanglinqing/Desktop/workspace-desktop/silly-code/.claude/worktrees/agent-a30a
-- Bash: Exit code 1 ls: /Users/wanglinqing/Desktop/workspace-desktop/silly-code/.claude/worktrees/agent-a422
-
-## 本次提交
-- 573675d refactor(bin): tighten auth exports and fix fragile string checks
-- 12f0991 fix(cost): default to Sonnet 4.6 without giving up tier unlocks
-- a569373 docs(kg): track src/ as legacy reference
-- dd24e3a refactor: extract auth state helper and tighten Windows launcher
-- c7e061c feat(privacy): silence auth-conflict and JetBrains banners
+## Recommended next recovery step
+- Inspect the repeated failing patch modules first
+- Compare the newest varmap against the previous released version

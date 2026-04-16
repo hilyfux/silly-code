@@ -1,0 +1,15 @@
+{
+  "isEnvTruthy": "S6",
+  "isEnvTruthy_in_getAPIProvider": "S6",
+  "getAPIProvider": "Uq",
+  "isFirstParty": "Tw",
+  "providerFamily": "OQ",
+  "modelAwareProviderResolver": "sX",
+  "subscriptionTier": "jK",
+  "isSubscriber": "i7",
+  "statsigTransport": "wU",
+  "AnthropicSDK": "K",
+  "configVar": "z",
+  "defaultContextWindow": "uh1",
+  "version": "2.1.110"
+}

@@ -78,10 +78,12 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
   //   - whether user is in China (date separator / vs -)
   //   - whether user is behind a known proxy (apostrophe variant)
   //   - whether user is using a competitor API (apostrophe variant)
-  // Fix: return a timezone matching the user's VPN exit (Asia/Tokyo).
+  // Fix: dynamically resolve timezone from current network IP (follows VPN exit).
+  //   Priority: SILLY_TIMEZONE env → IP geolocation lookup → "UTC" fallback.
+  //   Result cached in c11 (one lookup per process lifetime).
   patch('45-timezone-privacy',
     'function Up6(){if(!c11)c11=Intl.DateTimeFormat().resolvedOptions().timeZone;return c11}',
-    'function Up6(){return"Asia/Tokyo"}'
+    'function Up6(){if(!c11){c11=process.env.SILLY_TIMEZONE;if(!c11){try{c11=require("child_process").execSync("curl -s --max-time 3 http://ip-api.com/line/?fields=timezone",{encoding:"utf8",stdio:["pipe","pipe","pipe"]}).trim()}catch{}}if(!c11||!c11.includes("/"))c11="UTC"}return c11}'
   )
 
   // Patch 46: Neutralize steganographic apostrophe in system prompt date string

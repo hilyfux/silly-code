@@ -194,7 +194,7 @@ function makeSseStream(oaiResp, model) {
     const _send=(ev,d)=>ctrl.enqueue(_enc.encode('event: '+ev+'\ndata: '+JSON.stringify(d)+'\n\n'));
     const _closeAll=()=>{
       // Flush buffered tool args — clean empty-string params before sending
-      for(const[bi,rawArgs]of _argsMap){try{const _ai=JSON.parse(rawArgs);for(const _k of Object.keys(_ai)){if(_ai[_k]==='')delete _ai[_k];}  _send('content_block_delta',{type:'content_block_delta',index:bi,delta:{type:'input_json_delta',partial_json:JSON.stringify(_ai)}});}catch{_send('content_block_delta',{type:'content_block_delta',index:bi,delta:{type:'input_json_delta',partial_json:rawArgs}});}}_argsMap.clear();
+      for(const[bi,rawArgs]of _argsMap){try{const _ai=JSON.parse(rawArgs);for(const _k of Object.keys(_ai)){if(_ai[_k]===''||_ai[_k]===null)delete _ai[_k];}  _send('content_block_delta',{type:'content_block_delta',index:bi,delta:{type:'input_json_delta',partial_json:JSON.stringify(_ai)}});}catch{_send('content_block_delta',{type:'content_block_delta',index:bi,delta:{type:'input_json_delta',partial_json:rawArgs}});}}_argsMap.clear();
       if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockOpen=false;}
       for(const bi of _openToolBlocks){_send('content_block_stop',{type:'content_block_stop',index:bi});}_openToolBlocks.clear();
     };
@@ -329,7 +329,7 @@ function makeResponsesSseStream(oaiResp, model) {
           _argsBuf+=(_ev.delta||'');
         }
         if(_t==='response.function_call_arguments.done'){
-          if(_argsBuf){try{const _ai=JSON.parse(_argsBuf);for(const _k of Object.keys(_ai)){if(_ai[_k]==='')delete _ai[_k];}  _send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'input_json_delta',partial_json:JSON.stringify(_ai)}});}catch{_send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'input_json_delta',partial_json:_argsBuf}});}_argsBuf='';}
+          if(_argsBuf){try{const _ai=JSON.parse(_argsBuf);for(const _k of Object.keys(_ai)){if(_ai[_k]===''||_ai[_k]===null)delete _ai[_k];}  _send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'input_json_delta',partial_json:JSON.stringify(_ai)}});}catch{_send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'input_json_delta',partial_json:_argsBuf}});}_argsBuf='';}
           if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
         }
         if(_t==='response.output_text.done'){
@@ -395,7 +395,7 @@ function oaiToAnthropicResponse(oaiJson, model) {
   if (_mg.tool_calls) for (const tc of _mg.tool_calls) {
     let _i = {}; try { _i = JSON.parse(tc.function.arguments || '{}') } catch {}
     // Strip empty-string values — GPT sometimes emits optional params as "" (e.g. pages:"") which harness rejects
-    for (const _k of Object.keys(_i)) { if (_i[_k] === '') delete _i[_k]; }
+    for (const _k of Object.keys(_i)) { if (_i[_k] === '' || _i[_k] === null) delete _i[_k]; }
     _ct.push({ type: 'tool_use', id: tc.id || 'tc_' + Date.now(), name: tc.function.name, input: _i });
   }
   return new Response(JSON.stringify({
@@ -597,7 +597,7 @@ async function collectResponsesSse(oaiResp, model) {
         }
         if (_t === 'response.function_call_arguments.delta') _curArgs += (_ev.delta || '');
         if (_t === 'response.function_call_arguments.done') {
-          if (_curTool) { try { _curTool.input = JSON.parse(_curArgs || '{}'); for (const _k of Object.keys(_curTool.input)) { if (_curTool.input[_k] === '') delete _curTool.input[_k]; } } catch {} _toolCalls.push(_curTool); _curTool = null; _curArgs = ''; }
+          if (_curTool) { try { _curTool.input = JSON.parse(_curArgs || '{}'); for (const _k of Object.keys(_curTool.input)) { if (_curTool.input[_k] === '' || _curTool.input[_k] === null) delete _curTool.input[_k]; } } catch {} _toolCalls.push(_curTool); _curTool = null; _curArgs = ''; }
         }
         if (_t === 'response.completed') {
           const _u = _ev.response?.usage || {};
@@ -615,7 +615,7 @@ async function collectResponsesSse(oaiResp, model) {
   // Flush any partial text/think not closed by done events
   if (_curText) _textParts.push(_curText);
   if (_curThink) _thinkParts.push(_curThink);
-  if (_curTool) { try { _curTool.input = JSON.parse(_curArgs || '{}'); for (const _k of Object.keys(_curTool.input)) { if (_curTool.input[_k] === '') delete _curTool.input[_k]; } } catch {} _toolCalls.push(_curTool); }
+  if (_curTool) { try { _curTool.input = JSON.parse(_curArgs || '{}'); for (const _k of Object.keys(_curTool.input)) { if (_curTool.input[_k] === '' || _curTool.input[_k] === null) delete _curTool.input[_k]; } } catch {} _toolCalls.push(_curTool); }
   const _ct = [];
   for (const t of _thinkParts) _ct.push({ type: 'thinking', thinking: t });
   if (_textParts.length) _ct.push({ type: 'text', text: _textParts.join('') });

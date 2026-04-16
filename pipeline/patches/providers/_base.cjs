@@ -338,11 +338,25 @@ function tameSkillPrompts(text) {
   // Strip Anthropic billing header injected at the top of system prompts —
   // this is internal Claude Code telemetry and confuses GPT about its identity.
   text = text.replace(/^x-anthropic-billing-header:[^\n]*\n?/m, '');
-  // Strip <system-reminder> blocks that are Claude Code-internal plumbing:
-  //   • deferred tool schema notices (ToolSearch, ExitPlanMode, etc.)
-  //   • UserPromptSubmit hook results (PUA activation, frustration hooks)
-  // These blocks are meaningful to Claude but noise to GPT Pro.
-  text = text.replace(/<system-reminder>\s*The following deferred tools[\s\S]*?<\/system-reminder>/g, '');
+  // Rewrite deferred-tool schema notices from Claude Code protocol → GPT-usable format.
+  // Original text tells Claude to call ToolSearch with "select:Name" syntax before
+  // using a deferred tool. GPT Pro can follow this exact same protocol — it just needs
+  // the instructions in plain language without Claude-specific jargon.
+  text = text.replace(
+    /<system-reminder>\s*The following deferred tools are now available via ToolSearch\.([\s\S]*?)<\/system-reminder>/g,
+    (_, body) => {
+      // Extract tool names from the body (one per line after the header)
+      const names = (body.match(/^\s*(\w+)\s*$/gm) || []).map(s => s.trim()).filter(Boolean);
+      if (!names.length) return '';
+      return '[TOOL LOADING REQUIRED] These tools need their schemas loaded before use: ' +
+        names.join(', ') + '. ' +
+        'To use any of them: (1) Call ToolSearch with query "select:ToolName" to load its schema, ' +
+        '(2) then call the tool with the parameters returned. ' +
+        'Example: ToolSearch({query:"select:Monitor,ScheduleWakeup"}) then call Monitor/ScheduleWakeup normally.';
+    }
+  );
+  // Strip UserPromptSubmit hook results (PUA activation, frustration hooks) —
+  // these are harness-to-Claude signals with no meaning for GPT Pro.
   text = text.replace(/<system-reminder>\s*UserPromptSubmit hook[\s\S]*?<\/system-reminder>/g, '');
   // Strip the EXTREMELY-IMPORTANT blocks that force skill invocation
   text = text.replace(/<EXTREMELY-IMPORTANT>[\s\S]*?<\/EXTREMELY-IMPORTANT>/g, '');
@@ -453,7 +467,7 @@ function enforceContinuation(text, messages, tools) {
     // Already injected — refresh the open-todos tail so it reflects current state.
     return text.replace(/\n\nYour own TodoWrite list[\s\S]*?<\/continuation-discipline>/, openBlock + _loopBlock + '\n</continuation-discipline>');
   }
-  const block = '\n\n<continuation-discipline>\nYou are running in autonomous agent mode. The user is NOT waiting between your responses — there is no "natural pause" where you hand control back for approval.\n\nHARD RULES:\n1. If your TodoWrite list has any item with status "pending" or "in_progress" — you MUST call another tool in this same response. Not stop.\n2. Narration like "我会继续 / 继续下一批 / 还在继续 / I\'ll continue / next batch / let me keep going" is NOT a substitute for action. Write narration → call the tool in the SAME response.\n3. "Natural stopping points" (one batch clean, one test passing, one file done, one lint rule cleared) are NOT stopping points here — they are mid-stream. Keep going.\n4. Do NOT announce "I\'ll process the remaining items next" and then stop. Process them now.\n\nStop ONLY when:\n  (a) every TodoWrite item is marked completed AND no announced work remains outstanding; OR\n  (b) you hit an error you cannot recover from without user input (say what you need); OR\n  (c) the user explicitly said "stop" in THIS conversation.\n\nBefore writing the last token of your response, self-check:\n  • "Are there pending/in_progress todos?" → if yes, call the next tool NOW.\n  • "Did I just say I\'ll keep going?" → then keep going in this turn, not the next.\n  • "Am I stopping because it feels like a polite handoff?" → don\'t stop.' + openBlock + _loopBlock + '\n</continuation-discipline>';
+  const block = '\n\n<continuation-discipline>\nYou are running in autonomous agent mode. The user is NOT waiting between your responses — there is no "natural pause" where you hand control back for approval.\n\nHARD RULES:\n1. If your TodoWrite list has any item with status "pending" or "in_progress" — you MUST call another tool in this same response. Not stop.\n2. Narration like "我会继续 / 继续下一批 / 还在继续 / I\'ll continue / next batch / let me keep going" is NOT a substitute for action. Write narration → call the tool in the SAME response.\n3. "Natural stopping points" (one batch clean, one test passing, one file done, one lint rule cleared) are NOT stopping points here — they are mid-stream. Keep going.\n4. Do NOT announce "I\'ll process the remaining items next" and then stop. Process them now.\n\nTOOL LOADING (ToolSearch protocol): Some tools require schema loading before use. If you get an InputValidationError or a tool schema is listed as [TOOL LOADING REQUIRED], call ToolSearch first: ToolSearch({query:"select:ToolName"}) → then retry the tool call. Do NOT stop because a tool schema is missing — load it and continue.\n\nStop ONLY when:\n  (a) every TodoWrite item is marked completed AND no announced work remains outstanding; OR\n  (b) you hit an error you cannot recover from without user input (say what you need); OR\n  (c) the user explicitly said "stop" in THIS conversation.\n\nBefore writing the last token of your response, self-check:\n  • "Are there pending/in_progress todos?" → if yes, call the next tool NOW.\n  • "Did I just say I\'ll keep going?" → then keep going in this turn, not the next.\n  • "Am I stopping because it feels like a polite handoff?" → don\'t stop.' + openBlock + _loopBlock + '\n</continuation-discipline>';
   return text + block;
 }
 

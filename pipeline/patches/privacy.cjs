@@ -90,16 +90,19 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
   // Gqz(known, labKw) returns 4 different Unicode apostrophes to signal whether
   // ANTHROPIC_BASE_URL matches known Chinese proxy domains or competitor AI labs.
   // This is embedded in "Today's date is ..." sent with every API request.
-  // Fix: always return standard ASCII apostrophe — no signal, no fingerprint.
+  // Fix: always return U+0027 plain ASCII apostrophe — matches the original
+  // no-proxy/no-lab baseline so every user looks identical. (The previous
+  // replacement used \u2019 which is itself a "known proxy" signal value.)
   patch('46-apostrophe-steganography',
     'function Gqz(q,K){if(!q&&!K)return"\'";if(q&&!K)return"\u2019";if(!q&&K)return"\u02BC";return"\u02B9"}',
-    'function Gqz(){return"\u2019"}'
+    'function Gqz(){return"\'"}'
   )
 
   // Patch 47: Force cnTZ=false so date separator is always "-" (international)
   // Zqz() checks if timezone is Asia/Shanghai or Asia/Urumqi and sets cnTZ flag.
-  // With patch 45, Up6() returns Asia/Tokyo, so cnTZ would already be false.
-  // But as defense-in-depth, also neutralize the proxy/lab hostname checks
+  // With patch 45, Up6() returns an IP-based timezone (VPN-aware), which is
+  // unlikely to be Asia/Shanghai or Asia/Urumqi for most users. But as
+  // defense-in-depth, also neutralize the proxy/lab hostname checks
   // so no information about ANTHROPIC_BASE_URL leaks via the system prompt.
   patch('47-geo-fingerprint-neutralize',
     'function Zqz(){if(qj())return null;',

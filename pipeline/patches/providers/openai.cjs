@@ -151,17 +151,26 @@ async function _openaiAdapter(url, init) {
       // Serial tool execution — parallel calls cause agent loop confusion with GPT Pro
       _req.parallel_tool_calls = false;
     }
-    // 429 retry-with-backoff: up to 3 attempts (2 waits).
+    // 429 retry-with-backoff + fetch timeout: up to 3 attempts (2 waits).
     // chatgpt.com rate-limits aggressively during rapid loop iterations.
     // Without this, Claude Code generates "No response requested." synthetic
     // messages on every 429, burning pua:loop iterations without doing work.
+    // Fetch timeout (120s): chatgpt.com occasionally hangs with no response,
+    // causing subagents to freeze at "Initializing..." indefinitely.
     let _r, _rAttempt = 0;
     while (true) {
-      _r = await fetch('https://chatgpt.com/backend-api/codex/responses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...cred.headers },
-        body: JSON.stringify(_req),
-      });
+      const _ac = new AbortController();
+      const _fetchTimer = setTimeout(() => _ac.abort(), 120000);
+      try {
+        _r = await fetch('https://chatgpt.com/backend-api/codex/responses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...cred.headers },
+          body: JSON.stringify(_req),
+          signal: _ac.signal,
+        });
+      } finally {
+        clearTimeout(_fetchTimer);
+      }
       if (_r.status !== 429 || _rAttempt++ >= 2) break;
       // Cap at 30s: upstream has its own request timeout; waiting 120s risks racing it.
       // parseInt NaN-safe: malformed Retry-After falls back to 60s default.

@@ -104,3 +104,44 @@ if (fail > 0) {
 fs.writeFileSync(OUTPUT + '.tmp', src)
 fs.renameSync(OUTPUT + '.tmp', OUTPUT)
 console.log(`  Output: ${OUTPUT}\n`)
+
+// ── Vendor symlink: ensure pipeline/build/vendor → ripgrep source ─────────
+// cli-patched.js uses import.meta.url to locate vendor/ripgrep/. Since it
+// lives in pipeline/build/ (not the npm package dir), the vendor dir must
+// exist at pipeline/build/vendor/ or Glob/Grep silently fail with ENOENT.
+{
+  const buildDir = path.dirname(OUTPUT)
+  const vendorLink = path.join(buildDir, 'vendor')
+  // Find the vendor in the npm/npx cache
+  let vendorSrc = null
+  const npxDir = path.join(process.env.HOME || '~', '.npm', '_npx')
+  try {
+    for (const e of fs.readdirSync(npxDir)) {
+      const p = path.join(npxDir, e, 'node_modules', '@anthropic-ai', 'claude-code', 'vendor')
+      if (fs.existsSync(p)) { vendorSrc = p; break }
+    }
+  } catch {}
+  if (!vendorSrc) {
+    // Fallback: check local node_modules (if package is installed, not npx)
+    try {
+      const p = require.resolve('@anthropic-ai/claude-code/package.json')
+      const candidate = path.join(path.dirname(p), 'vendor')
+      if (fs.existsSync(candidate)) vendorSrc = candidate
+    } catch {}
+  }
+  if (vendorSrc) {
+    // Update symlink if missing or pointing elsewhere
+    let needsLink = true
+    try {
+      const existing = fs.readlinkSync(vendorLink)
+      if (existing === vendorSrc) needsLink = false
+      else fs.unlinkSync(vendorLink)
+    } catch {}
+    if (needsLink) {
+      fs.symlinkSync(vendorSrc, vendorLink)
+      console.log(`  → vendor: ${vendorLink}`)
+    }
+  } else {
+    console.warn('  ⚠ vendor/ripgrep not found in npm/npx cache — Glob/Grep will ENOENT')
+  }
+}

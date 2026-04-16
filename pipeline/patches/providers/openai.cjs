@@ -108,8 +108,15 @@ async function _openaiAdapter(url, init) {
     } catch (_e) { console.error('[silly-debug]', _e.message || _e); }
   }
 
-  // Clean Claude-specific identity and tame aggressive skill instructions
-  const _tools = _b.tools || [];
+  // Filter out Claude Code-internal tools that GPT Pro cannot use.
+  // These tools (ToolSearch, ExitPlanMode, EnterPlanMode, worktree ops, notebook ops)
+  // exist only in the Claude Code harness. Sending them to GPT Pro wastes context
+  // window, generates cognitive overhead, and causes GPT to attempt invalid tool calls.
+  const _CC_INTERNAL_TOOLS = new Set([
+    'ToolSearch','ExitPlanMode','EnterPlanMode','ExitWorktree','EnterWorktree',
+    'NotebookEdit','RemoteTrigger','CronCreate','CronDelete','CronList',
+  ]);
+  const _tools = ((_b.tools || []).filter(t => !_CC_INTERNAL_TOOLS.has(t.name)));
   const _clean = (t) => cleanIdentityForProvider(tameSkillPrompts(t), _provName);
   if (_b.system) {
     if (typeof _b.system === 'string') _b.system = enforceContinuation(_clean(_b.system), _b.messages, _tools);

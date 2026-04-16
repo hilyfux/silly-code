@@ -335,6 +335,15 @@ function oaiToAnthropicResponse(oaiJson, model) {
  */
 function tameSkillPrompts(text) {
   if (!text || typeof text !== 'string') return text;
+  // Strip Anthropic billing header injected at the top of system prompts —
+  // this is internal Claude Code telemetry and confuses GPT about its identity.
+  text = text.replace(/^x-anthropic-billing-header:[^\n]*\n?/m, '');
+  // Strip <system-reminder> blocks that are Claude Code-internal plumbing:
+  //   • deferred tool schema notices (ToolSearch, ExitPlanMode, etc.)
+  //   • UserPromptSubmit hook results (PUA activation, frustration hooks)
+  // These blocks are meaningful to Claude but noise to GPT Pro.
+  text = text.replace(/<system-reminder>\s*The following deferred tools[\s\S]*?<\/system-reminder>/g, '');
+  text = text.replace(/<system-reminder>\s*UserPromptSubmit hook[\s\S]*?<\/system-reminder>/g, '');
   // Strip the EXTREMELY-IMPORTANT blocks that force skill invocation
   text = text.replace(/<EXTREMELY-IMPORTANT>[\s\S]*?<\/EXTREMELY-IMPORTANT>/g, '');
   text = text.replace(/<EXTREMELY_IMPORTANT>[\s\S]*?<\/EXTREMELY_IMPORTANT>/g, '');

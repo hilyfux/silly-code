@@ -546,4 +546,72 @@ function enforceContinuation(text, messages, tools) {
   return text + block;
 }
 
-module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, findOpenTodos };
+/**
+ * Collect a chatgpt.com Responses API SSE stream into a static Anthropic response body.
+ * Used when the caller wants non-streaming but the endpoint requires stream:true.
+ *
+ * @param {Response} oaiResp - Raw fetch Response with SSE body
+ * @param {string} model - Model name to embed in response
+ * @returns {Promise<Response>} - Resolved Anthropic Messages API response
+ */
+async function collectResponsesSse(oaiResp, model) {
+  const _dec = new TextDecoder();
+  const _rd = oaiResp.body.getReader();
+  let _buf = '', _msgId = 'msg_sc_' + Date.now();
+  let _inTokens = 0, _outTokens = 0;
+  let _textParts = [], _curText = '', _toolCalls = [], _curTool = null, _curArgs = '';
+  let _stopReason = 'end_turn', _thinkParts = [], _curThink = '';
+  try {
+    while (true) {
+      const { done, value } = await _rd.read();
+      if (done) break;
+      _buf += _dec.decode(value, { stream: true });
+      const _lines = _buf.split('\n'); _buf = _lines.pop() || '';
+      for (const line of _lines) {
+        if (!line.startsWith('data: ')) continue;
+        const _d = line.slice(6).trim();
+        if (_d === '[DONE]') break;
+        let _ev; try { _ev = JSON.parse(_d) } catch { continue }
+        const _t = _ev.type;
+        if (_t === 'response.created') {
+          _msgId = _ev.response?.id || _msgId;
+          _inTokens = _ev.response?.usage?.input_tokens || 0;
+        }
+        if (_t === 'response.output_text.delta') _curText += (_ev.delta || '');
+        if (_t === 'response.output_text.done') { if (_curText) _textParts.push(_curText); _curText = ''; }
+        if (_t === 'response.reasoning_summary_text.delta') _curThink += (_ev.delta || '');
+        if (_t === 'response.reasoning_summary_text.done') { if (_curThink) _thinkParts.push(_curThink); _curThink = ''; }
+        if (_t === 'response.output_item.added' && _ev.item?.type === 'function_call') {
+          _curTool = { type: 'tool_use', id: _ev.item.call_id || ('toolu_' + Date.now()), name: _ev.item.name || '', input: {} };
+          _curArgs = '';
+        }
+        if (_t === 'response.function_call_arguments.delta') _curArgs += (_ev.delta || '');
+        if (_t === 'response.function_call_arguments.done') {
+          if (_curTool) { try { _curTool.input = JSON.parse(_curArgs || '{}') } catch {} _toolCalls.push(_curTool); _curTool = null; _curArgs = ''; }
+        }
+        if (_t === 'response.completed') {
+          const _u = _ev.response?.usage || {};
+          _inTokens = _u.input_tokens || _inTokens;
+          _outTokens = _u.output_tokens || 0;
+          const _ht = _toolCalls.length > 0 || (_ev.response?.output || []).some(o => o.type === 'function_call');
+          _stopReason = _ev.response?.status === 'incomplete' ? 'max_tokens' : _ht ? 'tool_use' : 'end_turn';
+        }
+        if (_t === 'response.failed' || _t === 'response.error') {
+          const _em = _ev.response?.error?.message || _ev.error?.message || ('Codex stream ' + _t);
+          throw new Error('[silly] Codex API: ' + _em);
+        }
+      }
+    }
+  } finally { try { _rd.releaseLock() } catch {} }
+  // Flush any partial text/think not closed by done events
+  if (_curText) _textParts.push(_curText);
+  if (_curThink) _thinkParts.push(_curThink);
+  if (_curTool) { try { _curTool.input = JSON.parse(_curArgs || '{}') } catch {} _toolCalls.push(_curTool); }
+  const _ct = [];
+  for (const t of _thinkParts) _ct.push({ type: 'thinking', thinking: t });
+  if (_textParts.length) _ct.push({ type: 'text', text: _textParts.join('') });
+  for (const tc of _toolCalls) _ct.push(tc);
+  return new Response(JSON.stringify({ id: _msgId, type: 'message', role: 'assistant', content: _ct, model, stop_reason: _stopReason, stop_sequence: null, usage: { input_tokens: _inTokens, output_tokens: _outTokens } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
+module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, findOpenTodos };

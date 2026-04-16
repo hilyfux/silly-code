@@ -82,7 +82,7 @@ async function _openaiAuth() {
 // ── adapter function ─────────────────────────────────────────────────────────
 // Intercepts fetch calls from the upstream client and routes to OpenAI.
 // References _openaiAuth (auth), mapModel, msgToOai, makeSseStream,
-// msgsToResponsesInput, makeResponsesSseStream, cleanIdentityForProvider from _base.cjs
+// msgsToResponsesInput, makeResponsesSseStream, collectResponsesSse, cleanIdentityForProvider from _base.cjs
 // all serialized into the same scope.
 async function _openaiAdapter(url, init) {
   const _codexModelTable = { 'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.4', 'claude-haiku': 'gpt-5.3-codex', default: 'gpt-5.4' };
@@ -133,12 +133,15 @@ async function _openaiAdapter(url, init) {
   }
 
   if (cred.kind === 'oauth') {
-    // ChatGPT OAuth → Responses API
+    // ChatGPT OAuth → chatgpt.com Responses API
+    // NOTE: chatgpt.com/backend-api/codex/responses requires stream:true — non-streaming
+    // requests return HTTP 400 "Stream must be set to true". We always stream and then
+    // collect the SSE into a static response when the caller wants non-streaming.
     const _om = mapModel(_b.model, _codexModelTable);
     const _sysText = flattenSystem(_b.system);
     const _input = msgsToResponsesInput(null, _b.messages);
     const _stream = !!_b.stream;
-    const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: _stream };
+    const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: true };
     // Forward max_tokens and temperature — without these, GPT Pro uses defaults
     // which can truncate long agentic responses or produce inconsistent behavior.
     if (_b.max_tokens) _req.max_output_tokens = _b.max_tokens;
@@ -154,40 +157,10 @@ async function _openaiAdapter(url, init) {
       headers: { 'Content-Type': 'application/json', ...cred.headers },
       body: JSON.stringify(_req),
     });
-    if (!_r.ok) { let _e = await _r.text(); try { _e = JSON.parse(_e).error?.message || _e; } catch {} throw new Error('Codex API error ' + _r.status + ': ' + _e); }
+    if (!_r.ok) { let _e = await _r.text(); try { _e = JSON.parse(_e).detail || JSON.parse(_e).error?.message || _e; } catch {} throw new Error('Codex API error ' + _r.status + ': ' + _e); }
     if (_stream) return new Response(makeResponsesSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
-    // Non-streaming: Responses API returns {output: [{type:'message', content:[{type:'output_text', text:'...'}]}]}
-    const _rd = await _r.json();
-    // Response-side debug dump — Claude Code doesn't have this.
-    // Completes the request→response diagnostic loop for GPT Pro optimization.
-    if (process.env.SILLY_DEBUG_DUMP) {
-      try {
-        const { writeFileSync, mkdirSync } = await import('node:fs');
-        const { tmpdir } = await import('node:os');
-        const { join: _j2 } = await import('node:path');
-        const _dd = _j2(tmpdir(), 'silly-debug');
-        mkdirSync(_dd, { recursive: true });
-        const _ts = new Date().toISOString().replace(/[:.]/g, '-');
-        writeFileSync(_j2(_dd, _ts + '-openai-response.json'), JSON.stringify({ status: _rd.status, output_count: (_rd.output||[]).length, output_types: (_rd.output||[]).map(o=>o.type), usage: _rd.usage, model: _rd.model }, null, 2));
-      } catch (_e2) { console.error('[silly-debug]', _e2.message || _e2); }
-    }
-    const _ct = [];
-    for (const item of (_rd.output || [])) {
-      if (item.type === 'message') {
-        for (const c of (item.content || [])) {
-          if (c.type === 'output_text') _ct.push({ type: 'text', text: c.text });
-        }
-      } else if (item.type === 'function_call') {
-        let _i = {}; try { _i = JSON.parse(item.arguments || '{}') } catch {}
-        _ct.push({ type: 'tool_use', id: item.call_id || 'tc_' + Date.now(), name: item.name, input: _i });
-      } else if (item.type === 'reasoning' || item.type === 'reasoning_summary') {
-        // o-series models return reasoning — map to Anthropic thinking block
-        // so upstream can display it in the TUI and track reasoning costs.
-        const _rt = item.summary || (item.content || []).map(c => c.text || '').join('');
-        if (_rt) _ct.push({ type: 'thinking', thinking: _rt });
-      }
-    }
-    return new Response(JSON.stringify({ id: 'msg_' + (_rd.id || Date.now()), type: 'message', role: 'assistant', content: _ct, model: _b.model, stop_reason: _rd.status === 'incomplete' ? 'max_tokens' : _ct.some(c => c.type === 'tool_use') ? 'tool_use' : 'end_turn', usage: { input_tokens: _rd.usage?.input_tokens || 0, output_tokens: _rd.usage?.output_tokens || 0 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    // Non-streaming caller: drain SSE stream into a static Anthropic response
+    return collectResponsesSse(_r, _b.model);
   } else {
     // API key → Chat Completions
     const _om = mapModel(_b.model, _oaiModelTable);

@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { mapModel, msgToOai, msgsToResponsesInput, flattenSystem, oaiToAnthropicResponse, makeSseStream, makeResponsesSseStream } = require('../pipeline/patches/providers/_base.cjs');
+const { mapModel, msgToOai, msgsToResponsesInput, flattenSystem, oaiToAnthropicResponse, makeSseStream, makeResponsesSseStream, collectResponsesSse } = require('../pipeline/patches/providers/_base.cjs');
 
 // Helper: create a mock Response with SSE body from lines
 function mockSseResponse(lines) {
@@ -329,6 +329,69 @@ async function drainStream(stream) {
     assert.ok(output.includes('"call_abc"'), 'missing tool call id');
     assert.ok(output.includes('"stop_reason":"tool_use"'), 'missing tool_use stop_reason');
     console.log('  makeSseStream chunked tool_calls: PASS');
+  }
+
+  // ── collectResponsesSse — non-streaming caller, forced-stream path ──
+  {
+    const sseLines = [
+      'event: response.created',
+      'data: {"type":"response.created","response":{"id":"resp_abc","usage":{"input_tokens":5,"output_tokens":0}}}',
+      '',
+      'event: response.output_text.delta',
+      'data: {"type":"response.output_text.delta","delta":"Hello"}',
+      '',
+      'event: response.output_text.delta',
+      'data: {"type":"response.output_text.delta","delta":" world"}',
+      '',
+      'event: response.output_text.done',
+      'data: {"type":"response.output_text.done"}',
+      '',
+      'event: response.completed',
+      'data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":5,"output_tokens":2}}}',
+      '',
+    ];
+    const resp = await collectResponsesSse(mockSseResponse(sseLines), 'gpt-5.4');
+    assert.strictEqual(resp.status, 200);
+    const body = JSON.parse(await resp.text());
+    assert.strictEqual(body.id, 'resp_abc');
+    assert.strictEqual(body.role, 'assistant');
+    assert.strictEqual(body.stop_reason, 'end_turn');
+    assert.strictEqual(body.content.length, 1);
+    assert.strictEqual(body.content[0].type, 'text');
+    assert.strictEqual(body.content[0].text, 'Hello world');
+    assert.strictEqual(body.usage.input_tokens, 5);
+    assert.strictEqual(body.usage.output_tokens, 2);
+    console.log('  collectResponsesSse text: PASS');
+  }
+
+  {
+    // collectResponsesSse with tool call
+    const sseLines = [
+      'event: response.created',
+      'data: {"type":"response.created","response":{"id":"resp_tool","usage":{"input_tokens":10,"output_tokens":0}}}',
+      '',
+      'event: response.output_item.added',
+      'data: {"type":"response.output_item.added","item":{"type":"function_call","call_id":"tc_1","name":"bash"}}',
+      '',
+      'event: response.function_call_arguments.delta',
+      'data: {"type":"response.function_call_arguments.delta","delta":"{\\"cmd\\":\\"ls\\"}"}',
+      '',
+      'event: response.function_call_arguments.done',
+      'data: {"type":"response.function_call_arguments.done"}',
+      '',
+      'event: response.completed',
+      'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"function_call"}],"usage":{"input_tokens":10,"output_tokens":3}}}',
+      '',
+    ];
+    const resp = await collectResponsesSse(mockSseResponse(sseLines), 'gpt-5.4');
+    const body = JSON.parse(await resp.text());
+    assert.strictEqual(body.stop_reason, 'tool_use');
+    assert.strictEqual(body.content.length, 1);
+    assert.strictEqual(body.content[0].type, 'tool_use');
+    assert.strictEqual(body.content[0].id, 'tc_1');
+    assert.strictEqual(body.content[0].name, 'bash');
+    assert.deepStrictEqual(body.content[0].input, { cmd: 'ls' });
+    console.log('  collectResponsesSse tool_call: PASS');
   }
 
   console.log('\nAll _base tests passed.');

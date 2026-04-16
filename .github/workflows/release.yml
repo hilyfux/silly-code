@@ -95,6 +95,8 @@ jobs:
 
           ### Install / upgrade
 
+          **macOS / Linux**
+
           \`\`\`bash
           # New install
           curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
@@ -102,6 +104,14 @@ jobs:
           # Existing install
           silly update apply
           \`\`\`
+
+          **Windows PowerShell**
+
+          \`\`\`powershell
+          irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex
+          \`\`\`
+
+          If you installed an earlier Windows build, run the installer again to refresh the `.cmd` launchers.
 
           ### Variable map
           See \`pipeline/varmap-${NEW}.json\` for the minified identifier snapshot.

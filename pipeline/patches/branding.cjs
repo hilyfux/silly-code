@@ -364,11 +364,11 @@ module.exports = function applyBranding({ patch, patchAll }) {
   patch('13e-mascot-body-bar',
     'createElement(T,{color:"clawd_body",backgroundColor:"clawd_background"},"█████")',
     `createElement(T,{backgroundColor:"${INDIGO_BG}"},` +
-      `lz.createElement(T,{color:"${B1}"},"█"),` +
-      `lz.createElement(T,{color:"${B2}"},"█"),` +
-      `lz.createElement(T,{color:"${B3}"},"█"),` +
-      `lz.createElement(T,{color:"${B4}"},"█"),` +
-      `lz.createElement(T,{color:"${B5}"},"█")` +
+      `gz.createElement(T,{color:"${B1}"},"█"),` +
+      `gz.createElement(T,{color:"${B2}"},"█"),` +
+      `gz.createElement(T,{color:"${B3}"},"█"),` +
+      `gz.createElement(T,{color:"${B4}"},"█"),` +
+      `gz.createElement(T,{color:"${B5}"},"█")` +
     `)`
   )
   patch('13f-mascot-r2R',
@@ -380,11 +380,11 @@ module.exports = function applyBranding({ patch, patchAll }) {
   patch('13g-mascot-feet',
     'createElement(T,{color:"clawd_body"},"  ","▘▘ ▝▝","  ")',
     `createElement(T,null,` +
-      `lz.createElement(T,null,"  "),` +
-      `lz.createElement(T,{color:"${FOOT_L}"},"▘▘"),` +
-      `lz.createElement(T,null," "),` +
-      `lz.createElement(T,{color:"${VIOLET}"},"▝▝"),` +
-      `lz.createElement(T,null,"  ")` +
+      `gz.createElement(T,null,"  "),` +
+      `gz.createElement(T,{color:"${FOOT_L}"},"▘▘"),` +
+      `gz.createElement(T,null," "),` +
+      `gz.createElement(T,{color:"${VIOLET}"},"▝▝"),` +
+      `gz.createElement(T,null,"  ")` +
     `)`
   )
 

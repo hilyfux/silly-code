@@ -109,11 +109,11 @@ async function _openaiAdapter(url, init) {
   }
 
   // Only filter tools that are genuinely unusable in sillyx sessions:
-  //   NotebookEdit  — requires a live Jupyter kernel (not present in CLI sessions)
   //   RemoteTrigger — GPT cannot be the target of a remote-trigger dispatch
-  // Everything else (ToolSearch, Plan/Worktree ops, CronCreate/Delete/List) runs
-  // through the harness and CAN work — we translate the usage protocol instead.
-  const _CC_UNUSABLE = new Set(['NotebookEdit', 'RemoteTrigger']);
+  // NotebookEdit: NOT filtered — harness impl is pure JSON cell editing,
+  //   no Jupyter kernel required. Works identically to Edit for .ipynb files.
+  // Everything else runs through the harness and CAN work.
+  const _CC_UNUSABLE = new Set(['RemoteTrigger']);
   const _tools = ((_b.tools || []).filter(t => !_CC_UNUSABLE.has(t.name)));
   const _clean = (t) => cleanIdentityForProvider(tameSkillPrompts(t), _provName);
   if (_b.system) {

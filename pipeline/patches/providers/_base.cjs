@@ -187,10 +187,14 @@ function makeSseStream(oaiResp, model) {
   let _sentStart=false,_blockIdx=0,_blockOpen=false,_outTok=0,_hasTools=false;
   // Track active tool block indices to properly close them
   const _openToolBlocks=new Set();
+  // Buffer tool args per block index — send cleaned JSON at finish_reason
+  const _argsMap=new Map();
   return new ReadableStream({async start(ctrl){
     const _rd=oaiResp.body.getReader();let _buf='';
     const _send=(ev,d)=>ctrl.enqueue(_enc.encode('event: '+ev+'\ndata: '+JSON.stringify(d)+'\n\n'));
     const _closeAll=()=>{
+      // Flush buffered tool args — clean empty-string params before sending
+      for(const[bi,rawArgs]of _argsMap){try{const _ai=JSON.parse(rawArgs);for(const _k of Object.keys(_ai)){if(_ai[_k]==='')delete _ai[_k];}  _send('content_block_delta',{type:'content_block_delta',index:bi,delta:{type:'input_json_delta',partial_json:JSON.stringify(_ai)}});}catch{_send('content_block_delta',{type:'content_block_delta',index:bi,delta:{type:'input_json_delta',partial_json:rawArgs}});}}_argsMap.clear();
       if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockOpen=false;}
       for(const bi of _openToolBlocks){_send('content_block_stop',{type:'content_block_stop',index:bi});}_openToolBlocks.clear();
     };
@@ -228,7 +232,7 @@ function makeSseStream(oaiResp, model) {
               _send('content_block_start',{type:'content_block_start',index:_bi,content_block:{type:'tool_use',id:_tcId,name:tc.function.name,input:{}}});
               _openToolBlocks.add(_bi);
             }
-            if(tc.function?.arguments)_send('content_block_delta',{type:'content_block_delta',index:_bi,delta:{type:'input_json_delta',partial_json:tc.function.arguments}});
+            if(tc.function?.arguments)_argsMap.set(_bi,(_argsMap.get(_bi)||'')+tc.function.arguments);
           }
         }
         if(_ch.finish_reason){
@@ -254,7 +258,7 @@ function makeSseStream(oaiResp, model) {
 function makeResponsesSseStream(oaiResp, model) {
   const _enc=new TextEncoder(),_dec=new TextDecoder();
   const _msgId='msg_sc_'+Date.now();
-  let _blockIdx=0,_blockOpen=false,_outTok=0,_sentStart=false,_hasTools=false,_thinkOpen=false;
+  let _blockIdx=0,_blockOpen=false,_outTok=0,_sentStart=false,_hasTools=false,_thinkOpen=false,_argsBuf='';
   return new ReadableStream({async start(ctrl){
     const _rd=oaiResp.body.getReader();let _buf='';
     const _send=(ev,d)=>ctrl.enqueue(_enc.encode('event: '+ev+'\ndata: '+JSON.stringify(d)+'\n\n'));
@@ -313,16 +317,19 @@ function makeResponsesSseStream(oaiResp, model) {
             _hasTools=true;
             if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
             _send('content_block_start',{type:'content_block_start',index:_blockIdx,content_block:{type:'tool_use',id:_ev.item.call_id||('toolu_'+Date.now()),name:_ev.item.name||'',input:{}}});
-            _blockOpen=true;
+            _blockOpen=true;_argsBuf='';
           } else if(_ev.item?.type==='message'){
             // New text output item — close previous block if open, start fresh text block
             if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
           }
         }
         if(_t==='response.function_call_arguments.delta'){
-          _send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'input_json_delta',partial_json:_ev.delta||''}});
+          // Buffer args — send cleaned JSON on done instead of streaming raw deltas.
+          // Prevents GPT's empty-string optional params (e.g. pages:"") from reaching the harness.
+          _argsBuf+=(_ev.delta||'');
         }
         if(_t==='response.function_call_arguments.done'){
+          if(_argsBuf){try{const _ai=JSON.parse(_argsBuf);for(const _k of Object.keys(_ai)){if(_ai[_k]==='')delete _ai[_k];}  _send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'input_json_delta',partial_json:JSON.stringify(_ai)}});}catch{_send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'input_json_delta',partial_json:_argsBuf}});}_argsBuf='';}
           if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
         }
         if(_t==='response.output_text.done'){
@@ -387,6 +394,8 @@ function oaiToAnthropicResponse(oaiJson, model) {
   if (_mg.content) _ct.push({ type: 'text', text: _mg.content });
   if (_mg.tool_calls) for (const tc of _mg.tool_calls) {
     let _i = {}; try { _i = JSON.parse(tc.function.arguments || '{}') } catch {}
+    // Strip empty-string values — GPT sometimes emits optional params as "" (e.g. pages:"") which harness rejects
+    for (const _k of Object.keys(_i)) { if (_i[_k] === '') delete _i[_k]; }
     _ct.push({ type: 'tool_use', id: tc.id || 'tc_' + Date.now(), name: tc.function.name, input: _i });
   }
   return new Response(JSON.stringify({
@@ -588,7 +597,7 @@ async function collectResponsesSse(oaiResp, model) {
         }
         if (_t === 'response.function_call_arguments.delta') _curArgs += (_ev.delta || '');
         if (_t === 'response.function_call_arguments.done') {
-          if (_curTool) { try { _curTool.input = JSON.parse(_curArgs || '{}') } catch {} _toolCalls.push(_curTool); _curTool = null; _curArgs = ''; }
+          if (_curTool) { try { _curTool.input = JSON.parse(_curArgs || '{}'); for (const _k of Object.keys(_curTool.input)) { if (_curTool.input[_k] === '') delete _curTool.input[_k]; } } catch {} _toolCalls.push(_curTool); _curTool = null; _curArgs = ''; }
         }
         if (_t === 'response.completed') {
           const _u = _ev.response?.usage || {};
@@ -606,7 +615,7 @@ async function collectResponsesSse(oaiResp, model) {
   // Flush any partial text/think not closed by done events
   if (_curText) _textParts.push(_curText);
   if (_curThink) _thinkParts.push(_curThink);
-  if (_curTool) { try { _curTool.input = JSON.parse(_curArgs || '{}') } catch {} _toolCalls.push(_curTool); }
+  if (_curTool) { try { _curTool.input = JSON.parse(_curArgs || '{}'); for (const _k of Object.keys(_curTool.input)) { if (_curTool.input[_k] === '') delete _curTool.input[_k]; } } catch {} _toolCalls.push(_curTool); }
   const _ct = [];
   for (const t of _thinkParts) _ct.push({ type: 'thinking', thinking: t });
   if (_textParts.length) _ct.push({ type: 'text', text: _textParts.join('') });

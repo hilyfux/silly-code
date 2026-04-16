@@ -77,6 +77,7 @@ const modules = [
   require('./patches/provider-engine.cjs'),
   require('./patches/equality.cjs'),
   require('./patches/privacy.cjs'),
+  require('./patches/auth-bypass.cjs'),
 ]
 
 for (const mod of modules) {

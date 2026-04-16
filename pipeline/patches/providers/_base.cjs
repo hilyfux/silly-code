@@ -263,6 +263,17 @@ function makeResponsesSseStream(oaiResp, model) {
           const _ht=_hasTools||(_ev.response?.output||[]).some(o=>o.type==='function_call');
           _finish(_ev.response?.status==='incomplete'?'max_tokens':_ht?'tool_use':'end_turn',_u.output_tokens||_outTok);return;
         }
+        // Handle API-level failures — response.failed / response.error / response.incomplete
+        // Without this, the stream silently hangs until done=true, killing the agent loop.
+        if(_t==='response.failed'||_t==='response.error'){
+          const _em=_ev.response?.error?.message||_ev.error?.message||('Codex stream '+_t);
+          ctrl.error(new Error('[silly] Codex API: '+_em));return;
+        }
+        if(_t==='response.incomplete'){
+          // incomplete without a reason → treat as max_tokens, let upstream handle continuation
+          if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockOpen=false;}
+          _finish('max_tokens',_outTok);return;
+        }
       }
     }
     // Stream ended without response.completed — clean up
@@ -414,7 +425,7 @@ function findOpenTodos(messages) {
  *
  * Append-only (doesn't alter upstream prompt semantics).
  */
-function enforceContinuation(text, messages) {
+function enforceContinuation(text, messages, tools) {
   if (!text || typeof text !== 'string') return text;
   const open = findOpenTodos(messages);
   let openBlock = '';
@@ -422,11 +433,18 @@ function enforceContinuation(text, messages) {
     const lines = open.slice(0, 8).map(t => '  - [' + (t.status || '?') + '] ' + (t.activeForm || t.content || '')).join('\n');
     openBlock = '\n\nYour own TodoWrite list currently has ' + open.length + ' unfinished item(s):\n' + lines + '\nThese items are NOT done. You cannot end the turn until every one is completed or explicitly blocked.';
   }
+  // Detect ScheduleWakeup in tools — /loop sessions require it to be called every turn
+  const _toolNames = Array.isArray(tools) ? tools.map(t => t.name || '') : [];
+  const _hasScheduleWakeup = _toolNames.includes('ScheduleWakeup');
+  const _loopBlock = _hasScheduleWakeup
+    ? '\n\nLOOP ENFORCEMENT: This is a /loop session. ScheduleWakeup is available. You MUST call ScheduleWakeup before ending your response to schedule the next iteration. Failing to call ScheduleWakeup = the autonomous loop permanently dies. After completing your work, call ScheduleWakeup with a delaySeconds appropriate to the task (60-300 seconds).'
+    : '';
+
   if (text.includes('<continuation-discipline>')) {
     // Already injected — refresh the open-todos tail so it reflects current state.
-    return text.replace(/\n\nYour own TodoWrite list[\s\S]*?<\/continuation-discipline>/, openBlock + '\n</continuation-discipline>');
+    return text.replace(/\n\nYour own TodoWrite list[\s\S]*?<\/continuation-discipline>/, openBlock + _loopBlock + '\n</continuation-discipline>');
   }
-  const block = '\n\n<continuation-discipline>\nYou are running in autonomous agent mode. The user is NOT waiting between your responses — there is no "natural pause" where you hand control back for approval.\n\nHARD RULES:\n1. If your TodoWrite list has any item with status "pending" or "in_progress" — you MUST call another tool in this same response. Not stop.\n2. Narration like "我会继续 / 继续下一批 / 还在继续 / I\'ll continue / next batch / let me keep going" is NOT a substitute for action. Write narration → call the tool in the SAME response.\n3. "Natural stopping points" (one batch clean, one test passing, one file done, one lint rule cleared) are NOT stopping points here — they are mid-stream. Keep going.\n4. Do NOT announce "I\'ll process the remaining items next" and then stop. Process them now.\n\nStop ONLY when:\n  (a) every TodoWrite item is marked completed AND no announced work remains outstanding; OR\n  (b) you hit an error you cannot recover from without user input (say what you need); OR\n  (c) the user explicitly said "stop" in THIS conversation.\n\nBefore writing the last token of your response, self-check:\n  • "Are there pending/in_progress todos?" → if yes, call the next tool NOW.\n  • "Did I just say I\'ll keep going?" → then keep going in this turn, not the next.\n  • "Am I stopping because it feels like a polite handoff?" → don\'t stop.' + openBlock + '\n</continuation-discipline>';
+  const block = '\n\n<continuation-discipline>\nYou are running in autonomous agent mode. The user is NOT waiting between your responses — there is no "natural pause" where you hand control back for approval.\n\nHARD RULES:\n1. If your TodoWrite list has any item with status "pending" or "in_progress" — you MUST call another tool in this same response. Not stop.\n2. Narration like "我会继续 / 继续下一批 / 还在继续 / I\'ll continue / next batch / let me keep going" is NOT a substitute for action. Write narration → call the tool in the SAME response.\n3. "Natural stopping points" (one batch clean, one test passing, one file done, one lint rule cleared) are NOT stopping points here — they are mid-stream. Keep going.\n4. Do NOT announce "I\'ll process the remaining items next" and then stop. Process them now.\n\nStop ONLY when:\n  (a) every TodoWrite item is marked completed AND no announced work remains outstanding; OR\n  (b) you hit an error you cannot recover from without user input (say what you need); OR\n  (c) the user explicitly said "stop" in THIS conversation.\n\nBefore writing the last token of your response, self-check:\n  • "Are there pending/in_progress todos?" → if yes, call the next tool NOW.\n  • "Did I just say I\'ll keep going?" → then keep going in this turn, not the next.\n  • "Am I stopping because it feels like a polite handoff?" → don\'t stop.' + openBlock + _loopBlock + '\n</continuation-discipline>';
   return text + block;
 }
 

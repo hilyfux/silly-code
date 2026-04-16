@@ -109,15 +109,16 @@ async function _openaiAdapter(url, init) {
   }
 
   // Clean Claude-specific identity and tame aggressive skill instructions
+  const _tools = _b.tools || [];
   const _clean = (t) => cleanIdentityForProvider(tameSkillPrompts(t), _provName);
   if (_b.system) {
-    if (typeof _b.system === 'string') _b.system = enforceContinuation(_clean(_b.system), _b.messages);
+    if (typeof _b.system === 'string') _b.system = enforceContinuation(_clean(_b.system), _b.messages, _tools);
     else if (Array.isArray(_b.system)) {
       _b.system = _b.system.map(p => p.text ? { ...p, text: _clean(p.text) } : p);
       // Append continuation-discipline block once, on the LAST system block
       if (_b.system.length) {
         const _last = _b.system.length - 1;
-        _b.system[_last] = { ..._b.system[_last], text: enforceContinuation(_b.system[_last].text || '', _b.messages) };
+        _b.system[_last] = { ..._b.system[_last], text: enforceContinuation(_b.system[_last].text || '', _b.messages, _tools) };
       }
     }
   }
@@ -133,8 +134,10 @@ async function _openaiAdapter(url, init) {
     const _input = msgsToResponsesInput(null, _b.messages);
     const _stream = !!_b.stream;
     const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: _stream };
-    if (_b.tools && _b.tools.length) {
-      _req.tools = _b.tools.map(t => ({ type: 'function', name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } }));
+    if (_tools.length) {
+      _req.tools = _tools.map(t => ({ type: 'function', name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } }));
+      // Serial tool execution — parallel calls cause agent loop confusion with GPT Pro
+      _req.parallel_tool_calls = false;
     }
     const _r = await fetch('https://chatgpt.com/backend-api/codex/responses', {
       method: 'POST',

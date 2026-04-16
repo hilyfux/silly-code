@@ -142,9 +142,8 @@ async function _openaiAdapter(url, init) {
     const _input = msgsToResponsesInput(null, _b.messages);
     const _stream = !!_b.stream;
     const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: true };
-    // Forward max_tokens and temperature — without these, GPT Pro uses defaults
-    // which can truncate long agentic responses or produce inconsistent behavior.
-    if (_b.max_tokens) _req.max_output_tokens = _b.max_tokens;
+    // Forward temperature — chatgpt.com Codex does NOT support max_output_tokens
+    // (returns HTTP 400 "Unsupported parameter"). Let GPT Pro use its own token limit.
     if (_b.temperature != null) _req.temperature = _b.temperature;
     if (_b.top_p != null) _req.top_p = _b.top_p;
     if (_tools.length) {

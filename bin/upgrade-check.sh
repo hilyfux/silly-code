@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Fires from launchd/cron; delegates to the upstream-upgrade skill via `sillyx -p`
-# so scheduled upgrades always consume the Codex quota instead of the user's
-# Claude subscription.
+# Fires from launchd/cron; three daily tasks:
+#   1. Version alignment  — ci-upgrade fast-path or sillyx agent
+#   2. Privacy audit      — always runs; findings escalate to sillyx
+#   3. Self-optimization  — sillyx updates skills/KG after any non-trivial run
+#
+# Sillyx (OpenAI) handles all non-trivial work so scheduled tasks drain
+# the ChatGPT Pro quota instead of the user's Claude subscription.
 
 set -euo pipefail
 
@@ -93,6 +97,16 @@ else:
 PY
 }
 
+# ── Task 2: Privacy audit ─────────────────────────────────────────────────────
+run_privacy_audit() {
+  set +e
+  PRIVACY_RAW="$(node pipeline/privacy-audit.cjs 2>&1)"
+  PRIVACY_EXIT=$?
+  set -e
+  echo "$PRIVACY_RAW"
+  return $PRIVACY_EXIT
+}
+
 cleanup_logs() {
   ls -t "$LOG_DIR"/upgrade-*.log 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/null || true
 }
@@ -100,7 +114,7 @@ cleanup_logs() {
 cleanup_logs
 
 {
-  echo "=== $STAMP upgrade-check ==="
+  echo "=== $STAMP daily-check ==="
 
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "not a git repo — skip"
@@ -134,8 +148,10 @@ cleanup_logs
     fi
   fi
 
+  # ── Task 1: Version alignment ──────────────────────────────────────────────
   CURRENT=$(current_version)
   LATEST=$(latest_version)
+  UPGRADE_STATUS="current"   # current | fast_path | needs_agent
   CI_EXIT=""
 
   if [ -z "$LATEST" ]; then
@@ -146,78 +162,154 @@ cleanup_logs
   echo "current=$CURRENT latest=$LATEST"
 
   if [ "$CURRENT" = "$LATEST" ]; then
-    echo "already current — nothing to do"
-    exit 0
-  fi
+    echo "version already current — checking other tasks"
+    UPGRADE_STATUS="current"
+  else
+    # Shell fast-path: try ci-upgrade.cjs first.
+    echo "$CURRENT → $LATEST — trying ci-upgrade.cjs fast path..."
+    CI_EXIT="$(capture_ci_exit)"
 
-  # Shell fast-path: try ci-upgrade.cjs first. If it upgrades cleanly (exit 1),
-  # commit + push directly without spawning an interactive agent. Only when
-  # ci-upgrade exits 2 (partial failure) do we wake the reasoning path.
-  echo "$CURRENT → $LATEST — trying ci-upgrade.cjs fast path..."
-  CI_EXIT="$(capture_ci_exit)"
-
-  case $CI_EXIT in
-    0)
-      # ci-upgrade saw current=latest (race: someone else upgraded just now)
-      echo "ci-upgrade says already current (race with another run) — done"
-      exit 0
-      ;;
-    1)
-      # clean upgrade, changes staged on working tree
-      echo "ci-upgrade handled $LATEST cleanly — committing without agent"
-      run_or_note git add -A
-      if [ "$DRY_RUN" = "1" ]; then
-        echo "dry-run: would commit Track 1: auto-upgrade upstream to $LATEST"
-      else
-        git commit -m "Track 1: auto-upgrade upstream to $LATEST
+    case $CI_EXIT in
+      0)
+        echo "ci-upgrade says already current (race with another run)"
+        UPGRADE_STATUS="current"
+        ;;
+      1)
+        # Clean upgrade — commit + push without agent
+        echo "ci-upgrade handled $LATEST cleanly — committing without agent"
+        run_or_note git add -A
+        if [ "$DRY_RUN" = "1" ]; then
+          echo "dry-run: would commit Track 1: auto-upgrade upstream to $LATEST"
+        else
+          git commit -m "Track 1: auto-upgrade upstream to $LATEST
 
 Shell fast-path — varmap + content-anchor rename sweep applied cleanly,
 no Claude agent needed. All 96 patches + unit tests passed before commit."
-      fi
-      run_or_note git push origin main
-      echo "pushed $LATEST (fast-path, zero agent tokens)"
-      exit 0
-      ;;
-    2)
-      # auto-fix incomplete — ask sillyx (Codex) to take over so the scheduled
-      # upgrade always drains the ChatGPT Pro quota instead of the user's Claude
-      # subscription.
-      AGENT_CMD="$(resolve_agent_cmd)"
-      if [ -z "$AGENT_CMD" ]; then
-        echo "ci-upgrade exit 2 (manual attention needed) but no 'sillyx' binary is available — stopping"
+        fi
+        run_or_note git push origin main
+        echo "pushed $LATEST (fast-path, zero agent tokens)"
+        UPGRADE_STATUS="fast_path"
+        ;;
+      2)
+        # Auto-fix incomplete — will need sillyx
+        echo "ci-upgrade exit 2 — manual rename sweep needed, will invoke sillyx"
+        UPGRADE_STATUS="needs_agent"
+        # Reset partial state so agent starts clean
+        if [ "$DRY_RUN" = "1" ]; then
+          echo "dry-run: would run git reset --hard HEAD --quiet"
+        else
+          git reset --hard HEAD --quiet
+        fi
+        ;;
+      *)
+        echo "ci-upgrade exited $CI_EXIT (unexpected) — will retry next slot"
+        git reset --hard HEAD --quiet 2>/dev/null || true
         exit 1
-      fi
-      echo "ci-upgrade couldn't fully resolve — invoking sillyx agent..."
-      # Reset any partial state from ci-upgrade so agent starts clean
-      if [ "$DRY_RUN" = "1" ]; then
-        echo "dry-run: would run git reset --hard HEAD --quiet"
-      else
-        git reset --hard HEAD --quiet
-      fi
-      SNAPSHOT="$(read_upgrade_snapshot)"
-      PROMPT="Upstream @anthropic-ai/claude-code released $LATEST (current: $CURRENT). ci-upgrade.cjs just tried and exited 2 (partial failure).
+        ;;
+    esac
+  fi
 
-MANDATORY FIRST STEP: Load the sillyx-behavior skill (Skill tool, name='sillyx-behavior') before doing anything else. It contains the complete manual rename sweep procedure you must follow.
+  # ── Task 2: Privacy audit ──────────────────────────────────────────────────
+  echo "--- privacy audit ---"
+  PRIVACY_STATUS="clean"
+  PRIVACY_FINDINGS=""
+  if node pipeline/privacy-audit.cjs > /tmp/silly-privacy-audit.json 2>&1; then
+    echo "privacy audit: clean"
+  else
+    PRIVACY_AUDIT_EXIT=$?
+    if [ "$PRIVACY_AUDIT_EXIT" = "1" ]; then
+      PRIVACY_STATUS="new_endpoints"
+      PRIVACY_FINDINGS="$(cat /tmp/silly-privacy-audit.json 2>/dev/null || echo '{}')"
+      echo "privacy audit: NEW UNBLOCKED ENDPOINTS FOUND"
+      echo "$PRIVACY_FINDINGS"
+    else
+      echo "privacy audit: error (exit $PRIVACY_AUDIT_EXIT) — check binary"
+    fi
+  fi
 
-Then: read the new binary with the grep battery from the skill, diagnose which patches still fail, apply manual renames to the three patch files (branding.cjs / equality.cjs / provider-engine.cjs), rebuild until 0 FAIL, run all tests, commit, push to main.
+  # ── Decide if sillyx agent is needed ──────────────────────────────────────
+  AGENT_CMD="$(resolve_agent_cmd)"
 
-Non-interactive: no brainstorming, no AskUserQuestion, no stopping midway. Show evidence (patch count, version output, test results) in the commit message. Working dir: $ROOT_DIR."
-      if [ -n "$SNAPSHOT" ]; then
-        PROMPT="$PROMPT
+  if [ "$UPGRADE_STATUS" != "needs_agent" ] && [ "$PRIVACY_STATUS" = "clean" ]; then
+    echo "all tasks clean — no agent needed today"
+    exit 0
+  fi
 
-Recent upgrade knowledge graph snapshot:
-$SNAPSHOT"
-      fi
-      PROMPT="$PROMPT
-
-If you can't confidently resolve, stop and open a GitHub issue via gh CLI."
-      note_or_exec "$AGENT_CMD" "$PROMPT"
-      exit 0
-      ;;
-    *)
-      echo "ci-upgrade exited $CI_EXIT (unexpected) — will retry next slot"
-      git reset --hard HEAD --quiet 2>/dev/null || true
+  if [ -z "$AGENT_CMD" ]; then
+    if [ "$UPGRADE_STATUS" = "needs_agent" ]; then
+      echo "upgrade needs manual attention but no 'sillyx' binary available — stopping"
       exit 1
-      ;;
-  esac
+    fi
+    echo "privacy findings noted but no sillyx binary — see .knowledge-graph/privacy-audit-latest.json"
+    exit 0
+  fi
+
+  # ── Task 3: Invoke sillyx with self-contained daily prompt ────────────────
+  echo "invoking sillyx agent for daily tasks..."
+  SNAPSHOT="$(read_upgrade_snapshot)"
+
+  # Build prompt sections
+  UPGRADE_SECTION=""
+  if [ "$UPGRADE_STATUS" = "needs_agent" ]; then
+    UPGRADE_SECTION="
+## TASK 1 — Version alignment (URGENT)
+Upstream @anthropic-ai/claude-code released $LATEST (current: $CURRENT).
+ci-upgrade.cjs just ran and exited 2 (partial failure — auto-fix incomplete).
+Execute the manual rename sweep from the sillyx-behavior skill:
+  Step 1: node pipeline/patch.cjs 2>&1 | grep '✗'
+  Step 2: run the grep battery (python3 inline from the skill)
+  Step 3: edit the 3 patch files with new MATCH constants
+  Step 4: rebuild → test → commit → push"
+  else
+    UPGRADE_SECTION="
+## TASK 1 — Version alignment
+Already at $CURRENT (latest). No upgrade needed."
+  fi
+
+  PRIVACY_SECTION=""
+  if [ "$PRIVACY_STATUS" = "new_endpoints" ]; then
+    PRIVACY_SECTION="
+## TASK 2 — Privacy audit (ACTION REQUIRED)
+pipeline/privacy-audit.cjs found unblocked telemetry endpoints:
+$PRIVACY_FINDINGS
+
+Add blocking patches in pipeline/patches/privacy.cjs for each UNBLOCKED endpoint.
+Pattern: intercept the fetch/xhr in the transport layer, same as patches 30-39.
+After patching: node pipeline/patch.cjs && verify endpoint no longer hits network.
+Commit the new privacy patches."
+  else
+    PRIVACY_SECTION="
+## TASK 2 — Privacy audit
+Clean — all known telemetry endpoints are blocked."
+  fi
+
+  PROMPT="You are sillyx running the daily silly-code maintenance protocol.
+
+MANDATORY FIRST STEP: Load the sillyx-behavior skill (Skill tool, name='sillyx-behavior') before doing anything else.
+
+Working dir: $ROOT_DIR
+
+$UPGRADE_SECTION
+
+$PRIVACY_SECTION
+
+## TASK 3 — Self-optimization (ALWAYS run after tasks 1 and 2)
+After completing the above tasks, update the skills to lock in what you learned:
+1. If any variable renames were found: add a new column to the rename history table in .claude/skills/upstream-upgrade/SKILL.md
+2. If any grep battery pattern returned NOT FOUND: fix it in the skill
+3. Update .knowledge-graph/work-snapshot.md with today's findings summary
+4. Commit all skill/KG updates with message: 'chore(kg): daily self-optimization YYYY-MM-DD'
+
+Non-interactive: no AskUserQuestion, no stopping midway, no brainstorming. Show evidence for every claim. If you can't confidently resolve any task, open a GitHub issue via gh CLI and stop."
+
+  if [ -n "$SNAPSHOT" ]; then
+    PROMPT="$PROMPT
+
+Recent knowledge graph snapshot:
+$SNAPSHOT"
+  fi
+
+  note_or_exec "$AGENT_CMD" "$PROMPT"
+  exit 0
+
 } 2>&1 | tee "$LOG"

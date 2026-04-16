@@ -158,6 +158,19 @@ async function _openaiAdapter(url, init) {
     if (_stream) return new Response(makeResponsesSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
     // Non-streaming: Responses API returns {output: [{type:'message', content:[{type:'output_text', text:'...'}]}]}
     const _rd = await _r.json();
+    // Response-side debug dump — Claude Code doesn't have this.
+    // Completes the request→response diagnostic loop for GPT Pro optimization.
+    if (process.env.SILLY_DEBUG_DUMP) {
+      try {
+        const { writeFileSync, mkdirSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join: _j2 } = await import('node:path');
+        const _dd = _j2(tmpdir(), 'silly-debug');
+        mkdirSync(_dd, { recursive: true });
+        const _ts = new Date().toISOString().replace(/[:.]/g, '-');
+        writeFileSync(_j2(_dd, _ts + '-openai-response.json'), JSON.stringify({ status: _rd.status, output_count: (_rd.output||[]).length, output_types: (_rd.output||[]).map(o=>o.type), usage: _rd.usage, model: _rd.model }, null, 2));
+      } catch (_e2) { console.error('[silly-debug]', _e2.message || _e2); }
+    }
     const _ct = [];
     for (const item of (_rd.output || [])) {
       if (item.type === 'message') {

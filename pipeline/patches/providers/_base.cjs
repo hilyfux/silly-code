@@ -254,7 +254,7 @@ function makeSseStream(oaiResp, model) {
 function makeResponsesSseStream(oaiResp, model) {
   const _enc=new TextEncoder(),_dec=new TextDecoder();
   const _msgId='msg_sc_'+Date.now();
-  let _blockIdx=0,_blockOpen=false,_outTok=0,_sentStart=false,_hasTools=false;
+  let _blockIdx=0,_blockOpen=false,_outTok=0,_sentStart=false,_hasTools=false,_thinkOpen=false;
   return new ReadableStream({async start(ctrl){
     const _rd=oaiResp.body.getReader();let _buf='';
     const _send=(ev,d)=>ctrl.enqueue(_enc.encode('event: '+ev+'\ndata: '+JSON.stringify(d)+'\n\n'));
@@ -278,8 +278,31 @@ function makeResponsesSseStream(oaiResp, model) {
           _sentStart=true;
           _send('message_start',{type:'message_start',message:{id:_ev.response?.id||_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,stop_sequence:null,usage:{input_tokens:_ev.response?.usage?.input_tokens||0,output_tokens:0}}});
         }
+        // o-series reasoning events → Anthropic thinking blocks.
+        // This gives GPT Pro o3/o1 models the SAME thinking visibility as Claude
+        // in the TUI — something Claude Code can't do because it never runs o-series.
+        if(_t==='response.reasoning_summary_part.added'){
+          _ensureStart();
+          if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
+          _send('content_block_start',{type:'content_block_start',index:_blockIdx,content_block:{type:'thinking',thinking:''}});
+          _thinkOpen=true;_blockOpen=true;
+        }
+        if(_t==='response.reasoning_summary_text.delta'){
+          _ensureStart();
+          if(!_thinkOpen){
+            if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;}
+            _send('content_block_start',{type:'content_block_start',index:_blockIdx,content_block:{type:'thinking',thinking:''}});
+            _thinkOpen=true;_blockOpen=true;
+          }
+          _send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'thinking_delta',thinking:_ev.delta||''}});
+        }
+        if(_t==='response.reasoning_summary_text.done'||_t==='response.reasoning_summary_part.done'){
+          if(_thinkOpen&&_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;_thinkOpen=false;}
+        }
         if(_t==='response.output_text.delta'){
           _ensureStart();
+          // Close thinking block if still open before starting text
+          if(_thinkOpen&&_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockIdx++;_blockOpen=false;_thinkOpen=false;}
           if(!_blockOpen){_blockOpen=true;_send('content_block_start',{type:'content_block_start',index:_blockIdx,content_block:{type:'text',text:''}});}
           _outTok++;
           _send('content_block_delta',{type:'content_block_delta',index:_blockIdx,delta:{type:'text_delta',text:_ev.delta||''}});

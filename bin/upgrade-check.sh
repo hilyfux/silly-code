@@ -143,8 +143,28 @@ cleanup_logs
     LOCAL_SHA=$(git rev-parse HEAD 2>/dev/null)
     REMOTE_SHA=$(git rev-parse origin/main 2>/dev/null)
     if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
-      echo "local HEAD ($LOCAL_SHA) != origin/main ($REMOTE_SHA) — skipping"
-      exit 0
+      # Self-update: installed copy is behind origin — pull + rebuild + re-exec.
+      # This is how adapter fixes and skill updates reach the running cron without
+      # manual intervention. Only safe when worktree is clean (checked above).
+      echo "self-update: $LOCAL_SHA → $REMOTE_SHA"
+      git reset --hard origin/main --quiet
+      node pipeline/patch.cjs 2>&1 | tail -3
+      echo "self-update complete — re-executing with new script"
+      exec "$0" "$@"
+    fi
+  fi
+
+  # ── Binary SHA sanity check ───────────────────────────────────────────────
+  # Even when npm version is current, the installed binary may be stale if a
+  # silly-code adapter fix was pushed without an upstream version bump.
+  # `sillyx --version` embeds the build git SHA (e.g. "2.1.110-silly.dc47dcb").
+  _bin="$ROOT_DIR/pipeline/build/cli-patched.js"
+  if [ -f "$_bin" ]; then
+    _bin_sha=$(node "$_bin" --version 2>/dev/null | grep -o '[a-f0-9]\{7\}$' || echo "")
+    _repo_sha=$(git rev-parse --short HEAD 2>/dev/null || echo "")
+    if [ -n "$_bin_sha" ] && [ -n "$_repo_sha" ] && [ "$_bin_sha" != "$_repo_sha" ]; then
+      echo "binary SHA ($_bin_sha) != repo HEAD ($_repo_sha) — rebuilding"
+      node pipeline/patch.cjs 2>&1 | tail -3
     fi
   fi
 
@@ -188,6 +208,7 @@ no Claude agent needed. All 96 patches + unit tests passed before commit."
         fi
         run_or_note git push origin main
         echo "pushed $LATEST (fast-path, zero agent tokens)"
+        echo "NOTE: any running sillyx session uses the old binary — restart it to pick up the new build"
         UPGRADE_STATUS="fast_path"
         ;;
       2)

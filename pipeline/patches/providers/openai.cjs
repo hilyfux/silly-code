@@ -151,11 +151,21 @@ async function _openaiAdapter(url, init) {
       // Serial tool execution — parallel calls cause agent loop confusion with GPT Pro
       _req.parallel_tool_calls = false;
     }
-    const _r = await fetch('https://chatgpt.com/backend-api/codex/responses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...cred.headers },
-      body: JSON.stringify(_req),
-    });
+    // 429 retry-with-backoff: up to 3 attempts (2 waits).
+    // chatgpt.com rate-limits aggressively during rapid loop iterations.
+    // Without this, Claude Code generates "No response requested." synthetic
+    // messages on every 429, burning pua:loop iterations without doing work.
+    let _r, _rAttempt = 0;
+    while (true) {
+      _r = await fetch('https://chatgpt.com/backend-api/codex/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...cred.headers },
+        body: JSON.stringify(_req),
+      });
+      if (_r.status !== 429 || _rAttempt++ >= 2) break;
+      const _ra = parseInt(_r.headers.get('Retry-After') || '60', 10);
+      await new Promise(_res => setTimeout(_res, Math.min(_ra, 120) * 1000));
+    }
     if (!_r.ok) { let _e = await _r.text(); try { _e = JSON.parse(_e).detail || JSON.parse(_e).error?.message || _e; } catch {} throw new Error('Codex API error ' + _r.status + ': ' + _e); }
     if (_stream) return new Response(makeResponsesSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
     // Non-streaming caller: drain SSE stream into a static Anthropic response

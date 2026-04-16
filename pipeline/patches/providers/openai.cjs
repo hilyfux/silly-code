@@ -163,8 +163,10 @@ async function _openaiAdapter(url, init) {
         body: JSON.stringify(_req),
       });
       if (_r.status !== 429 || _rAttempt++ >= 2) break;
-      const _ra = parseInt(_r.headers.get('Retry-After') || '60', 10);
-      await new Promise(_res => setTimeout(_res, Math.min(_ra, 120) * 1000));
+      // Cap at 30s: upstream has its own request timeout; waiting 120s risks racing it.
+      // parseInt NaN-safe: malformed Retry-After falls back to 60s default.
+      const _ra = Math.max(1, parseInt(_r.headers.get('Retry-After') || '', 10) || 60);
+      await new Promise(_res => setTimeout(_res, Math.min(_ra, 30) * 1000));
     }
     if (!_r.ok) { let _e = await _r.text(); try { _e = JSON.parse(_e).detail || JSON.parse(_e).error?.message || _e; } catch {} throw new Error('Codex API error ' + _r.status + ': ' + _e); }
     if (_stream) return new Response(makeResponsesSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });

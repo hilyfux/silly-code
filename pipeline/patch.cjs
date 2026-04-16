@@ -12,6 +12,7 @@
 
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 const { execSync } = require('child_process')
 
 const INPUT = process.argv[2] || path.join(__dirname, 'upstream/package/cli.js')
@@ -125,11 +126,16 @@ console.log(`  Output: ${OUTPUT}\n`)
 {
   const buildDir = path.dirname(OUTPUT)
   const vendorLink = path.join(buildDir, 'vendor')
-  // Find the vendor in the npm/npx cache
+  // Find the vendor in the npm/npx cache.
+  // Sort entries by mtime descending — newest cache entry (most likely to match
+  // the current claude-code version) is checked first, avoiding a full linear scan.
   let vendorSrc = null
-  const npxDir = path.join(process.env.HOME || '~', '.npm', '_npx')
+  const npxDir = path.join(os.homedir(), '.npm', '_npx')  // os.homedir() is cross-platform (Windows: USERPROFILE)
   try {
-    for (const e of fs.readdirSync(npxDir)) {
+    const entries = fs.readdirSync(npxDir)
+      .map(e => { try { return { e, mtime: fs.statSync(path.join(npxDir, e)).mtimeMs } } catch { return { e, mtime: 0 } } })
+      .sort((a, b) => b.mtime - a.mtime)
+    for (const { e } of entries) {
       const p = path.join(npxDir, e, 'node_modules', '@anthropic-ai', 'claude-code', 'vendor')
       if (fs.existsSync(p)) { vendorSrc = p; break }
     }
@@ -143,7 +149,10 @@ console.log(`  Output: ${OUTPUT}\n`)
     } catch {}
   }
   if (vendorSrc) {
-    // Update symlink if missing or pointing elsewhere
+    // Update symlink if missing or pointing elsewhere.
+    // Windows: use 'junction' for directories — works without admin/Developer Mode.
+    // macOS/Linux: third arg is ignored.
+    const _symlinkType = process.platform === 'win32' ? 'junction' : undefined
     let needsLink = true
     try {
       const existing = fs.readlinkSync(vendorLink)
@@ -151,7 +160,7 @@ console.log(`  Output: ${OUTPUT}\n`)
       else fs.unlinkSync(vendorLink)
     } catch {}
     if (needsLink) {
-      fs.symlinkSync(vendorSrc, vendorLink)
+      fs.symlinkSync(vendorSrc, vendorLink, _symlinkType)
       console.log(`  → vendor: ${vendorLink}`)
     }
   } else {

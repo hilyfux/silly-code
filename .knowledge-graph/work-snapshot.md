@@ -1,34 +1,27 @@
-# 工作快照 (04/16 10:26)
+# 工作快照 (04/16 16:03)
 
 ## 活跃模块
-- pipeline (r:12 w:17)
-- bin (r:7 w:13)
-- pipeline/patches (r:6 w:9)
-- tests (r:3 w:5)
-- . (r:4 w:2)
-- .github/workflows (r:1 w:3)
-- skills (r:0 w:2)
-- src/utils/plugins (r:1 w:0)
+- pipeline/patches/providers (r:13 w:10)
+- pipeline (r:2 w:1)
+- pipeline/patches (r:1 w:0)
+- . (r:1 w:0)
 
 ## 修改的模块
-- bin
-- tests
-- .
-- skills
+- pipeline/patches/providers
 - pipeline
-- .github/workflows
-- pipeline/patches
 
 ## 未提交变更 (work in progress)
 -  M .knowledge-graph/graph-events.jsonl
 -  M .knowledge-graph/work-snapshot.md
-- ?? pipeline/privacy-audit.cjs
 
 ## 遇到的问题
+- Bash: Exit code 1
 - Bash: Exit code 1   ci-upgrade upgraded KG event: PASS node:assert:95   throw new AssertionError(obj);   ^
-- Bash: Exit code 1 From https://github.com/hilyfux/silly-code  * branch            main       -> FETCH_HEAD
-- Bash: Exit code 1 ls: /Users/wanglinqing/Desktop/workspace-desktop/silly-code/.claude/worktrees/agent-a30a
+- Bash: Exit code 1 2026-04-16T07-32-11-851Z-openai-request.json 2026-04-16T07-32-13-620Z-openai-request.jso
 
 ## 本次提交
-- e7d3b74 feat(sillyx): add sillyx-behavior skill + wire into upgrade-check prompt
-- 6eac442 chore: upgrade upstream to Claude Code 2.1.110
+- 04a9666 fix(base): extend empty-param filter to also strip null tool inputs
+- d172fcb fix(patch): create vendor symlink in build dir so Glob/Grep find ripgrep
+- 72785b7 fix(base): strip empty-string tool params from GPT responses
+- 9fe69f5 refactor(base): tighten collectResponsesSse — capture ts once, fix [DONE] exit
+- 344b867 fix(kg): consume work-snapshot once at startup to prevent conversation bleed

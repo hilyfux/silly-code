@@ -557,12 +557,13 @@ function enforceContinuation(text, messages, tools) {
 async function collectResponsesSse(oaiResp, model) {
   const _dec = new TextDecoder();
   const _rd = oaiResp.body.getReader();
-  let _buf = '', _msgId = 'msg_sc_' + Date.now();
+  const _ts = Date.now();  // capture once — used for fallback IDs
+  let _buf = '', _msgId = 'msg_sc_' + _ts;
   let _inTokens = 0, _outTokens = 0;
   let _textParts = [], _curText = '', _toolCalls = [], _curTool = null, _curArgs = '';
-  let _stopReason = 'end_turn', _thinkParts = [], _curThink = '';
+  let _stopReason = 'end_turn', _thinkParts = [], _curThink = '', _done = false;
   try {
-    while (true) {
+    while (!_done) {
       const { done, value } = await _rd.read();
       if (done) break;
       _buf += _dec.decode(value, { stream: true });
@@ -570,7 +571,7 @@ async function collectResponsesSse(oaiResp, model) {
       for (const line of _lines) {
         if (!line.startsWith('data: ')) continue;
         const _d = line.slice(6).trim();
-        if (_d === '[DONE]') break;
+        if (_d === '[DONE]') { _done = true; break; }
         let _ev; try { _ev = JSON.parse(_d) } catch { continue }
         const _t = _ev.type;
         if (_t === 'response.created') {
@@ -582,7 +583,7 @@ async function collectResponsesSse(oaiResp, model) {
         if (_t === 'response.reasoning_summary_text.delta') _curThink += (_ev.delta || '');
         if (_t === 'response.reasoning_summary_text.done') { if (_curThink) _thinkParts.push(_curThink); _curThink = ''; }
         if (_t === 'response.output_item.added' && _ev.item?.type === 'function_call') {
-          _curTool = { type: 'tool_use', id: _ev.item.call_id || ('toolu_' + Date.now()), name: _ev.item.name || '', input: {} };
+          _curTool = { type: 'tool_use', id: _ev.item.call_id || ('toolu_' + _ts), name: _ev.item.name || '', input: {} };
           _curArgs = '';
         }
         if (_t === 'response.function_call_arguments.delta') _curArgs += (_ev.delta || '');
@@ -593,8 +594,7 @@ async function collectResponsesSse(oaiResp, model) {
           const _u = _ev.response?.usage || {};
           _inTokens = _u.input_tokens || _inTokens;
           _outTokens = _u.output_tokens || 0;
-          const _ht = _toolCalls.length > 0 || (_ev.response?.output || []).some(o => o.type === 'function_call');
-          _stopReason = _ev.response?.status === 'incomplete' ? 'max_tokens' : _ht ? 'tool_use' : 'end_turn';
+          _stopReason = _ev.response?.status === 'incomplete' ? 'max_tokens' : _toolCalls.length > 0 ? 'tool_use' : 'end_turn';
         }
         if (_t === 'response.failed' || _t === 'response.error') {
           const _em = _ev.response?.error?.message || _ev.error?.message || ('Codex stream ' + _t);

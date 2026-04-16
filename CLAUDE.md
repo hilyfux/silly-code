@@ -81,6 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh 
 ## Skills
 
 - **`/upstream-upgrade`** — Workflow for upgrading when upstream Claude Code releases a new version. Includes patch failure recovery, variable mapping methodology, and testing protocol. Read `skills/upstream-upgrade.md`.
+- **`/sillyx-behavior`** — **Sillyx 必读（OpenAI provider 专用）**。Skill-first 纪律 + PUA 持续推进约束 + upstream upgrade 完整手工路径。任何升级/patch/定时任务排查任务，必须先加载此 skill。
 
 ## Rules
 

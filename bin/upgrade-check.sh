@@ -195,7 +195,13 @@ no Claude agent needed. All 96 patches + unit tests passed before commit."
         git reset --hard HEAD --quiet
       fi
       SNAPSHOT="$(read_upgrade_snapshot)"
-      PROMPT="Upstream @anthropic-ai/claude-code released $LATEST (current: $CURRENT). ci-upgrade.cjs just tried and exited 2 (partial failure). Invoke the upstream-upgrade skill to handle this: read the new binary, diagnose which patches still fail, apply manual renames, test, commit, push to main. Non-interactive: no brainstorming, no AskUserQuestion. Working dir: $ROOT_DIR."
+      PROMPT="Upstream @anthropic-ai/claude-code released $LATEST (current: $CURRENT). ci-upgrade.cjs just tried and exited 2 (partial failure).
+
+MANDATORY FIRST STEP: Load the sillyx-behavior skill (Skill tool, name='sillyx-behavior') before doing anything else. It contains the complete manual rename sweep procedure you must follow.
+
+Then: read the new binary with the grep battery from the skill, diagnose which patches still fail, apply manual renames to the three patch files (branding.cjs / equality.cjs / provider-engine.cjs), rebuild until 0 FAIL, run all tests, commit, push to main.
+
+Non-interactive: no brainstorming, no AskUserQuestion, no stopping midway. Show evidence (patch count, version output, test results) in the commit message. Working dir: $ROOT_DIR."
       if [ -n "$SNAPSHOT" ]; then
         PROMPT="$PROMPT
 

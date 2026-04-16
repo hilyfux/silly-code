@@ -2,6 +2,7 @@
 .claude/CLAUDE.md: .claude/node
 .claude/skills/knowledge-graph/scripts/CLAUDE.md: scripts/scripts
 .claude/skills/knowledge-graph/SKILL.md: knowledge-graph
+.claude/skills/sillyx-behavior/SKILL.md: sillyx-behavior
 .claude/skills/upstream-upgrade/SKILL.md: upstream-upgrad
 .github/CLAUDE.md: .github/github
 .github/workflows/CLAUDE.md: workflows/workf

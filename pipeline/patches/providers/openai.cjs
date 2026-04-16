@@ -139,6 +139,11 @@ async function _openaiAdapter(url, init) {
     const _input = msgsToResponsesInput(null, _b.messages);
     const _stream = !!_b.stream;
     const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: _stream };
+    // Forward max_tokens and temperature — without these, GPT Pro uses defaults
+    // which can truncate long agentic responses or produce inconsistent behavior.
+    if (_b.max_tokens) _req.max_output_tokens = _b.max_tokens;
+    if (_b.temperature != null) _req.temperature = _b.temperature;
+    if (_b.top_p != null) _req.top_p = _b.top_p;
     if (_tools.length) {
       _req.tools = _tools.map(t => ({ type: 'function', name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } }));
       // Serial tool execution — parallel calls cause agent loop confusion with GPT Pro
@@ -149,7 +154,7 @@ async function _openaiAdapter(url, init) {
       headers: { 'Content-Type': 'application/json', ...cred.headers },
       body: JSON.stringify(_req),
     });
-    if (!_r.ok) { const _e = await _r.text(); throw new Error('Codex API error ' + _r.status + ': ' + _e); }
+    if (!_r.ok) { let _e = await _r.text(); try { _e = JSON.parse(_e).error?.message || _e; } catch {} throw new Error('Codex API error ' + _r.status + ': ' + _e); }
     if (_stream) return new Response(makeResponsesSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
     // Non-streaming: Responses API returns {output: [{type:'message', content:[{type:'output_text', text:'...'}]}]}
     const _rd = await _r.json();
@@ -162,6 +167,11 @@ async function _openaiAdapter(url, init) {
       } else if (item.type === 'function_call') {
         let _i = {}; try { _i = JSON.parse(item.arguments || '{}') } catch {}
         _ct.push({ type: 'tool_use', id: item.call_id || 'tc_' + Date.now(), name: item.name, input: _i });
+      } else if (item.type === 'reasoning' || item.type === 'reasoning_summary') {
+        // o-series models return reasoning — map to Anthropic thinking block
+        // so upstream can display it in the TUI and track reasoning costs.
+        const _rt = item.summary || (item.content || []).map(c => c.text || '').join('');
+        if (_rt) _ct.push({ type: 'thinking', thinking: _rt });
       }
     }
     return new Response(JSON.stringify({ id: 'msg_' + (_rd.id || Date.now()), type: 'message', role: 'assistant', content: _ct, model: _b.model, stop_reason: _rd.status === 'incomplete' ? 'max_tokens' : _ct.some(c => c.type === 'tool_use') ? 'tool_use' : 'end_turn', usage: { input_tokens: _rd.usage?.input_tokens || 0, output_tokens: _rd.usage?.output_tokens || 0 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -181,7 +191,7 @@ async function _openaiAdapter(url, init) {
       headers: { 'Content-Type': 'application/json', ...cred.headers },
       body: JSON.stringify(_req),
     });
-    if (!_r.ok) { const _e = await _r.text(); throw new Error('OpenAI API error ' + _r.status + ': ' + _e); }
+    if (!_r.ok) { let _e = await _r.text(); try { _e = JSON.parse(_e).error?.message || _e; } catch {} throw new Error('OpenAI API error ' + _r.status + ': ' + _e); }
     if (_b.stream) return new Response(makeSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
     return oaiToAnthropicResponse(await _r.json(), _b.model);
   }
@@ -206,7 +216,14 @@ module.exports = {
     },
   },
   models: { 'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.4', 'claude-haiku': 'gpt-5.3-codex', default: 'gpt-5.4' },
-  contextWindow: { default: 120000, perModel: {} },
+  contextWindow: { default: 120000, perModel: {
+    'gpt-5.4': 200000,
+    'gpt-5.4-mini': 128000,
+    'gpt-5.3-codex': 120000,
+    'gpt-4o': 128000,
+    'gpt-4o-mini': 128000,
+    'o3': 200000,
+  } },
   tierNames: { max: 'ChatGPT Pro', pro: 'ChatGPT Plus', api: 'OpenAI API' },
   adapter: _openaiAdapter,
   auth: _openaiAuth,

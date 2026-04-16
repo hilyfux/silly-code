@@ -53,9 +53,31 @@ function msgToOai(msg){
     else if(p.type==='image')_texts.push({type:'image_url',image_url:{url:'data:'+p.source.media_type+';base64,'+p.source.data}});
     else if(p.type==='tool_use')_toolCalls.push({id:p.id||'tc_'+Date.now(),type:'function',function:{name:p.name,arguments:JSON.stringify(p.input||{})}});
     else if(p.type==='tool_result'){
-      let _c=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
-      if(p.is_error)_c='[ERROR] '+_c;
-      _toolResults.push({role:'tool',tool_call_id:p.tool_use_id,content:_c});
+      // Tool results can contain mixed content: text + images + documents.
+      // Extract all content types — images from tool results (e.g., screenshots)
+      // are critical for GPT Pro to reason about visual output.
+      let _trContent;
+      if(typeof p.content==='string'){_trContent=p.content;}
+      else if(Array.isArray(p.content)){
+        const _parts=[];
+        for(const c of p.content){
+          if(c.type==='text')_parts.push({type:'text',text:c.text||''});
+          else if(c.type==='image')_parts.push({type:'image_url',image_url:{url:'data:'+(c.source?.media_type||'image/png')+';base64,'+(c.source?.data||'')}});
+          else _parts.push({type:'text',text:c.text||JSON.stringify(c)});
+        }
+        _trContent=_parts.length===1&&_parts[0].type==='text'?_parts[0].text:_parts;
+      }else{_trContent=String(p.content||'');}
+      if(p.is_error){
+        if(typeof _trContent==='string')_trContent='[ERROR] '+_trContent;
+        else if(Array.isArray(_trContent))_trContent=[{type:'text',text:'[ERROR]'},..._trContent];
+      }
+      _toolResults.push({role:'tool',tool_call_id:p.tool_use_id,content:_trContent});
+    }
+    // Handle MCP/server tool blocks — serialize to text so GPT sees the data
+    else if(p.type==='server_tool_use'||p.type==='mcp_tool_use')_texts.push({type:'text',text:'[Tool call: '+((p.name||p.tool_name||'unknown'))+'] '+JSON.stringify(p.input||p.arguments||{})});
+    else if(p.type==='server_tool_result'||p.type==='mcp_tool_result'){
+      const _rc=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
+      _texts.push({type:'text',text:'[Tool result: '+((p.name||p.tool_name||''))+'] '+_rc});
     }
     else _texts.push({type:'text',text:JSON.stringify(p)});
   }
@@ -117,9 +139,32 @@ function msgsToResponsesInput(system, messages) {
       }
       else if(p.type==='tool_result'){
         _flush();
-        let _c=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
+        // Extract text + image content from tool results (e.g., screenshots)
+        let _c;
+        if(typeof p.content==='string'){_c=p.content;}
+        else if(Array.isArray(p.content)){
+          // Responses API function_call_output only supports string output,
+          // but images from tool results (screenshots, charts) are critical.
+          // Serialize images as data URLs inline so GPT Pro can see them.
+          const _txts=[];
+          for(const c of p.content){
+            if(c.type==='text')_txts.push(c.text||'');
+            else if(c.type==='image')_txts.push('[image: data:'+(c.source?.media_type||'image/png')+';base64,'+(c.source?.data||'').slice(0,100)+'...]');
+            else _txts.push(c.text||JSON.stringify(c));
+          }
+          _c=_txts.join('\n');
+        }else{_c=String(p.content||'');}
         if(p.is_error)_c='[ERROR] '+_c;
         _parts.push({type:'function_call_output',call_id:p.tool_use_id,output:_c});
+      }
+      // Handle MCP/server tool blocks in Responses API path
+      else if(p.type==='server_tool_use'||p.type==='mcp_tool_use'){
+        _flush();_mc.push({type:'input_text',text:'[Tool call: '+((p.name||p.tool_name||'unknown'))+'] '+JSON.stringify(p.input||p.arguments||{})});
+      }
+      else if(p.type==='server_tool_result'||p.type==='mcp_tool_result'){
+        _flush();
+        const _rc=typeof p.content==='string'?p.content:(p.content||[]).map(c=>c.text||'').join('');
+        _mc.push({type:'input_text',text:'[Tool result: '+((p.name||p.tool_name||''))+'] '+_rc});
       }
       else{_mc.push({type:'input_text',text:JSON.stringify(p)});}
     }
@@ -186,7 +231,10 @@ function makeSseStream(oaiResp, model) {
             if(tc.function?.arguments)_send('content_block_delta',{type:'content_block_delta',index:_bi,delta:{type:'input_json_delta',partial_json:tc.function.arguments}});
           }
         }
-        if(_ch.finish_reason){_finish(_ch.finish_reason==='tool_calls'?'tool_use':'end_turn');return;}
+        if(_ch.finish_reason){
+          const _sr={'tool_calls':'tool_use','function_calls':'tool_use','stop':'end_turn','length':'max_tokens','content_filter':'end_turn'};
+          _finish(_sr[_ch.finish_reason]||(_hasTools?'tool_use':'end_turn'));return;
+        }
       }
     }
     // Stream ended without [DONE] or finish_reason — clean up
@@ -288,7 +336,11 @@ function makeResponsesSseStream(oaiResp, model) {
  */
 function flattenSystem(sys) {
   if (!sys) return '';
-  return typeof sys === 'string' ? sys : (sys || []).map(p => p.text || '').join('');
+  if (typeof sys === 'string') return sys;
+  // Flatten system blocks to text, stripping cache_control metadata.
+  // Anthropic uses cache_control: {type:'ephemeral'} on system blocks for
+  // prompt caching — irrelevant for GPT Pro and causes issues in some APIs.
+  return (sys || []).map(p => p.text || '').join('');
 }
 
 /**
@@ -317,7 +369,7 @@ function oaiToAnthropicResponse(oaiJson, model) {
   return new Response(JSON.stringify({
     id: 'msg_' + (oaiJson.id || Date.now()), type: 'message', role: 'assistant',
     content: _ct, model,
-    stop_reason: _c?.finish_reason === 'tool_calls' ? 'tool_use' : 'end_turn',
+    stop_reason: ({'tool_calls':'tool_use','function_calls':'tool_use','stop':'end_turn','length':'max_tokens','content_filter':'end_turn'})[_c?.finish_reason]||(_mg.tool_calls?'tool_use':'end_turn'),
     usage: { input_tokens: oaiJson.usage?.prompt_tokens || 0, output_tokens: oaiJson.usage?.completion_tokens || 0 }
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

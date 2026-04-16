@@ -4,10 +4,13 @@
  * Replaces upstream Anthropic branding with silly-code identity.
  */
 
-module.exports = function applyBranding({ patch, patchAll }) {
+module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix }) {
+  // Build-time git SHA embedded: `sillyx --version` → "2.1.110-silly.<sha>"
+  // This makes dev and installed binaries immediately distinguishable.
+  const _ver = `2.1.110-${sillyVersionSuffix || 'silly'}`
   patchAll('01-version',
     'VERSION:"2.1.110"',
-    'VERSION:"2.1.110-silly"'
+    `VERSION:"${_ver}"`
   )
 
   patchAll('02-package-url',

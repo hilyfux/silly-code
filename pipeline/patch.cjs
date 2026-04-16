@@ -12,9 +12,22 @@
 
 const fs = require('fs')
 const path = require('path')
+const { execSync } = require('child_process')
 
 const INPUT = process.argv[2] || path.join(__dirname, 'upstream/package/cli.js')
 const OUTPUT = process.argv[3] || path.join(__dirname, 'build/cli-patched.js')
+
+// ── Build-time git SHA (silly-code repo) ────────────────────
+// Embedded into version string so `sillyx --version` shows which exact
+// commit the binary was built from. Lets you instantly diff dev vs installed.
+let SILLY_GIT_SHA = 'dev'
+try {
+  SILLY_GIT_SHA = execSync('git rev-parse --short HEAD', {
+    cwd: path.join(__dirname, '..'),
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).toString().trim()
+} catch {}
+const SILLY_VERSION_SUFFIX = `silly.${SILLY_GIT_SHA}`
 
 // ── Upstream version guard ──────────────────────────────────
 const depsPath = path.join(__dirname, '..', 'deps.json')
@@ -71,7 +84,7 @@ function patchAll(name, find, replace) {
 
 // ── Load and apply patch modules in order ────────────────────
 
-const helpers = { patch, patchAll }
+const helpers = { patch, patchAll, sillyVersionSuffix: SILLY_VERSION_SUFFIX }
 const modules = [
   require('./patches/branding.cjs'),
   require('./patches/provider-engine.cjs'),

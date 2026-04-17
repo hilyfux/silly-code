@@ -256,6 +256,21 @@ module.exports = function applyProviders({ patch }) {
     );
   }
 
+  // ── Patch 52: Clamp 1M-context window when account lacks extra-usage ──
+  // Without this, ff() returns 1e6 for any model carrying the `[1m]` suffix. The
+  // auto-compact threshold (v38 ≈ window-33k) then sits near 967k, but Anthropic's
+  // server rejects `[1m]` requests with "Extra usage is required for long context"
+  // for Max users who don't have extra-usage enabled (except Opus 4.7, which is
+  // free per current policy). Net effect: auto-compact never fires in time and
+  // the user sees a hard API error instead of transparent compaction.
+  //
+  // When firstParty + [1m] + not Opus 4.7 + hasExtraUsageEnabled !== true, fall
+  // back to DR1 so auto-compact triggers ~187k — safely below the server limit.
+  patch('52-clamp-1m-without-extra-usage',
+    'if(DP(q))return 1e6;',
+    'if(DP(q)){var _1m=q?q.toLowerCase():"";if(pq()==="firstParty"&&_1m.indexOf("opus-4-7")===-1&&k_()?.hasExtraUsageEnabled!==!0)return DR1;return 1e6}'
+  );
+
   // ── Patch 60: Model display name ──
   const displayProviders = providers.filter(p => p.identity.modelDisplayNames);
   if (displayProviders.length > 0) {

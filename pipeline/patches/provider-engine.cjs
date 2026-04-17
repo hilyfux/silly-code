@@ -281,9 +281,12 @@ module.exports = function applyProviders({ patch }) {
   //       resolves exact-match; deprecated slugs (5.1-codex-max, etc.) are
   //       still user-selectable but get silently migrated at dispatch time
   //       via OAUTH_MODEL_MIGRATIONS (see openai.cjs).
+  // KEEP IN SYNC: the "(→ <target>)" suffixes on deprecated slugs mirror
+  // OAUTH_MODEL_MIGRATIONS in pipeline/patches/providers/openai.cjs. When a
+  // slug stops needing migration (or its target changes), update both places.
   patch('53-restore-opus-46-menu',
     'O.push(xvK),O',
-    'O.push(xvK),O.push(uvK(q,!1)),pq()!=="openai"?O:[{value:"gpt-5.4",label:"gpt-5.4",description:"Latest frontier agentic coding model"},{value:"gpt-5.2-codex",label:"gpt-5.2-codex",description:"Frontier agentic coding model"},{value:"gpt-5.1-codex-max",label:"gpt-5.1-codex-max",description:"Codex-optimized flagship for deep and fast reasoning"},{value:"gpt-5.4-mini",label:"gpt-5.4-mini",description:"Smaller frontier agentic coding model"},{value:"gpt-5.3-codex",label:"gpt-5.3-codex",description:"Frontier Codex-optimized agentic coding model"},{value:"gpt-5.3-codex-spark",label:"gpt-5.3-codex-spark",description:"Ultra-fast coding model"},{value:"gpt-5.2",label:"gpt-5.2",description:"Optimized for professional work and long-running agents"},{value:"gpt-5.1-codex-mini",label:"gpt-5.1-codex-mini",description:"Optimized for codex. Cheaper, faster, but less capable"}]'
+    'O.push(xvK),O.push(uvK(q,!1)),pq()!=="openai"?O:[{value:"gpt-5.4",label:"gpt-5.4",description:"Latest frontier agentic coding model"},{value:"gpt-5.2-codex",label:"gpt-5.2-codex",description:"Frontier agentic coding model (→ gpt-5.4)"},{value:"gpt-5.1-codex-max",label:"gpt-5.1-codex-max",description:"Codex-optimized flagship for deep and fast reasoning (→ gpt-5.4)"},{value:"gpt-5.4-mini",label:"gpt-5.4-mini",description:"Smaller frontier agentic coding model"},{value:"gpt-5.3-codex",label:"gpt-5.3-codex",description:"Frontier Codex-optimized agentic coding model"},{value:"gpt-5.3-codex-spark",label:"gpt-5.3-codex-spark",description:"Ultra-fast coding model (→ gpt-5.3-codex)"},{value:"gpt-5.2",label:"gpt-5.2",description:"Optimized for professional work and long-running agents (→ gpt-5.4)"},{value:"gpt-5.1-codex-mini",label:"gpt-5.1-codex-mini",description:"Optimized for codex. Cheaper, faster, but less capable (→ gpt-5.4)"}]'
   );
 
   // ── Patch 54: q_6 fallback short-circuit for openai ──

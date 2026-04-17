@@ -1,7 +1,7 @@
 # pipeline/patches/providers/ — Provider Configs
 ## Prohibitions
 - Adding require() or module-scope refs in adapter/auth functions → serialization safeguard will reject (bf38f75)
-- Mismatching models table between adapter inline table and module.exports.models → causes silent model mapping divergence
+- Manually editing sentinel-injected tables in adapter functions → they are auto-generated from file-top constants by provider-core.cjs
 - Using bare import() without 'node:' prefix → checkSerialization blocks non-node imports
 ## When Changing
 - Shared protocol functions → @pipeline/patches/providers/_base.cjs has mapModel, msgToOai, flattenSystem, oaiToAnthropicResponse, SSE streams

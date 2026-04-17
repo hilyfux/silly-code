@@ -39,8 +39,11 @@ const TEST_WRITE_OUTPUT = process.env.SILLY_CI_UPGRADE_TEST_WRITE_OUTPUT === '1'
 const KG_DIR = TEST_KG_DIR || path.join(ROOT, '.knowledge-graph');
 const KG_EVENTS = path.join(KG_DIR, 'graph-events.jsonl');
 const KG_SNAPSHOT = path.join(KG_DIR, 'work-snapshot.md');
-const PATCH_FILES = ['branding.cjs', 'provider-engine.cjs', 'equality.cjs', 'privacy.cjs']
-  .map(f => path.join(PATCHES_DIR, f));
+const PATCH_FILES = [
+  'branding.cjs', 'provider-core.cjs', 'provider-ux.cjs', 'provider-identity.cjs',
+  'equality.cjs', 'privacy.cjs',
+].map(f => path.join(PATCHES_DIR, f));
+const MATCH_REGISTRY = path.join(PIPELINE, 'match-registry.cjs');
 
 function log(msg) { process.stderr.write(`[ci-upgrade] ${msg}\n`); }
 function die(code, msg) { log('ERR: ' + msg); process.exit(code); }
@@ -374,7 +377,7 @@ function bumpVersionRefs(oldVer, newVer) {
   const files = [
     path.join(ROOT, 'deps.json'),
     path.join(PATCHES_DIR, 'branding.cjs'),
-    path.join(PATCHES_DIR, 'provider-engine.cjs'),
+    MATCH_REGISTRY,
     path.join(ROOT, 'README.md'),
   ];
   for (const f of files) {
@@ -444,7 +447,7 @@ function contentAnchorRename() {
     return TEST_CONTENT_ANCHOR_COUNT;
   }
   const newSrc = fs.readFileSync(path.join(UPSTREAM_DIR, 'package/cli.js'), 'utf8');
-  const engine = fs.readFileSync(path.join(PATCHES_DIR, 'provider-engine.cjs'), 'utf8');
+  const engine = fs.readFileSync(MATCH_REGISTRY, 'utf8');
   const branding = fs.readFileSync(path.join(PATCHES_DIR, 'branding.cjs'), 'utf8');
 
   const tryAnchor = (matchStr) => {

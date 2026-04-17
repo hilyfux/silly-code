@@ -16,7 +16,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node tests/base.test.cjs && node tests/schema.test.cjs",
+    "test": "node tests/base.test.cjs && node tests/schema.test.cjs && node tests/providers.test.cjs && node tests/build-integrity.test.cjs",
     "build": "node pipeline/patch.cjs"
   },
   "dependencies": {

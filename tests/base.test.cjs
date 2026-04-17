@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { mapModel, msgToOai, msgsToResponsesInput, flattenSystem, oaiToAnthropicResponse, makeSseStream, makeResponsesSseStream, collectResponsesSse } = require('../pipeline/patches/providers/_base.cjs');
+const { mapModel, _cleanToolArgs, msgToOai, msgsToResponsesInput, flattenSystem, oaiToAnthropicResponse, makeSseStream, makeResponsesSseStream, collectResponsesSse } = require('../pipeline/patches/providers/_base.cjs');
 
 // Helper: create a mock Response with SSE body from lines
 function mockSseResponse(lines) {
@@ -43,6 +43,19 @@ async function drainStream(stream) {
     assert.strictEqual(mapModel('claude-opus-4-6', null), 'claude-opus-4-6');
     assert.strictEqual(mapModel(null, table), null);
     console.log('  mapModel: PASS');
+  }
+
+  // ── _cleanToolArgs ──
+  {
+    // Strips empty strings and nulls
+    const r1 = _cleanToolArgs('{"a":"hello","b":"","c":null}');
+    assert.deepStrictEqual(r1, { a: 'hello' });
+    // Returns null on invalid JSON
+    assert.strictEqual(_cleanToolArgs('not json'), null);
+    // Handles empty/missing input
+    assert.deepStrictEqual(_cleanToolArgs(''), {});
+    assert.deepStrictEqual(_cleanToolArgs(null), {});
+    console.log('  _cleanToolArgs: PASS');
   }
 
   // ── msgToOai ──

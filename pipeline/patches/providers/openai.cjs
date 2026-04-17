@@ -148,45 +148,10 @@ async function _openaiAuth() {
 // msgsToResponsesInput, makeResponsesSseStream, collectResponsesSse, cleanIdentityForProvider from _base.cjs
 // all serialized into the same scope.
 async function _openaiAdapter(url, init) {
-  // KEEP IN SYNC: file-top CODEX_MODELS + CODEX_ALIASES registry. Sorted
-  // longest-slug-first so mapModel's substring fallback never rewrites a
-  // longer slug via a shorter prefix. The new hasOwnProperty exact-match path
-  // in mapModel makes ordering redundant — left sorted as belt-and-braces.
-  const _codexModelTable = {
-    'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.3-codex', 'claude-haiku': 'gpt-5.3-codex',
-    // Opus 4.6 menu slot → flagship. Previously pointed at gpt-5.1-codex-max, but
-    // chatgpt.com Codex OAuth rejects that slug ("not supported when using Codex
-    // with a ChatGPT account"); Codex CLI itself migrates 5.1-codex-max → 5.4.
-    'claude-opus-4-6':      'gpt-5.4',
-    'claude-opus-4-6[1m]':  'gpt-5.4',
-    'gpt-5.1-codex-mini':   'gpt-5.1-codex-mini',
-    'gpt-5.1-codex-max':    'gpt-5.1-codex-max',
-    'gpt-5.1-codex':        'gpt-5.1-codex',
-    'gpt-5.2-codex':        'gpt-5.2-codex',
-    'gpt-5.3-codex':        'gpt-5.3-codex',
-    'gpt-5.3-codex-spark':  'gpt-5.3-codex-spark',
-    'gpt-5.4-mini':         'gpt-5.4-mini',
-    'gpt-5.4':              'gpt-5.4',
-    'gpt-5.2':              'gpt-5.2',
-    'gpt-5.1':              'gpt-5.1',
-    default: 'gpt-5.4',
-  };
-  // Mirrors OAUTH_MODEL_MIGRATIONS at file top — inlined because the adapter is
-  // .toString()-serialized and cannot capture outer-scope refs. If the user
-  // still types a deprecated slug (via CLI flag, an old config, or the menu's
-  // remaining direct slugs), rewrite it before hitting chatgpt.com.
-  const _oauthMigrations = {
-    'gpt-5.1-codex-max':   'gpt-5.4',
-    'gpt-5.1-codex-mini':  'gpt-5.4',
-    'gpt-5.2':             'gpt-5.4',
-    'gpt-5.2-codex':       'gpt-5.4',
-    'gpt-5.1-codex':       'gpt-5.3-codex',
-    'gpt-5.1':             'gpt-5.3-codex',
-    'gpt-5-codex':         'gpt-5.3-codex',
-    'gpt-5-codex-mini':    'gpt-5.3-codex',
-    'gpt-5':               'gpt-5.3-codex',
-    'gpt-5.3-codex-spark': 'gpt-5.3-codex',
-  };
+  // Auto-injected by provider-core.cjs from file-top CODEX_MODELS + CODEX_ALIASES.
+  // Do NOT manually edit — update the source-of-truth constants above instead.
+  const _codexModelTable = "__INJECT__codexModelTable__";
+  const _oauthMigrations = "__INJECT__oauthMigrations__";
   const _oaiModelTable = { 'claude-opus': 'gpt-4o', 'claude-sonnet': 'gpt-4o', 'claude-haiku': 'gpt-4o-mini', default: 'gpt-4o' };
   const _provName = 'OpenAI GPT';
 
@@ -444,4 +409,14 @@ module.exports = {
   tierNames: { max: 'ChatGPT Pro', pro: 'ChatGPT Plus', api: 'OpenAI API' },
   adapter: _openaiAdapter,
   auth: _openaiAuth,
+  _injectableData: {
+    _codexModelTable: Object.assign(
+      {},
+      CODEX_ALIASES,
+      { 'claude-opus-4-6': CODEX_ALIASES['claude-opus'], 'claude-opus-4-6[1m]': CODEX_ALIASES['claude-opus'] },
+      Object.fromEntries(CODEX_MODELS.map(m => [m.slug, m.slug])),
+      { default: CODEX_ALIASES['claude-opus'] }
+    ),
+    _oauthMigrations: OAUTH_MODEL_MIGRATIONS,
+  },
 };

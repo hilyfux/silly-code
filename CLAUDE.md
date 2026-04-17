@@ -32,14 +32,21 @@ When scoping a change, identify its track **and** verify the other doesn't silen
 upstream @anthropic-ai/claude-code (npm pack)
     ↓
 pipeline/patch.cjs (orchestrator)
-    ├── patches/branding.cjs          (01-07a) URLs, names, mascot color
-    ├── patches/provider-engine.cjs   (10-15, 50-51, 60-65) Provider system
+    ├── match-registry.cjs              MATCH constants + anchor guards (shared)
+    ├── patches/
+    │   ├── _providers.cjs              Provider loading + validation (shared)
+    │   ├── branding.cjs                (01-14b) URLs, names, mascot color
+    │   ├── provider-engine.cjs         Wrapper → core → ux → identity
+    │   │   ├── provider-core.cjs       (10-15)  Detection, injection, resolution
+    │   │   ├── provider-ux.cjs         (50-55)  Context window, menu, heading
+    │   │   └── provider-identity.cjs   (60-67)  Display names, identity, tier
+    │   ├── equality.cjs                (20-25)  Tier bypass — 技术平权
+    │   ├── privacy.cjs                 (30-48)  Telemetry blocking — 隐私安全
+    │   ├── auth-bypass.cjs             (70-79)  Non-Claude auth isolation
     │   └── providers/
-    │       ├── _base.cjs             Protocol translation (mapModel, msgToOai, SSE)
-    │       ├── claude.cjs            Claude config (default/fallback)
-    │       └── openai.cjs            OpenAI Codex adapter + config
-    ├── patches/equality.cjs          (20-21) Tier bypass
-    └── patches/privacy.cjs           (30-39) Telemetry blocking
+    │       ├── _base.cjs               Protocol translation (mapModel, msgToOai, SSE)
+    │       ├── claude.cjs              Claude config (default/fallback)
+    │       └── openai.cjs              OpenAI Codex adapter + config
     ↓
 pipeline/build/cli-patched.js (output)
 ```
@@ -84,3 +91,7 @@ curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh 
 - **Test all 3 providers** after any patch change
 - **Adapter functions are string-injected** — they run in the client factory scope, can't access outer variables
 - **`src/` is reference only** — runtime uses `pipeline/build/cli-patched.js`, not source code
+
+Installed Knowledge Graph: v1.3.1+f6dc89c
+
+Use version+commit to compare source repo, installed copy, and host project state

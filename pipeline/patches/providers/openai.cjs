@@ -120,6 +120,11 @@ async function _openaiAdapter(url, init) {
   // in mapModel makes ordering redundant — left sorted as belt-and-braces.
   const _codexModelTable = {
     'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.3-codex', 'claude-haiku': 'gpt-5.1-codex-mini',
+    // The menu "Reasoning" slot (patch 53) passes claude-opus-4-6 as its value;
+    // route it to Codex's reasoning-heavy model via exact-match before the
+    // substring loop falls back to the claude-opus alias.
+    'claude-opus-4-6':    'gpt-5.1-codex-max',
+    'claude-opus-4-6[1m]':'gpt-5.1-codex-max',
     'gpt-5.1-codex-mini': 'gpt-5.1-codex-mini',
     'gpt-5.1-codex-max':  'gpt-5.1-codex-max',
     'gpt-5.1-codex':      'gpt-5.1-codex',

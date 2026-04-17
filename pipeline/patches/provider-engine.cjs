@@ -268,12 +268,18 @@ module.exports = function applyProviders({ patch }) {
     'if(DP(q)){var _1m=q?q.toLowerCase():"";if(pq()==="firstParty"&&_1m.indexOf("opus-4-7")===-1&&!S6(process.env.SILLY_ENABLE_1M_CONTEXT))return DR1;return 1e6}'
   );
 
-  // ── Patch 53: Restore Opus 4.6 option in the /model menu ──
-  // Single-anchor MATCH on xvK (Haiku entry) — injects uvK (Opus 4.6 entry)
-  // immediately after. Minified `xvK` is the only upstream id this depends on.
+  // ── Patch 53: Restore Opus 4.6 option + rebrand menu for sillyx ──
+  // Two jobs in one replacement (single MATCH, single anchor on xvK):
+  //   (a) firstParty Max-tier branch gets uvK (Opus 4.6) pushed — keeps the
+  //       option we lost when 2.1.112 simplified cjY.
+  //   (b) openai provider gets each item's label/description remapped to
+  //       reflect the actual backend model (GPT-5.x), since upstream's
+  //       factories hardcode Claude names. Values stay untouched so routing
+  //       (mapModel → _codexModelTable) continues to work. firstParty path
+  //       is a no-op (pq()!=="openai" short-circuits the map).
   patch('53-restore-opus-46-menu',
     'O.push(xvK),O',
-    'O.push(xvK),O.push(uvK(q,!1)),O'
+    'O.push(xvK),O.push(uvK(q,!1)),pq()!=="openai"?O:O.map(function(_i){var _v=_i&&_i.value;if(_v===null)return Object.assign({},_i,{description:"GPT-5.4 · Flagship"});if(_v==="opus")return Object.assign({},_i,{label:"Opus",description:"GPT-5.4 · Flagship"});if(_v==="opus[1m]")return Object.assign({},_i,{label:"Opus (1M)",description:"GPT-5.4 (1M context) · Flagship"});if(_v==="sonnet")return Object.assign({},_i,{label:"Sonnet",description:"GPT-5.3 Codex · Agentic coding"});if(_v==="sonnet[1m]")return Object.assign({},_i,{label:"Sonnet (1M)",description:"GPT-5.3 Codex (1M context)"});if(_v==="haiku")return Object.assign({},_i,{label:"Haiku",description:"GPT-5.1 Codex Mini · Fast, cheap"});if(typeof _v==="string"&&_v.indexOf("opus-4-6")>=0)return Object.assign({},_i,{label:"Reasoning",description:"GPT-5.1 Codex Max · Deep reasoning"});return _i;})'
   );
 
   // ── Patch 60: Model display name ──

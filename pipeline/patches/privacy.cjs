@@ -138,4 +138,18 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
     '{id:"jetbrains-plugin-install",type:"info",isActive:',
     '{id:"jetbrains-plugin-install",type:"info",isActive:()=>false,_origIsActive:'
   )
+
+  // Patch 48: Restore 1h prompt cache TTL for all querySources
+  // When telemetry is blocked (patches 30/36), o85() falls back to the hardcoded
+  // default allowlist ["repl_main_thread*","sdk","auto_mode"] — only 3 of the
+  // 31 known querySources match, so 28 paths (compact, side_question, agent_*,
+  // web_search_tool, session_memory, speculation, …) silently drop to 5-minute
+  // TTL. Users on long sessions pay repeated cache-write costs instead of the
+  // 0.1× cache-read. Restore parity with telemetry-on behavior by widening the
+  // fallback allowlist to "*" (wildcard matches every querySource). i7()/overage
+  // guards above still gate non-subscribers, so free users aren't affected.
+  patch('48-prompt-cache-1h-allowlist',
+    '"tengu_prompt_cache_1h_config",{allowlist:["repl_main_thread*","sdk","auto_mode"]}',
+    '"tengu_prompt_cache_1h_config",{allowlist:["*"]}'
+  )
 }

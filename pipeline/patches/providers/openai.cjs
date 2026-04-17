@@ -57,15 +57,22 @@ const CODEX_ALIASES = {
 // sentinel in the binary). Mirror that behaviour so our OAuth users don't see
 // the "Retrying 5/10 · Unable to connect" storm on Opus 4.6.
 const OAUTH_MODEL_MIGRATIONS = {
-  'gpt-5.1-codex-max':  'gpt-5.4',
-  'gpt-5.1-codex-mini': 'gpt-5.4',
-  'gpt-5.2':            'gpt-5.4',
-  'gpt-5.2-codex':      'gpt-5.4',
-  'gpt-5.1-codex':      'gpt-5.3-codex',
-  'gpt-5.1':            'gpt-5.3-codex',
-  'gpt-5-codex':        'gpt-5.3-codex',
-  'gpt-5-codex-mini':   'gpt-5.3-codex',
-  'gpt-5':              'gpt-5.3-codex',
+  'gpt-5.1-codex-max':   'gpt-5.4',
+  'gpt-5.1-codex-mini':  'gpt-5.4',
+  'gpt-5.2':             'gpt-5.4',
+  'gpt-5.2-codex':       'gpt-5.4',
+  'gpt-5.1-codex':       'gpt-5.3-codex',
+  'gpt-5.1':             'gpt-5.3-codex',
+  'gpt-5-codex':         'gpt-5.3-codex',
+  'gpt-5-codex-mini':    'gpt-5.3-codex',
+  'gpt-5':               'gpt-5.3-codex',
+  // 2026-04-17 batch smoke: gpt-5.3-codex-spark accepted by chatgpt.com
+  // (no 400) but stream never completes — upstream retry-loop hits 10+
+  // requests for a single `reply OK` prompt. The slug appears in the newer
+  // Codex web UI (user screenshot) but is absent from the 0.121.0 native
+  // binary catalog. Until we confirm spark's SSE contract, migrate to
+  // gpt-5.3-codex which is the closest stable sibling.
+  'gpt-5.3-codex-spark': 'gpt-5.3-codex',
 };
 const ALL_MODELS = [...CODEX_MODELS, ...OAI_LEGACY_MODELS];
 
@@ -169,15 +176,16 @@ async function _openaiAdapter(url, init) {
   // still types a deprecated slug (via CLI flag, an old config, or the menu's
   // remaining direct slugs), rewrite it before hitting chatgpt.com.
   const _oauthMigrations = {
-    'gpt-5.1-codex-max':  'gpt-5.4',
-    'gpt-5.1-codex-mini': 'gpt-5.4',
-    'gpt-5.2':            'gpt-5.4',
-    'gpt-5.2-codex':      'gpt-5.4',
-    'gpt-5.1-codex':      'gpt-5.3-codex',
-    'gpt-5.1':            'gpt-5.3-codex',
-    'gpt-5-codex':        'gpt-5.3-codex',
-    'gpt-5-codex-mini':   'gpt-5.3-codex',
-    'gpt-5':              'gpt-5.3-codex',
+    'gpt-5.1-codex-max':   'gpt-5.4',
+    'gpt-5.1-codex-mini':  'gpt-5.4',
+    'gpt-5.2':             'gpt-5.4',
+    'gpt-5.2-codex':       'gpt-5.4',
+    'gpt-5.1-codex':       'gpt-5.3-codex',
+    'gpt-5.1':             'gpt-5.3-codex',
+    'gpt-5-codex':         'gpt-5.3-codex',
+    'gpt-5-codex-mini':    'gpt-5.3-codex',
+    'gpt-5':               'gpt-5.3-codex',
+    'gpt-5.3-codex-spark': 'gpt-5.3-codex',
   };
   const _oaiModelTable = { 'claude-opus': 'gpt-4o', 'claude-sonnet': 'gpt-4o', 'claude-haiku': 'gpt-4o-mini', default: 'gpt-4o' };
   const _provName = 'OpenAI GPT';

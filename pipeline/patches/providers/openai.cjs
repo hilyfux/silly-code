@@ -13,6 +13,35 @@
  *   - Per-provider state variable (_openaiData) is declared by the engine
  */
 
+// ── Single source of truth for Codex models ──
+// Verified against upstream codex-cli 0.121.0 native binary (strings | grep slug).
+// Adding a row here propagates to modelDisplayNames, contextWindow.perModel,
+// and the tierNames metadata. The adapter's inline _codexModelTable mirrors
+// the slug list; see the "KEEP IN SYNC" marker inside _openaiAdapter.
+const CODEX_MODELS = [
+  { slug: 'gpt-5.4',            display: 'GPT-5.4',            ctx: 272000 },
+  { slug: 'gpt-5.4-mini',       display: 'GPT-5.4 Mini',       ctx: 272000 },
+  { slug: 'gpt-5.3-codex',      display: 'GPT-5.3 Codex',      ctx: 272000 },
+  { slug: 'gpt-5.2-codex',      display: 'GPT-5.2 Codex',      ctx: 272000 },
+  { slug: 'gpt-5.2',            display: 'GPT-5.2',            ctx: 272000 },
+  { slug: 'gpt-5.1-codex-max',  display: 'GPT-5.1 Codex Max',  ctx: 400000 },
+  { slug: 'gpt-5.1-codex-mini', display: 'GPT-5.1 Codex Mini', ctx: 272000 },
+  { slug: 'gpt-5.1-codex',      display: 'GPT-5.1 Codex',      ctx: 272000 },
+  { slug: 'gpt-5.1',            display: 'GPT-5.1',            ctx: 272000 },
+];
+const OAI_LEGACY_MODELS = [
+  { slug: 'gpt-4o',      display: 'GPT-4o',      ctx: 128000 },
+  { slug: 'gpt-4o-mini', display: 'GPT-4o Mini', ctx: 128000 },
+  { slug: 'o3',          display: 'o3',          ctx: 200000 },
+];
+// Claude alias → Codex slug, tier-aligned with Codex UI's default picks.
+const CODEX_ALIASES = {
+  'claude-opus':   'gpt-5.4',             // flagship, most capable
+  'claude-sonnet': 'gpt-5.3-codex',       // agentic coding mainstream
+  'claude-haiku': 'gpt-5.1-codex-mini',   // cheap, fast
+};
+const ALL_MODELS = [...CODEX_MODELS, ...OAI_LEGACY_MODELS];
+
 // ── auth function ────────────────────────────────────────────────────────────
 // Returns { headers, kind } where kind is 'oauth' or 'apikey'
 // _openaiData is declared by the serialization engine as: let _openaiData = null;
@@ -85,18 +114,21 @@ async function _openaiAuth() {
 // msgsToResponsesInput, makeResponsesSseStream, collectResponsesSse, cleanIdentityForProvider from _base.cjs
 // all serialized into the same scope.
 async function _openaiAdapter(url, init) {
-  // Alias → Codex model, mirroring Codex UI's tiered selection.
-  // Verified against upstream codex-cli 0.121.0 native binary (slug strings).
-  //   opus    → gpt-5.4 (most capable, flagship)
-  //   sonnet  → gpt-5.3-codex (agentic coding, current mainstream)
-  //   haiku   → gpt-5.1-codex-mini (cheap/fast)
+  // KEEP IN SYNC: file-top CODEX_MODELS + CODEX_ALIASES registry. Sorted
+  // longest-slug-first so mapModel's substring fallback never rewrites a
+  // longer slug via a shorter prefix. The new hasOwnProperty exact-match path
+  // in mapModel makes ordering redundant — left sorted as belt-and-braces.
   const _codexModelTable = {
     'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.3-codex', 'claude-haiku': 'gpt-5.1-codex-mini',
-    // Pass-through for explicit Codex slugs — lets users override via
-    // ANTHROPIC_DEFAULT_OPUS_MODEL=gpt-5.2-codex etc. without mapping.
-    'gpt-5.4':'gpt-5.4','gpt-5.4-mini':'gpt-5.4-mini','gpt-5.3-codex':'gpt-5.3-codex',
-    'gpt-5.2-codex':'gpt-5.2-codex','gpt-5.2':'gpt-5.2',
-    'gpt-5.1-codex-max':'gpt-5.1-codex-max','gpt-5.1-codex-mini':'gpt-5.1-codex-mini','gpt-5.1-codex':'gpt-5.1-codex','gpt-5.1':'gpt-5.1',
+    'gpt-5.1-codex-mini': 'gpt-5.1-codex-mini',
+    'gpt-5.1-codex-max':  'gpt-5.1-codex-max',
+    'gpt-5.1-codex':      'gpt-5.1-codex',
+    'gpt-5.2-codex':      'gpt-5.2-codex',
+    'gpt-5.3-codex':      'gpt-5.3-codex',
+    'gpt-5.4-mini':       'gpt-5.4-mini',
+    'gpt-5.4':            'gpt-5.4',
+    'gpt-5.2':            'gpt-5.2',
+    'gpt-5.1':            'gpt-5.1',
     default: 'gpt-5.4',
   };
   const _oaiModelTable = { 'claude-opus': 'gpt-4o', 'claude-sonnet': 'gpt-4o', 'claude-haiku': 'gpt-4o-mini', default: 'gpt-4o' };
@@ -128,20 +160,8 @@ async function _openaiAdapter(url, init) {
   // Everything else runs through the harness and CAN work.
   const _CC_UNUSABLE = new Set(['RemoteTrigger']);
   const _tools = ((_b.tools || []).filter(t => !_CC_UNUSABLE.has(t.name)));
-
-  // /fast command parity with Codex CLI. Codex's "fast mode" sets service_tier:
-  // "priority" — ~2× cost, ~2× speed, single-gear toggle. Claude Code has a
-  // multi-gear /effort (low/medium/high/xhigh); map high+ to Codex fast.
-  // Overrides (highest wins): SILLY_CODEX_FAST=1 force on · =0 force off.
-  // n8z is upstream's effort getter; rename-tracked in upstream-upgrade skill.
-  const _sillyFastTier = () => {
-    const _env = process.env.SILLY_CODEX_FAST;
-    if (_env != null && _env !== '') return /^(1|true|on|yes)$/i.test(_env);
-    try {
-      const _e = typeof n8z === 'function' ? n8z() : undefined;
-      return _e === 'high' || _e === 'xhigh';
-    } catch { return false; }
-  };
+  // sillyFastTier lives in _base.cjs; hand it the minified effort getter.
+  const _fastTier = sillyFastTier(typeof n8z === 'function' ? n8z : undefined);
   const _clean = (t) => cleanIdentityForProvider(tameSkillPrompts(t), _provName);
   if (_b.system) {
     if (typeof _b.system === 'string') _b.system = enforceContinuation(_clean(_b.system), _b.messages, _tools);
@@ -173,10 +193,7 @@ async function _openaiAdapter(url, init) {
     // (returns HTTP 400 "Unsupported parameter"). Let GPT Pro use its own token limit.
     if (_b.temperature != null) _req.temperature = _b.temperature;
     if (_b.top_p != null) _req.top_p = _b.top_p;
-    // /fast parity with Codex CLI: effort high/xhigh → priority tier (~2× cost, ~2× speed).
-    // SILLY_CODEX_FAST=1|0 overrides. n8z is the rename-tracked effort getter; wrap in
-    // try/catch so rename regressions don't crash the adapter.
-    if (_sillyFastTier()) _req.service_tier = 'priority';
+    if (_fastTier) _req.service_tier = 'priority';
     if (_tools.length) {
       _req.tools = _tools.map(t => ({ type: 'function', name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } }));
       // Serial tool execution — parallel calls cause agent loop confusion with GPT Pro
@@ -224,8 +241,7 @@ async function _openaiAdapter(url, init) {
     // never sees the true context size and auto-compact never fires until chatgpt.com
     // itself rejects with "prompt is too long" (rendered as "Context limit reached").
     if (_b.stream) _req.stream_options = { include_usage: true };
-    // /fast parity — effort high/xhigh (or SILLY_CODEX_FAST=1) → priority tier.
-    if (_sillyFastTier()) _req.service_tier = 'priority';
+    if (_fastTier) _req.service_tier = 'priority';
     if (_b.tools && _b.tools.length) {
       _req.tools = _b.tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } } }));
       _req.tool_choice = 'auto';
@@ -252,25 +268,17 @@ module.exports = {
     agentPrompt: 'You are a Silly Code agent, running with OpenAI GPT.',
     simplePrompt: 'You are Silly Code (OpenAI GPT).',
     sdkPrompt: null,
-    modelDisplayNames: {
-      'gpt-5.4': 'GPT-5.4', 'gpt-5.4-mini': 'GPT-5.4 Mini',
-      'gpt-5.3-codex': 'GPT-5.3 Codex',
-      'gpt-5.2-codex': 'GPT-5.2 Codex', 'gpt-5.2': 'GPT-5.2',
-      'gpt-5.1-codex-max': 'GPT-5.1 Codex Max', 'gpt-5.1-codex-mini': 'GPT-5.1 Codex Mini',
-      'gpt-5.1-codex': 'GPT-5.1 Codex', 'gpt-5.1': 'GPT-5.1',
-      'gpt-4o-mini': 'GPT-4o Mini', 'gpt-4o': 'GPT-4o', 'o3': 'o3',
-      'claude-opus': 'GPT-5.4', 'claude-sonnet': 'GPT-5.3 Codex', 'claude-haiku': 'GPT-5.1 Codex Mini',
-      default: 'GPT-5.4',
-    },
+    modelDisplayNames: Object.assign(
+      Object.fromEntries(ALL_MODELS.map(m => [m.slug, m.display])),
+      Object.fromEntries(Object.entries(CODEX_ALIASES).map(([a, s]) => [a, ALL_MODELS.find(m => m.slug === s).display])),
+      { default: ALL_MODELS.find(m => m.slug === CODEX_ALIASES['claude-opus']).display }
+    ),
   },
-  models: { 'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.3-codex', 'claude-haiku': 'gpt-5.1-codex-mini', default: 'gpt-5.4' },
-  contextWindow: { default: 200000, perModel: {
-    'gpt-5.4': 272000, 'gpt-5.4-mini': 272000,
-    'gpt-5.3-codex': 272000, 'gpt-5.2-codex': 272000, 'gpt-5.2': 272000,
-    'gpt-5.1-codex-max': 400000, 'gpt-5.1-codex-mini': 272000,
-    'gpt-5.1-codex': 272000, 'gpt-5.1': 272000,
-    'gpt-4o': 128000, 'gpt-4o-mini': 128000, 'o3': 200000,
-  } },
+  models: { ...CODEX_ALIASES, default: CODEX_ALIASES['claude-opus'] },
+  contextWindow: {
+    default: 200000,
+    perModel: Object.fromEntries(ALL_MODELS.map(m => [m.slug, m.ctx])),
+  },
   tierNames: { max: 'ChatGPT Pro', pro: 'ChatGPT Plus', api: 'OpenAI API' },
   adapter: _openaiAdapter,
   auth: _openaiAuth,

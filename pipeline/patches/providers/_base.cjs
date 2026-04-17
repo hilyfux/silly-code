@@ -24,10 +24,33 @@
  */
 function mapModel(model, table) {
   if (!table || !model) return model;
+  // Exact-key match first: lets explicit provider slugs (e.g. 'gpt-5.4-mini')
+  // pass through untouched, even when the alias table also contains a shorter
+  // prefix that would otherwise substring-match ('gpt-5.4').
+  if (Object.prototype.hasOwnProperty.call(table, model)) return table[model];
   for (const [k, v] of Object.entries(table)) {
     if (k !== 'default' && model.includes(k)) return v;
   }
   return table.default || model;
+}
+
+/**
+ * Decide whether the current request should run on OpenAI's priority tier.
+ * Single-gear toggle that mirrors Codex CLI's /fast command. Claude Code's
+ * multi-gear /effort maps as: high/xhigh → priority, else default.
+ *
+ * Overrides (highest wins): SILLY_CODEX_FAST env var (any truthy → on; '0'|
+ * 'false'|'off'|'no' → off; else → fall through to effort check).
+ * n8z is upstream's effort getter; wrapped in typeof+try so a future rename
+ * degrades gracefully to env-only mode.
+ */
+function sillyFastTier(effortGetter) {
+  const _env = process.env.SILLY_CODEX_FAST;
+  if (_env != null && _env !== '') return /^(1|true|on|yes)$/i.test(_env);
+  try {
+    const _e = typeof effortGetter === 'function' ? effortGetter() : undefined;
+    return _e === 'high' || _e === 'xhigh';
+  } catch { return false; }
 }
 
 /**
@@ -639,4 +662,4 @@ async function collectResponsesSse(oaiResp, model) {
   return new Response(JSON.stringify({ id: _msgId, type: 'message', role: 'assistant', content: _ct, model, stop_reason: _stopReason, stop_sequence: null, usage: { input_tokens: _inTokens, output_tokens: _outTokens } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
-module.exports = { mapModel, mapOaiStopReason, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, findOpenTodos };
+module.exports = { mapModel, mapOaiStopReason, sillyFastTier, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, findOpenTodos };

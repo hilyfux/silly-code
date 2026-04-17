@@ -12,7 +12,6 @@ curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh 
 
 ```bash
 silly login codex      # ChatGPT Pro / Codex (推荐)
-silly login copilot    # GitHub Copilot
 silly login claude     # Claude Pro/Max
 ```
 
@@ -20,7 +19,6 @@ silly login claude     # Claude Pro/Max
 
 ```bash
 sillyx                 # OpenAI Codex
-sillyt                 # GitHub Copilot
 sillye                 # Claude
 ```
 

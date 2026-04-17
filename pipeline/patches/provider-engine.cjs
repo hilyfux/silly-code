@@ -256,13 +256,16 @@ module.exports = function applyProviders({ patch }) {
     );
   }
 
-  // ── Patch 52: Clamp 1M-context window when account lacks extra-usage ──
-  // Opus 4.7 has free 1M; other [1m] models need extra-usage (overage billing).
-  // Without the clamp, ff() returns 1e6 for all [1m], so auto-compact sits near
-  // 967k but the server 429s much earlier — user hits hard error, not compaction.
-  patch('52-clamp-1m-without-extra-usage',
+  // ── Patch 52: Clamp non-Opus-4.7 1M context on firstParty ──
+  // Opus 4.7 is the only [1m] model with free 1M on current Anthropic pricing;
+  // every other [1m] variant needs extra-usage overage billing or the server
+  // rejects with "Extra usage is required for long context" before auto-compact
+  // (v38 ≈ window-33k) fires. Default clamp to 200K so compaction triggers
+  // well below the server limit. Paying users can opt out with SILLY_ENABLE_1M_CONTEXT=1.
+  // We read NO account state — equality-neutral.
+  patch('52-clamp-1m-non-opus-47',
     'if(DP(q))return 1e6;',
-    'if(DP(q)){var _1m=q?q.toLowerCase():"";if(pq()==="firstParty"&&_1m.indexOf("opus-4-7")===-1&&k_()?.hasExtraUsageEnabled!==!0)return DR1;return 1e6}'
+    'if(DP(q)){var _1m=q?q.toLowerCase():"";if(pq()==="firstParty"&&_1m.indexOf("opus-4-7")===-1&&!S6(process.env.SILLY_ENABLE_1M_CONTEXT))return DR1;return 1e6}'
   );
 
   // ── Patch 60: Model display name ──

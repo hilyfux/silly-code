@@ -29,7 +29,7 @@ if ! _claude_logged_in; then
   info "Not logged in. The TUI will open — type /login to sign in."
   echo ""
   # Claude login happens inside the TUI via /login command.
-  # Unlike Codex/Copilot, there's no standalone CLI login flow,
+  # Unlike Codex, there's no standalone CLI login flow,
   # so we proceed directly to the TUI.
 fi
 

@@ -15,7 +15,7 @@
 
 ## Q: 怎么接入 OpenAI / DeepSeek / Ollama 等非 Anthropic 模型？
 
-本项目内置了 OpenAI 和 Copilot 的原生支持（通过 `sillyx` 和 `sillyt`）。对于其他模型，可以用 [LiteLLM](https://github.com/BerriAI/litellm) 等代理做协议转换。
+本项目内置了 OpenAI Codex 的原生支持（通过 `sillyx`）。对于其他模型，可以用 [LiteLLM](https://github.com/BerriAI/litellm) 等代理做协议转换。
 
 详细配置步骤请参考：[第三方模型使用指南](./third-party-models.md)
 
@@ -25,7 +25,6 @@
 
 ```bash
 silly login codex      # OpenAI Codex
-silly login copilot    # GitHub Copilot
 silly login claude     # Claude
 ```
 
@@ -35,6 +34,5 @@ silly login claude     # Claude
 
 ```bash
 sillyx                 # OpenAI Codex (GPT-5.4)
-sillyt                 # GitHub Copilot (GPT-4o)
 sillye                 # Claude (claude-opus-4-6)
 ```

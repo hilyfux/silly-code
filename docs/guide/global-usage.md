@@ -5,7 +5,6 @@
 ```bash
 cd ~/your-project
 sillyx                 # OpenAI Codex
-sillyt                 # GitHub Copilot
 sillye                 # Claude
 silly status           # 查看状态
 ```

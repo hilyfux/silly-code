@@ -2,19 +2,19 @@
 
 ## What this project is
 
-silly-code is a multi-provider AI coding assistant built on top of the upstream Claude Code binary via a **patch pipeline**. It adds OpenAI Codex and GitHub Copilot as alternative providers while keeping full Claude support.
+silly-code is a multi-provider AI coding assistant built on top of the upstream Claude Code binary via a **patch pipeline**. It adds OpenAI Codex as an alternative provider while keeping full Claude support.
 
 **This is NOT a source-code fork.** We patch the upstream compiled binary (`cli.js`), not the source.
 
-## Three tracks — every change serves one of these, in sync
+## Two tracks — every change serves one of these, in sync
 
-silly-code's iteration is a **three-track problem**, not a monolith. Every patch / feature / fix maps to exactly one track, but because they share `_base.cjs` (protocol translation), each change propagates to all three and is verified by a single test sweep (`tests/providers.test.cjs`). That's what "synchronized iteration" means: one edit, three checks, all green or all reverted.
+silly-code's iteration is a **two-track problem**, not a monolith. Every patch / feature / fix maps to exactly one track, but because they share `_base.cjs` (protocol translation), each change propagates to both and is verified by a single test sweep (`tests/providers.test.cjs`). That's what "synchronized iteration" means: one edit, two checks, both green or both reverted.
 
 **Track 1 — Claude (firstParty): follow upstream, stay clean**
 - Follow @anthropic-ai/claude-code releases (local launchd + CI fallback)
 - **Privacy** — zero telemetry, 10 endpoints blocked (patches 30-40)
 - **Purity** — no Claude-Code identity bleed through non-firstParty providers (patches 11*, 60-67)
-- **Equality** — no tier gating (patches 20-24)
+- **Equality** — no tier gating (patches 20-24); patch 52 clamp is env-opt-in, reads no account state
 
 **Track 2 — Codex (OpenAI): best-in-class UX for ChatGPT Pro**
 - "Better than Codex CLI" is a product goal, not a side effect
@@ -22,12 +22,9 @@ silly-code's iteration is a **three-track problem**, not a monolith. Every patch
 - Prompt-level help for GPT's quirks (continuation-discipline, tameSkillPrompts)
 - `SILLY_DEBUG_DUMP` + `silly report` feed the optimization loop — dumps → diagnosis → adapter patch
 
-**Track 3 — Copilot: regression-free**
-- Not a focus of proactive feature work; `pipeline/patches/providers/copilot.cjs` stays small
-- `tests/providers.test.cjs` is the guard — every `_base.cjs` change sweeps Copilot too
-- If a Copilot-only regression surfaces in CI and can't be fixed in <30 min, escalate to deprecation
+**Copilot provider is deprecated** and no longer maintained — adapter removed, bypass hook cleared, env flag `CLAUDE_CODE_USE_COPILOT` is a no-op. Do not add Copilot-specific code.
 
-When scoping a change, identify its track **and** verify the other two don't silently break.
+When scoping a change, identify its track **and** verify the other doesn't silently break.
 
 ## Architecture
 
@@ -40,8 +37,7 @@ pipeline/patch.cjs (orchestrator)
     │   └── providers/
     │       ├── _base.cjs             Protocol translation (mapModel, msgToOai, SSE)
     │       ├── claude.cjs            Claude config (default/fallback)
-    │       ├── openai.cjs            OpenAI Codex adapter + config
-    │       └── copilot.cjs           GitHub Copilot adapter + config
+    │       └── openai.cjs            OpenAI Codex adapter + config
     ├── patches/equality.cjs          (20-21) Tier bypass
     └── patches/privacy.cjs           (30-39) Telemetry blocking
     ↓
@@ -56,12 +52,10 @@ node pipeline/patch.cjs
 
 # Test providers
 CLAUDE_CODE_USE_OPENAI=1 SILLY_CODE_DATA=~/.silly-code node pipeline/build/cli-patched.js -p "hello"
-CLAUDE_CODE_USE_COPILOT=1 SILLY_CODE_DATA=~/.silly-code node pipeline/build/cli-patched.js -p "hello"
 node pipeline/build/cli-patched.js -p "hello"
 
 # OAuth login
 node pipeline/login.mjs codex
-node pipeline/login.mjs copilot
 
 # Install (end user)
 curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash

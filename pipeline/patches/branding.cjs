@@ -310,9 +310,9 @@ module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix })
   )
 
   // Patch 14a: Hide OAuth org name in welcome card for non-firstParty.
-  // OpenAI / Copilot users get the email-shaped orgName from their upstream
-  // provider ("user@x.com's Organization") — exposing it in the welcome card
-  // is an identity leak under our purity contract.
+  // OpenAI users get the email-shaped orgName from their upstream provider
+  // ("user@x.com's Organization") — exposing it in the welcome card is an
+  // identity leak under our purity contract.
   patch('14a-welcome-hide-org-non-firstParty',
     '!process.env.IS_DEMO&&M.oauthAccount?.organizationName&&V7.createElement',
     '!process.env.IS_DEMO&&M.oauthAccount?.organizationName&&(typeof pq!=="function"||pq()==="firstParty")&&V7.createElement'

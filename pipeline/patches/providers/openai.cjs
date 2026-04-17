@@ -85,7 +85,20 @@ async function _openaiAuth() {
 // msgsToResponsesInput, makeResponsesSseStream, collectResponsesSse, cleanIdentityForProvider from _base.cjs
 // all serialized into the same scope.
 async function _openaiAdapter(url, init) {
-  const _codexModelTable = { 'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.4', 'claude-haiku': 'gpt-5.3-codex', default: 'gpt-5.4' };
+  // Alias → Codex model, mirroring Codex UI's tiered selection.
+  // Verified against upstream codex-cli 0.121.0 native binary (slug strings).
+  //   opus    → gpt-5.4 (most capable, flagship)
+  //   sonnet  → gpt-5.3-codex (agentic coding, current mainstream)
+  //   haiku   → gpt-5.1-codex-mini (cheap/fast)
+  const _codexModelTable = {
+    'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.3-codex', 'claude-haiku': 'gpt-5.1-codex-mini',
+    // Pass-through for explicit Codex slugs — lets users override via
+    // ANTHROPIC_DEFAULT_OPUS_MODEL=gpt-5.2-codex etc. without mapping.
+    'gpt-5.4':'gpt-5.4','gpt-5.4-mini':'gpt-5.4-mini','gpt-5.3-codex':'gpt-5.3-codex',
+    'gpt-5.2-codex':'gpt-5.2-codex','gpt-5.2':'gpt-5.2',
+    'gpt-5.1-codex-max':'gpt-5.1-codex-max','gpt-5.1-codex-mini':'gpt-5.1-codex-mini','gpt-5.1-codex':'gpt-5.1-codex','gpt-5.1':'gpt-5.1',
+    default: 'gpt-5.4',
+  };
   const _oaiModelTable = { 'claude-opus': 'gpt-4o', 'claude-sonnet': 'gpt-4o', 'claude-haiku': 'gpt-4o-mini', default: 'gpt-4o' };
   const _provName = 'OpenAI GPT';
 
@@ -220,20 +233,23 @@ module.exports = {
     simplePrompt: 'You are Silly Code (OpenAI GPT).',
     sdkPrompt: null,
     modelDisplayNames: {
-      'gpt-5.4-mini': 'GPT 5.4 Mini', 'gpt-5.4': 'GPT 5.4', 'gpt-5.3-codex': 'GPT 5.3 Codex',
-      'gpt-4o-mini': 'GPT 4o Mini', 'gpt-4o': 'GPT 4o', 'o3': 'o3',
-      'claude-opus': 'GPT 5.4', 'claude-sonnet': 'GPT 5.4', 'claude-haiku': 'GPT 5.3 Codex',
-      default: 'GPT 5.4',
+      'gpt-5.4': 'GPT-5.4', 'gpt-5.4-mini': 'GPT-5.4 Mini',
+      'gpt-5.3-codex': 'GPT-5.3 Codex',
+      'gpt-5.2-codex': 'GPT-5.2 Codex', 'gpt-5.2': 'GPT-5.2',
+      'gpt-5.1-codex-max': 'GPT-5.1 Codex Max', 'gpt-5.1-codex-mini': 'GPT-5.1 Codex Mini',
+      'gpt-5.1-codex': 'GPT-5.1 Codex', 'gpt-5.1': 'GPT-5.1',
+      'gpt-4o-mini': 'GPT-4o Mini', 'gpt-4o': 'GPT-4o', 'o3': 'o3',
+      'claude-opus': 'GPT-5.4', 'claude-sonnet': 'GPT-5.3 Codex', 'claude-haiku': 'GPT-5.1 Codex Mini',
+      default: 'GPT-5.4',
     },
   },
-  models: { 'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.4', 'claude-haiku': 'gpt-5.3-codex', default: 'gpt-5.4' },
-  contextWindow: { default: 120000, perModel: {
-    'gpt-5.4': 200000,
-    'gpt-5.4-mini': 128000,
-    'gpt-5.3-codex': 120000,
-    'gpt-4o': 128000,
-    'gpt-4o-mini': 128000,
-    'o3': 200000,
+  models: { 'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.3-codex', 'claude-haiku': 'gpt-5.1-codex-mini', default: 'gpt-5.4' },
+  contextWindow: { default: 200000, perModel: {
+    'gpt-5.4': 272000, 'gpt-5.4-mini': 272000,
+    'gpt-5.3-codex': 272000, 'gpt-5.2-codex': 272000, 'gpt-5.2': 272000,
+    'gpt-5.1-codex-max': 400000, 'gpt-5.1-codex-mini': 272000,
+    'gpt-5.1-codex': 272000, 'gpt-5.1': 272000,
+    'gpt-4o': 128000, 'gpt-4o-mini': 128000, 'o3': 200000,
   } },
   tierNames: { max: 'ChatGPT Pro', pro: 'ChatGPT Plus', api: 'OpenAI API' },
   adapter: _openaiAdapter,

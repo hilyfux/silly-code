@@ -256,6 +256,17 @@ module.exports = function applyProviders({ patch }) {
     );
   }
 
+  // ── Patch 53: Restore Opus 4.6 option in the /model menu ──
+  // Upstream 2.1.112's cjY() simplified the Max-tier branch to 3 items
+  // (Default/Sonnet/Haiku). uvK() — the Opus 4.6 builder — is still exported
+  // but no longer called in that branch, so users can't pick Opus 4.6 from
+  // /model anymore. Inject uvK(q,!1) after xvK (Haiku) in the Max-tier branch
+  // so the menu grows to 4 items: Default / Sonnet / Haiku / Opus 4.6.
+  patch('53-restore-opus-46-menu',
+    ',rt())O.push(bvK());return O.push(xvK),O',
+    ',rt())O.push(bvK());return O.push(xvK),O.push(uvK(q,!1)),O'
+  );
+
   // ── Patch 52: Clamp non-Opus-4.7 1M context on firstParty ──
   // Opus 4.7 is the only [1m] model with free 1M on current Anthropic pricing;
   // every other [1m] variant needs extra-usage overage billing or the server

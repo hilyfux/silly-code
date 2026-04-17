@@ -184,7 +184,7 @@ function msgsToResponsesInput(system, messages) {
 function makeSseStream(oaiResp, model) {
   const _enc=new TextEncoder(),_dec=new TextDecoder();
   const _msgId='msg_sc_'+Date.now();
-  let _sentStart=false,_blockIdx=0,_blockOpen=false,_outTok=0,_hasTools=false;
+  let _sentStart=false,_blockIdx=0,_blockOpen=false,_outTok=0,_inTok=0,_hasTools=false,_finished=false,_pendingStop=null;
   // Track active tool block indices to properly close them
   const _openToolBlocks=new Set();
   // Buffer tool args per block index — send cleaned JSON at finish_reason
@@ -199,8 +199,10 @@ function makeSseStream(oaiResp, model) {
       for(const bi of _openToolBlocks){_send('content_block_stop',{type:'content_block_stop',index:bi});}_openToolBlocks.clear();
     };
     const _finish=(reason)=>{
+      if(_finished)return;
+      _finished=true;
       _closeAll();
-      _send('message_delta',{type:'message_delta',delta:{stop_reason:reason,stop_sequence:null},usage:{output_tokens:_outTok}});
+      _send('message_delta',{type:'message_delta',delta:{stop_reason:_pendingStop||reason,stop_sequence:null},usage:{input_tokens:_inTok,output_tokens:_outTok}});
       _send('message_stop',{type:'message_stop'});ctrl.close();
     };
     try{while(true){
@@ -213,6 +215,9 @@ function makeSseStream(oaiResp, model) {
         if(_d==='[DONE]'){_finish(_hasTools?'tool_use':'end_turn');return;}
         let _chunk;try{_chunk=JSON.parse(_d)}catch{continue}
         if(!_sentStart){_sentStart=true;_send('message_start',{type:'message_start',message:{id:_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,stop_sequence:null,usage:{input_tokens:0,output_tokens:0}}});}
+        // Final usage chunk (OpenAI sends it when stream_options.include_usage=true):
+        // choices array is empty but usage is populated. Capture before continue.
+        if(_chunk.usage){_inTok=_chunk.usage.prompt_tokens||_inTok;_outTok=_chunk.usage.completion_tokens||_outTok;}
         const _ch=_chunk.choices?.[0];if(!_ch)continue;
         const _dt=_ch.delta||{};
         if(_dt.content!=null){
@@ -237,7 +242,10 @@ function makeSseStream(oaiResp, model) {
         }
         if(_ch.finish_reason){
           const _sr={'tool_calls':'tool_use','function_calls':'tool_use','stop':'end_turn','length':'max_tokens','content_filter':'end_turn'};
-          _finish(_sr[_ch.finish_reason]||(_hasTools?'tool_use':'end_turn'));return;
+          // Defer _finish() so we still process the trailing usage chunk that OpenAI
+          // emits when stream_options.include_usage=true. Real [DONE] (or stream end)
+          // calls _finish — it reuses _pendingStop and is idempotent.
+          _pendingStop=_sr[_ch.finish_reason]||(_hasTools?'tool_use':'end_turn');
         }
       }
     }
@@ -258,14 +266,14 @@ function makeSseStream(oaiResp, model) {
 function makeResponsesSseStream(oaiResp, model) {
   const _enc=new TextEncoder(),_dec=new TextDecoder();
   const _msgId='msg_sc_'+Date.now();
-  let _blockIdx=0,_blockOpen=false,_outTok=0,_sentStart=false,_hasTools=false,_thinkOpen=false,_argsBuf='';
+  let _blockIdx=0,_blockOpen=false,_outTok=0,_inTok=0,_sentStart=false,_hasTools=false,_thinkOpen=false,_argsBuf='';
   return new ReadableStream({async start(ctrl){
     const _rd=oaiResp.body.getReader();let _buf='';
     const _send=(ev,d)=>ctrl.enqueue(_enc.encode('event: '+ev+'\ndata: '+JSON.stringify(d)+'\n\n'));
     const _ensureStart=()=>{if(!_sentStart){_sentStart=true;_send('message_start',{type:'message_start',message:{id:_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,stop_sequence:null,usage:{input_tokens:0,output_tokens:0}}});}};
     const _finish=(sr,usage)=>{
       if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockOpen=false;}
-      _send('message_delta',{type:'message_delta',delta:{stop_reason:sr,stop_sequence:null},usage:{output_tokens:usage||_outTok}});
+      _send('message_delta',{type:'message_delta',delta:{stop_reason:sr,stop_sequence:null},usage:{input_tokens:_inTok,output_tokens:usage||_outTok}});
       _send('message_stop',{type:'message_stop'});ctrl.close();
     };
     try{while(true){
@@ -338,6 +346,7 @@ function makeResponsesSseStream(oaiResp, model) {
         if(_t==='response.completed'){
           if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockOpen=false;}
           const _u=_ev.response?.usage||{};
+          _inTok=_u.input_tokens||_inTok;
           const _ht=_hasTools||(_ev.response?.output||[]).some(o=>o.type==='function_call');
           _finish(_ev.response?.status==='incomplete'?'max_tokens':_ht?'tool_use':'end_turn',_u.output_tokens||_outTok);return;
         }

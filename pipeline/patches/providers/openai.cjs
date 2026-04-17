@@ -188,6 +188,11 @@ async function _openaiAdapter(url, init) {
     if (_b.system) _msgs.push({ role: 'system', content: flattenSystem(_b.system) });
     for (const m of (_b.messages || [])) _msgs.push(...msgToOai(m));
     const _req = { model: _om, messages: _msgs, stream: !!_b.stream, max_tokens: _b.max_tokens || 4096, temperature: _b.temperature != null ? _b.temperature : 1 };
+    // Enable include_usage so the final SSE chunk carries prompt/completion tokens —
+    // without it the adapter reports input_tokens:0 upstream, so Claude Code's vJ()
+    // never sees the true context size and auto-compact never fires until chatgpt.com
+    // itself rejects with "prompt is too long" (rendered as "Context limit reached").
+    if (_b.stream) _req.stream_options = { include_usage: true };
     if (_b.tools && _b.tools.length) {
       _req.tools = _b.tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } } }));
       _req.tool_choice = 'auto';

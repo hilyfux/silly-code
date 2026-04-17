@@ -35,10 +35,17 @@ const OAI_LEGACY_MODELS = [
   { slug: 'o3',          display: 'o3',          ctx: 200000 },
 ];
 // Claude alias → Codex slug, tier-aligned with Codex UI's default picks.
+// haiku note (2026-04-17 regression): gpt-5.1-codex-mini was observed to
+// stall sub-agents ("Explore" / Task spawns) on chatgpt.com's /codex/responses
+// endpoint — 3-minute silent timeout, zero tool_uses, zero tokens. Sub-agents
+// default to the haiku alias, so mapping haiku to an unstable slug broke every
+// agentic workflow. Reverted to gpt-5.3-codex (same as sonnet) until we have
+// dumps proving mini is stable on this endpoint. Menu still shows a distinct
+// "Fast" slot via patch 53's label remap; user-facing tier structure preserved.
 const CODEX_ALIASES = {
   'claude-opus':   'gpt-5.4',             // flagship, most capable
   'claude-sonnet': 'gpt-5.3-codex',       // agentic coding mainstream
-  'claude-haiku': 'gpt-5.1-codex-mini',   // cheap, fast
+  'claude-haiku':  'gpt-5.3-codex',       // reverted from gpt-5.1-codex-mini (see note)
 };
 const ALL_MODELS = [...CODEX_MODELS, ...OAI_LEGACY_MODELS];
 
@@ -119,7 +126,7 @@ async function _openaiAdapter(url, init) {
   // longer slug via a shorter prefix. The new hasOwnProperty exact-match path
   // in mapModel makes ordering redundant — left sorted as belt-and-braces.
   const _codexModelTable = {
-    'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.3-codex', 'claude-haiku': 'gpt-5.1-codex-mini',
+    'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.3-codex', 'claude-haiku': 'gpt-5.3-codex',
     // The menu "Reasoning" slot (patch 53) passes claude-opus-4-6 as its value;
     // route it to Codex's reasoning-heavy model via exact-match before the
     // substring loop falls back to the claude-opus alias.

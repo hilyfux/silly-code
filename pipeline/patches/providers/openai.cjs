@@ -162,6 +162,16 @@ async function _openaiAdapter(url, init) {
   const _tools = ((_b.tools || []).filter(t => !_CC_UNUSABLE.has(t.name)));
   // sillyFastTier lives in _base.cjs; hand it the minified effort getter.
   const _fastTier = sillyFastTier(typeof n8z === 'function' ? n8z : undefined);
+  // P0 agent-core: provider-agnostic budget observation. SILLY_AGENT_CORE=1
+  // enables local ndjson logging in agentBudgetLog; tracker itself is pure
+  // and cheap, so we always compute but only log on opt-in. Writes happen
+  // asynchronously after the request is queued (not awaited).
+  if (process.env.SILLY_AGENT_CORE === '1') {
+    const _ctxWindow = 272000; // openai.cjs default upper bound; tracker normalises
+    const _b0 = _b;
+    const _budget = agentBudgetTrack({ messages: _b0.messages, systemPrompt: _b0.system, tools: _b0.tools, contextWindow: _ctxWindow });
+    agentBudgetLog({ provider: 'openai', model: _b0.model, cred_kind: cred.kind, message_count: (_b0.messages || []).length, ..._budget });
+  }
   const _clean = (t) => cleanIdentityForProvider(tameSkillPrompts(t), _provName);
   if (_b.system) {
     if (typeof _b.system === 'string') _b.system = enforceContinuation(_clean(_b.system), _b.messages, _tools);

@@ -54,6 +54,109 @@ function sillyFastTier(effortGetter) {
 }
 
 /**
+ * Provider-agnostic context budget tracker — P0 of the agent core.
+ *
+ * Pure function: given only the protocol-level signals (messages, system
+ * prompt, tools, context window size), returns the best estimate of token
+ * usage for the current conversation. No provider-specific branches; works
+ * for any adapter that normalises assistant messages into the Anthropic
+ * Messages shape with usage blocks.
+ *
+ * Algorithm:
+ *   1. Walk messages backwards to the most recent assistant whose message
+ *      carries a usage block; sum input_tokens + cache_creation +
+ *      cache_read + output_tokens (matches upstream's ey6 / vJ semantics).
+ *   2. Estimate byte size of any trailing messages after that anchor
+ *      (user + tool_result + etc.) and add a rough 3.5-char-per-token
+ *      conversion.
+ *   3. If no assistant usage exists at all, fall back to whole-message
+ *      byte estimate plus system + tools byte count.
+ *
+ * Output: { used, total, remaining, usedPct, compactAt, blockingAt, source }
+ *   - source: 'assistant_usage' | 'byte_estimate' | 'mixed'
+ *   - compactAt = total - 33000 (matches upstream's v38 = Yn - t_7 math)
+ *   - blockingAt = total - 3000 (matches upstream's Yn - e_7)
+ */
+function agentBudgetTrack({ messages, systemPrompt, tools, contextWindow }) {
+  const _total = Math.max(1, Number(contextWindow) || 200000);
+  const _compactAt = Math.max(0, _total - 33000);
+  const _blockingAt = Math.max(0, _total - 3000);
+  const _bytesToTokens = (b) => Math.ceil(b / 3.5);
+  const _strBytes = (s) => typeof s === 'string' ? s.length : 0;
+  const _blockBytes = (p) => {
+    if (!p) return 0;
+    if (typeof p === 'string') return p.length;
+    if (p.type === 'text') return _strBytes(p.text);
+    if (p.type === 'tool_use') return _strBytes(p.name) + _strBytes(JSON.stringify(p.input || {}));
+    if (p.type === 'tool_result') {
+      if (typeof p.content === 'string') return p.content.length;
+      if (Array.isArray(p.content)) return p.content.reduce((n, c) => n + _blockBytes(c), 0);
+      return 0;
+    }
+    if (p.type === 'thinking' || p.type === 'redacted_thinking') return _strBytes(p.thinking) + _strBytes(p.data);
+    if (p.type === 'image') return 512;
+    return _strBytes(JSON.stringify(p));
+  };
+  const _msgBytes = (m) => {
+    if (!m) return 0;
+    if (typeof m.content === 'string') return m.content.length;
+    if (Array.isArray(m.content)) return m.content.reduce((n, c) => n + _blockBytes(c), 0);
+    return 0;
+  };
+  let _anchorUsage = null, _anchorIdx = -1;
+  if (Array.isArray(messages)) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m && m.role === 'assistant' && m.usage && typeof m.usage.input_tokens === 'number') {
+        _anchorUsage = m.usage; _anchorIdx = i; break;
+      }
+    }
+  }
+  let _used = 0, _source = 'byte_estimate';
+  if (_anchorUsage) {
+    _used = (_anchorUsage.input_tokens || 0)
+          + (_anchorUsage.cache_creation_input_tokens || 0)
+          + (_anchorUsage.cache_read_input_tokens || 0)
+          + (_anchorUsage.output_tokens || 0);
+    _source = 'assistant_usage';
+    let _tailBytes = 0;
+    for (let j = _anchorIdx + 1; j < messages.length; j++) _tailBytes += _msgBytes(messages[j]);
+    if (_tailBytes > 0) {
+      _used += _bytesToTokens(_tailBytes);
+      _source = 'mixed';
+    }
+  } else {
+    let _all = 0;
+    if (Array.isArray(messages)) for (const m of messages) _all += _msgBytes(m);
+    if (typeof systemPrompt === 'string') _all += systemPrompt.length;
+    else if (Array.isArray(systemPrompt)) for (const p of systemPrompt) _all += _strBytes(p && p.text);
+    if (Array.isArray(tools)) _all += tools.reduce((n, t) => n + _strBytes(t && t.name) + _strBytes(t && t.description) + _strBytes(JSON.stringify((t && t.input_schema) || {})), 0);
+    _used = _bytesToTokens(_all);
+  }
+  const _remaining = Math.max(0, _total - _used);
+  const _usedPct = Math.min(100, Math.max(0, Math.round((_used / _total) * 100)));
+  return { used: _used, total: _total, remaining: _remaining, usedPct: _usedPct, compactAt: _compactAt, blockingAt: _blockingAt, source: _source };
+}
+
+/**
+ * Append one budget-track observation line to the local ndjson log.
+ * Only writes when SILLY_AGENT_CORE=1. All IO errors swallowed — the
+ * observation layer must never interfere with request flow.
+ */
+async function agentBudgetLog(entry) {
+  if (process.env.SILLY_AGENT_CORE !== '1') return;
+  try {
+    const { appendFileSync, mkdirSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { homedir } = await import('node:os');
+    const _dir = process.env.SILLY_CODE_DATA || join(homedir(), '.silly-code');
+    mkdirSync(_dir, { recursive: true });
+    const _path = process.env.SILLY_BUDGET_LOG || join(_dir, 'budget-log.ndjson');
+    appendFileSync(_path, JSON.stringify({ ts: Date.now(), ...entry }) + '\n');
+  } catch { /* intentionally silent */ }
+}
+
+/**
  * Convert an Anthropic Messages API message to one or more OpenAI
  * Chat Completions messages.
  *
@@ -662,4 +765,4 @@ async function collectResponsesSse(oaiResp, model) {
   return new Response(JSON.stringify({ id: _msgId, type: 'message', role: 'assistant', content: _ct, model, stop_reason: _stopReason, stop_sequence: null, usage: { input_tokens: _inTokens, output_tokens: _outTokens } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
-module.exports = { mapModel, mapOaiStopReason, sillyFastTier, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, findOpenTodos };
+module.exports = { mapModel, mapOaiStopReason, sillyFastTier, agentBudgetTrack, agentBudgetLog, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, findOpenTodos };

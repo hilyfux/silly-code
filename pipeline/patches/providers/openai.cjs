@@ -233,6 +233,31 @@ async function _openaiAdapter(url, init) {
     // messages on every 429, burning pua:loop iterations without doing work.
     // Fetch timeout (120s): chatgpt.com occasionally hangs with no response,
     // causing subagents to freeze at "Initializing..." indefinitely.
+    // Unconditional request-shape dump (no env flag required). Captures
+    // every /codex/responses invocation so interactive TUI failures become
+    // post-mortem-able without user intervention. Small files; self-rotates
+    // at ~200 entries via mtime sort (kept simple).
+    const _bodyStr = JSON.stringify(_req);
+    try {
+      const { mkdirSync, writeFileSync } = await import('node:fs');
+      const { tmpdir: _tmp } = await import('node:os');
+      const { join: _jr } = await import('node:path');
+      const _rDir = _jr(_tmp(), 'silly-debug');
+      mkdirSync(_rDir, { recursive: true });
+      const _stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      writeFileSync(_jr(_rDir, _stamp + '-codex-request.json'), JSON.stringify({
+        ts: Date.now(),
+        url: 'https://chatgpt.com/backend-api/codex/responses',
+        model: _req.model, stream: _req.stream,
+        body_size: _bodyStr.length,
+        instructions_len: (_req.instructions || '').length,
+        input_item_count: (_req.input || []).length,
+        input_preview: (_req.input || []).slice(0, 3).map(i => ({ type: i.type, role: i.role, content_parts: Array.isArray(i.content) ? i.content.map(c => ({ type: c.type, len: (c.text || '').length })) : null })),
+        tools_count: (_req.tools || []).length,
+        tool_names: (_req.tools || []).map(t => t.name),
+        extra_fields: Object.keys(_req).filter(k => !['model','instructions','input','store','stream','temperature','top_p','tools','parallel_tool_calls','service_tier'].includes(k)),
+      }, null, 2));
+    } catch {}
     let _r, _rAttempt = 0;
     while (true) {
       const _ac = new AbortController();
@@ -241,9 +266,37 @@ async function _openaiAdapter(url, init) {
         _r = await fetch('https://chatgpt.com/backend-api/codex/responses', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...cred.headers },
-          body: JSON.stringify(_req),
+          body: _bodyStr,
           signal: _ac.signal,
         });
+      } catch (_fetchErr) {
+        // fetch() threw — TLS / abort / DNS / socket reset. Dump the raw error so
+        // we can tell the difference. Upstream collapses all of these into the
+        // generic "Unable to connect to API" message otherwise.
+        try {
+          const { mkdirSync, writeFileSync } = await import('node:fs');
+          const { tmpdir: _tmp } = await import('node:os');
+          const { join: _jr } = await import('node:path');
+          const _rDir = _jr(_tmp(), 'silly-debug');
+          mkdirSync(_rDir, { recursive: true });
+          const _stamp = new Date().toISOString().replace(/[:.]/g, '-');
+          writeFileSync(_jr(_rDir, _stamp + '-codex-fetch-error.json'), JSON.stringify({
+            ts: Date.now(),
+            url: 'https://chatgpt.com/backend-api/codex/responses',
+            err_name: _fetchErr && _fetchErr.name,
+            err_message: _fetchErr && _fetchErr.message,
+            err_code: _fetchErr && _fetchErr.code,
+            err_cause_name: _fetchErr && _fetchErr.cause && _fetchErr.cause.name,
+            err_cause_message: _fetchErr && _fetchErr.cause && _fetchErr.cause.message,
+            err_cause_code: _fetchErr && _fetchErr.cause && _fetchErr.cause.code,
+            body_size: _bodyStr.length,
+            req_model: _req.model,
+            req_tools_count: (_req.tools || []).length,
+            req_extra_fields: Object.keys(_req).filter(k => !['model','instructions','input','store','stream','temperature','top_p','tools','parallel_tool_calls','service_tier'].includes(k)),
+          }, null, 2));
+          console.error('[silly] fetch /codex/responses threw: ' + (_fetchErr && (_fetchErr.message || _fetchErr.name)) + ' (body ' + _bodyStr.length + ' bytes)');
+        } catch {}
+        throw _fetchErr;
       } finally {
         clearTimeout(_fetchTimer);
       }

@@ -42,8 +42,16 @@ module.exports = function applyEquality({ patch }) {
   // "max" to unlock tier-gated features), which would otherwise auto-select
   // Opus 4.6 by default and burn ~5× Sonnet's token budget. Users who want
   // Opus can still flip with /model opus; the tier unlocks remain intact.
+  // No [1m] suffix — Sonnet default runs at 200K (patch 52 clamps non-Opus).
   patch('25-sonnet-default',
     'function hv(){if(ch())return LE()+(YX()?"[1m]":"");if(Yq6())return LE()+(YX()?"[1m]":"");return Af()}',
-    'function hv(){return Af()+(YX()?"[1m]":"")}'
+    'function hv(){return Af()}'
+  )
+
+  // Patch 25b: Fix Default menu description to match actual default model.
+  // uT6() shows "Opus 4.7" for max tier, but patch 25 sets Sonnet as default.
+  patch('25b-default-menu-desc',
+    'function uT6(q=!1){if(ch()||Yq6()){if(YX())return"Opus 4.7 with 1M context \xB7 Most capable for complex work";return"Opus 4.7 \xB7 Most capable for complex work"}return"Sonnet 4.6 \xB7 Best for everyday tasks"}',
+    'function uT6(q=!1){return"Sonnet 4.6 \xB7 Best for everyday tasks"}'
   )
 }

@@ -47,6 +47,25 @@ const CODEX_ALIASES = {
   'claude-sonnet': 'gpt-5.3-codex',       // agentic coding mainstream
   'claude-haiku':  'gpt-5.3-codex',       // reverted from gpt-5.1-codex-mini (see note)
 };
+// ChatGPT-account migration map (mirrored from codex-cli 0.121.0's model_catalog
+// upgrade pointers — strings-extracted from the native binary on 2026-04-17).
+// chatgpt.com/backend-api/codex/responses returns HTTP 400 "The '<slug>' model
+// is not supported when using Codex with a ChatGPT account" for the LHS slugs,
+// and Codex CLI itself silently migrates them to the RHS before dispatch
+// (there's a `model_migration.rs` + a `hide_gpt-5.1-codex-max_migration_prompt`
+// sentinel in the binary). Mirror that behaviour so our OAuth users don't see
+// the "Retrying 5/10 · Unable to connect" storm on Opus 4.6.
+const OAUTH_MODEL_MIGRATIONS = {
+  'gpt-5.1-codex-max':  'gpt-5.4',
+  'gpt-5.1-codex-mini': 'gpt-5.4',
+  'gpt-5.2':            'gpt-5.4',
+  'gpt-5.2-codex':      'gpt-5.4',
+  'gpt-5.1-codex':      'gpt-5.3-codex',
+  'gpt-5.1':            'gpt-5.3-codex',
+  'gpt-5-codex':        'gpt-5.3-codex',
+  'gpt-5-codex-mini':   'gpt-5.3-codex',
+  'gpt-5':              'gpt-5.3-codex',
+};
 const ALL_MODELS = [...CODEX_MODELS, ...OAI_LEGACY_MODELS];
 
 // ── auth function ────────────────────────────────────────────────────────────
@@ -127,11 +146,11 @@ async function _openaiAdapter(url, init) {
   // in mapModel makes ordering redundant — left sorted as belt-and-braces.
   const _codexModelTable = {
     'claude-opus': 'gpt-5.4', 'claude-sonnet': 'gpt-5.3-codex', 'claude-haiku': 'gpt-5.3-codex',
-    // The menu "Reasoning" slot (patch 53) passes claude-opus-4-6 as its value;
-    // route it to Codex's reasoning-heavy model via exact-match before the
-    // substring loop falls back to the claude-opus alias.
-    'claude-opus-4-6':    'gpt-5.1-codex-max',
-    'claude-opus-4-6[1m]':'gpt-5.1-codex-max',
+    // Opus 4.6 menu slot → flagship. Previously pointed at gpt-5.1-codex-max, but
+    // chatgpt.com Codex OAuth rejects that slug ("not supported when using Codex
+    // with a ChatGPT account"); Codex CLI itself migrates 5.1-codex-max → 5.4.
+    'claude-opus-4-6':    'gpt-5.4',
+    'claude-opus-4-6[1m]':'gpt-5.4',
     'gpt-5.1-codex-mini': 'gpt-5.1-codex-mini',
     'gpt-5.1-codex-max':  'gpt-5.1-codex-max',
     'gpt-5.1-codex':      'gpt-5.1-codex',
@@ -142,6 +161,21 @@ async function _openaiAdapter(url, init) {
     'gpt-5.2':            'gpt-5.2',
     'gpt-5.1':            'gpt-5.1',
     default: 'gpt-5.4',
+  };
+  // Mirrors OAUTH_MODEL_MIGRATIONS at file top — inlined because the adapter is
+  // .toString()-serialized and cannot capture outer-scope refs. If the user
+  // still types a deprecated slug (via CLI flag, an old config, or the menu's
+  // remaining direct slugs), rewrite it before hitting chatgpt.com.
+  const _oauthMigrations = {
+    'gpt-5.1-codex-max':  'gpt-5.4',
+    'gpt-5.1-codex-mini': 'gpt-5.4',
+    'gpt-5.2':            'gpt-5.4',
+    'gpt-5.2-codex':      'gpt-5.4',
+    'gpt-5.1-codex':      'gpt-5.3-codex',
+    'gpt-5.1':            'gpt-5.3-codex',
+    'gpt-5-codex':        'gpt-5.3-codex',
+    'gpt-5-codex-mini':   'gpt-5.3-codex',
+    'gpt-5':              'gpt-5.3-codex',
   };
   const _oaiModelTable = { 'claude-opus': 'gpt-4o', 'claude-sonnet': 'gpt-4o', 'claude-haiku': 'gpt-4o-mini', default: 'gpt-4o' };
   const _provName = 'OpenAI GPT';
@@ -206,15 +240,24 @@ async function _openaiAdapter(url, init) {
     // NOTE: chatgpt.com/backend-api/codex/responses requires stream:true — non-streaming
     // requests return HTTP 400 "Stream must be set to true". We always stream and then
     // collect the SSE into a static response when the caller wants non-streaming.
-    const _om = mapModel(_b.model, _codexModelTable);
+    let _om = mapModel(_b.model, _codexModelTable);
+    // Apply the chatgpt.com migration map — several 5.1/5.2 slugs return 400
+    // "not supported when using Codex with a ChatGPT account"; Codex CLI
+    // silently rewrites to the RHS target before dispatch.
+    if (_oauthMigrations[_om]) {
+      const _to = _oauthMigrations[_om];
+      console.error('[silly] codex: migrating "' + _om + '" → "' + _to + '" (chatgpt.com Codex account does not accept the old slug).');
+      _om = _to;
+    }
     const _sysText = flattenSystem(_b.system);
     const _input = msgsToResponsesInput(null, _b.messages);
     const _stream = !!_b.stream;
     const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: true };
-    // Forward temperature — chatgpt.com Codex does NOT support max_output_tokens
-    // (returns HTTP 400 "Unsupported parameter"). Let GPT Pro use its own token limit.
-    if (_b.temperature != null) _req.temperature = _b.temperature;
-    if (_b.top_p != null) _req.top_p = _b.top_p;
+    // Do NOT forward temperature / top_p — chatgpt.com's ResponsesApiRequest
+    // struct has no such fields (verified against codex-cli 0.121.0 native
+    // binary) and returns HTTP 400 "Unsupported parameter: temperature" when
+    // passed. Upstream Claude Code sets temperature=1 by default, so every
+    // request from the main TUI was being rejected before this fix landed.
     // service_tier: only opt-in via SILLY_CODEX_FAST=1 on /codex/responses.
     // 2026-04-17: user reported 7/10 retry storms after bff322e auto-injected
     // "priority" for effort>=high. chatgpt.com's Codex OAuth endpoint does not

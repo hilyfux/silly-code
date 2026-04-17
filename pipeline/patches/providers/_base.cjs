@@ -596,8 +596,23 @@ function tameSkillPrompts(text) {
   text = text.replace(/IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE\. YOU MUST USE IT\./gi, '');
   text = text.replace(/This is not negotiable\. This is not optional\. You cannot rationalize your way out of this\./gi, '');
   text = text.replace(/even a 1% chance a skill might apply/gi, 'a skill clearly applies');
-  // Remove the "Red Flags" table that makes models paranoid about skipping skills
-  text = text.replace(/## Red Flags[\s\S]*?(?=## |\n---|\Z)/g, '');
+  // Remove the "Red Flags" table header + its markdown pipe-table body.
+  // Precise termination (stops at the first non-pipe line) so we don't
+  // accidentally eat surrounding skill prose. The earlier version used
+  // \Z which JS regex doesn't support — it silently matched a literal "Z",
+  // fizzled when input had none, and left the table intact.
+  text = text.replace(/## Red Flags\n(?:\|[^\n]*\n?)+/g, '');
+  // Strip the "Triggers on: '...', '...', ..." tails the harness appends to
+  // each auto-injected skill catalog entry. GPT Pro picks skills from the
+  // name + leading description; the exhaustive alias list is pure noise.
+  // Scope: any occurrence in prose. Non-greedy up to the next period or
+  // newline; handles both English and Chinese tail punctuation.
+  text = text.replace(/Triggers on: ?[^\n]+?[\.\n]/g, '');
+  // Strip GraphViz `digraph` / ```dot fenced blocks — the superpowers skill
+  // embeds a flow-control DOT graph that GPT parses as noise. Keep the
+  // surrounding skill prose; just drop the graph body.
+  text = text.replace(/```dot[\s\S]*?```/g, '');
+  text = text.replace(/^digraph\s+\w+\s*\{[\s\S]*?^\}\s*$/gm, '');
   return text;
 }
 

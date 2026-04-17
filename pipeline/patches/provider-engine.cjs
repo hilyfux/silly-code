@@ -268,18 +268,21 @@ module.exports = function applyProviders({ patch }) {
     'if(DP(q)){var _1m=q?q.toLowerCase():"";if(pq()==="firstParty"&&_1m.indexOf("opus-4-7")===-1&&!S6(process.env.SILLY_ENABLE_1M_CONTEXT))return DR1;return 1e6}'
   );
 
-  // ── Patch 53: Restore Opus 4.6 option + rebrand menu for sillyx ──
+  // ── Patch 53: Restore Opus 4.6 option + Codex-only menu for sillyx ──
   // Two jobs in one replacement (single MATCH, single anchor on xvK):
   //   (a) firstParty Max-tier branch gets uvK (Opus 4.6) pushed — keeps the
-  //       option we lost when 2.1.112 simplified cjY.
-  //   (b) openai provider gets each item's label/description remapped to
-  //       reflect the actual backend model (GPT-5.x), since upstream's
-  //       factories hardcode Claude names. Values stay untouched so routing
-  //       (mapModel → _codexModelTable) continues to work. firstParty path
-  //       is a no-op (pq()!=="openai" short-circuits the map).
+  //       option we lost when 2.1.112 simplified cjY. firstParty menu is
+  //       otherwise untouched (pq()!=="openai" short-circuit).
+  //   (b) openai provider gets a Codex-only projection: drop [1m] variants
+  //       (chatgpt.com/backend-api/codex/responses has no 1M context tier),
+  //       drop opus-4-6 (routes to same gpt-5.4 as opus after slug-migration
+  //       commit d4ab504 — would show as a duplicate), and relabel remaining
+  //       items with actual Codex model slugs so user stops seeing Claude
+  //       tier names on a GPT backend. Values stay as the Claude aliases
+  //       so routing through mapModel → _codexModelTable continues to work.
   patch('53-restore-opus-46-menu',
     'O.push(xvK),O',
-    'O.push(xvK),O.push(uvK(q,!1)),pq()!=="openai"?O:O.map(function(_i){var _v=_i&&_i.value;if(_v===null)return Object.assign({},_i,{description:"GPT-5.4 · Flagship"});if(_v==="opus")return Object.assign({},_i,{label:"Opus",description:"GPT-5.4 · Flagship"});if(_v==="opus[1m]")return Object.assign({},_i,{label:"Opus (1M)",description:"GPT-5.4 (1M context) · Flagship"});if(_v==="sonnet")return Object.assign({},_i,{label:"Sonnet",description:"GPT-5.3 Codex · Agentic coding"});if(_v==="sonnet[1m]")return Object.assign({},_i,{label:"Sonnet (1M)",description:"GPT-5.3 Codex (1M context)"});if(_v==="haiku")return Object.assign({},_i,{label:"Haiku",description:"GPT-5.3 Codex · Fast tier"});if(typeof _v==="string"&&_v.indexOf("opus-4-6")>=0)return Object.assign({},_i,{label:"Reasoning",description:"GPT-5.1 Codex Max · Deep reasoning"});return _i;})'
+    'O.push(xvK),O.push(uvK(q,!1)),pq()!=="openai"?O:O.filter(function(_i){var _v=_i&&_i.value;if(typeof _v==="string"&&_v.endsWith("[1m]"))return false;if(typeof _v==="string"&&_v.indexOf("opus-4-6")>=0)return false;return true;}).map(function(_i){var _v=_i&&_i.value;if(_v===null)return Object.assign({},_i,{label:"Default",description:"GPT-5.4 · Flagship"});if(_v==="opus")return Object.assign({},_i,{label:"GPT-5.4",description:"Flagship · Most capable"});if(_v==="sonnet")return Object.assign({},_i,{label:"GPT-5.3 Codex",description:"Agentic coding · Everyday tasks"});if(_v==="haiku")return Object.assign({},_i,{label:"GPT-5.3 Codex Fast",description:"Sub-agents · /fast tier"});return _i;})'
   );
 
   // ── Patch 60: Model display name ──

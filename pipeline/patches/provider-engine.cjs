@@ -285,6 +285,34 @@ module.exports = function applyProviders({ patch }) {
     'O.push(xvK),O.push(uvK(q,!1)),pq()!=="openai"?O:O.filter(function(_i){var _v=_i&&_i.value;if(typeof _v==="string"&&_v.endsWith("[1m]"))return false;if(typeof _v==="string"&&_v.indexOf("opus-4-6")>=0)return false;return true;}).map(function(_i){var _v=_i&&_i.value;if(_v===null)return Object.assign({},_i,{label:"Default",description:"GPT-5.4 · Flagship"});if(_v==="opus")return Object.assign({},_i,{label:"GPT-5.4",description:"Flagship · Most capable"});if(_v==="sonnet")return Object.assign({},_i,{label:"GPT-5.3 Codex",description:"Agentic coding · Everyday tasks"});if(_v==="haiku")return Object.assign({},_i,{label:"GPT-5.3 Codex Fast",description:"Sub-agents · /fast tier"});return _i;})'
   );
 
+  // ── Patch 54: q_6 fallback short-circuit for openai ──
+  // q_6 wraps cjY and, if the user's CURRENTLY-SELECTED model value Y is not
+  // in the cjY-produced array K, appends a matching fallback item. Branches:
+  //   Y==="opusplan"          → appends djY()
+  //   Y==="opus"              → appends pvK(!1)
+  //   Y==="opus[1m]"          → appends V37(!1)  ← this bypassed patch 53's filter
+  //   Y==="claude-opus-4-6"   → appends uvK(q,!1)
+  //   Y==="claude-opus-4-6[1m]"→ appends mvK(q,!1)
+  // If a sillyx user had previously selected "Opus (1M context)" in sillye, the
+  // saved value "opus[1m]" survives to the next sillyx session and q_6 re-adds
+  // the 1M Opus item behind our back. Short-circuit: when pq()==="openai",
+  // return RM6(K) directly — all fallbacks are Claude-only by construction.
+  patch('54-menu-fallback-openai-skip',
+    '||K.some((w)=>w.value===Y))return RM6(K);else if(Y==="opusplan")',
+    '||K.some((w)=>w.value===Y))return RM6(K);if(typeof pq==="function"&&pq()==="openai")return RM6(K);else if(Y==="opusplan")'
+  );
+
+  // ── Patch 55: "/model" heading for openai ──
+  // Upstream hardcodes "Switch between Claude models. Applies to this session
+  // and future Claude Code sessions. For other/previous model names, specify
+  // with --model." sillyx users on an OpenAI backend see the word "Claude"
+  // in a GPT-only picker — semantic mismatch. Replace at anchor with a
+  // provider-aware expression; firstParty keeps the original string.
+  patch('55-model-heading-openai',
+    '$??"Switch between Claude models. Applies to this session and future Claude Code sessions. For other/previous model names, specify with --model."',
+    '$??((typeof pq==="function"&&pq()==="openai")?"Switch between Codex models. Applies to this session and future sessions. For other/previous model names, specify with --model.":"Switch between Claude models. Applies to this session and future Claude Code sessions. For other/previous model names, specify with --model.")'
+  );
+
   // ── Patch 60: Model display name ──
   const displayProviders = providers.filter(p => p.identity.modelDisplayNames);
   if (displayProviders.length > 0) {

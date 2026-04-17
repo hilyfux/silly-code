@@ -253,7 +253,35 @@ async function _openaiAdapter(url, init) {
       const _ra = Math.max(1, parseInt(_r.headers.get('Retry-After') || '', 10) || 60);
       await new Promise(_res => setTimeout(_res, Math.min(_ra, 30) * 1000));
     }
-    if (!_r.ok) { let _e = await _r.text(); try { _e = JSON.parse(_e).detail || JSON.parse(_e).error?.message || _e; } catch {} throw new Error('Codex API error ' + _r.status + ': ' + _e); }
+    if (!_r.ok) {
+      let _e = await _r.text();
+      const _raw = _e;
+      try { _e = JSON.parse(_e).detail || JSON.parse(_e).error?.message || _e; } catch {}
+      // Always stderr-log the real status + body snippet so upstream's generic
+      // "Unable to connect to API" doesn't mask chatgpt.com's actual rejection.
+      // Also persist a rejection dump to /tmp/silly-debug so the failure is
+      // post-mortem-able without needing SILLY_DEBUG_DUMP preset.
+      try {
+        const _snippet = (typeof _e === 'string' ? _e : JSON.stringify(_e)).slice(0, 500);
+        console.error('[silly] /codex/responses ' + _r.status + ': ' + _snippet);
+        const { mkdirSync, writeFileSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join: _jRej } = await import('node:path');
+        const _rd = _jRej(tmpdir(), 'silly-debug');
+        mkdirSync(_rd, { recursive: true });
+        const _stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        writeFileSync(_jRej(_rd, _stamp + '-codex-rejection.json'), JSON.stringify({
+          ts: Date.now(), url: 'https://chatgpt.com/backend-api/codex/responses',
+          status: _r.status, headers: Object.fromEntries(_r.headers),
+          body_raw: _raw.slice(0, 4000), body_parsed: _e,
+          req_model: _req.model, req_stream: _req.stream, req_tools_count: (_req.tools || []).length,
+          req_input_len: JSON.stringify(_req.input || []).length,
+        }, null, 2));
+      } catch {}
+      const _err = new Error('Codex API error ' + _r.status + ': ' + (typeof _e === 'string' ? _e.slice(0, 500) : JSON.stringify(_e).slice(0, 500)));
+      _err.status = _r.status;
+      throw _err;
+    }
     if (_stream) return new Response(makeResponsesSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
     // Non-streaming caller: drain SSE stream into a static Anthropic response
     return collectResponsesSse(_r, _b.model);

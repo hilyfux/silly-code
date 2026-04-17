@@ -268,21 +268,22 @@ module.exports = function applyProviders({ patch }) {
     'if(DP(q)){var _1m=q?q.toLowerCase():"";if(pq()==="firstParty"&&_1m.indexOf("opus-4-7")===-1&&!S6(process.env.SILLY_ENABLE_1M_CONTEXT))return DR1;return 1e6}'
   );
 
-  // ── Patch 53: Restore Opus 4.6 option + Codex-only menu for sillyx ──
+  // ── Patch 53: Restore Opus 4.6 option + native Codex menu for sillyx ──
   // Two jobs in one replacement (single MATCH, single anchor on xvK):
   //   (a) firstParty Max-tier branch gets uvK (Opus 4.6) pushed — keeps the
   //       option we lost when 2.1.112 simplified cjY. firstParty menu is
   //       otherwise untouched (pq()!=="openai" short-circuit).
-  //   (b) openai provider gets a Codex-only projection: drop [1m] variants
-  //       (chatgpt.com/backend-api/codex/responses has no 1M context tier),
-  //       drop opus-4-6 (routes to same gpt-5.4 as opus after slug-migration
-  //       commit d4ab504 — would show as a duplicate), and relabel remaining
-  //       items with actual Codex model slugs so user stops seeing Claude
-  //       tier names on a GPT backend. Values stay as the Claude aliases
-  //       so routing through mapModel → _codexModelTable continues to work.
+  //   (b) openai provider replaces the Claude menu entirely with a native
+  //       Codex list mirroring the `codex` CLI's /model picker (verified
+  //       against @openai/codex 0.121.0 plus user-provided screenshot of
+  //       the production Codex TUI). Values are the Codex slugs themselves
+  //       so routing through mapModel → _codexModelTable in openai.cjs
+  //       resolves exact-match; deprecated slugs (5.1-codex-max, etc.) are
+  //       still user-selectable but get silently migrated at dispatch time
+  //       via OAUTH_MODEL_MIGRATIONS (see openai.cjs).
   patch('53-restore-opus-46-menu',
     'O.push(xvK),O',
-    'O.push(xvK),O.push(uvK(q,!1)),pq()!=="openai"?O:O.filter(function(_i){var _v=_i&&_i.value;if(typeof _v==="string"&&_v.endsWith("[1m]"))return false;if(typeof _v==="string"&&_v.indexOf("opus-4-6")>=0)return false;return true;}).map(function(_i){var _v=_i&&_i.value;if(_v===null)return Object.assign({},_i,{label:"Default",description:"GPT-5.4 · Flagship"});if(_v==="opus")return Object.assign({},_i,{label:"GPT-5.4",description:"Flagship · Most capable"});if(_v==="sonnet")return Object.assign({},_i,{label:"GPT-5.3 Codex",description:"Agentic coding · Everyday tasks"});if(_v==="haiku")return Object.assign({},_i,{label:"GPT-5.3 Codex Fast",description:"Sub-agents · /fast tier"});return _i;})'
+    'O.push(xvK),O.push(uvK(q,!1)),pq()!=="openai"?O:[{value:"gpt-5.4",label:"gpt-5.4",description:"Latest frontier agentic coding model"},{value:"gpt-5.2-codex",label:"gpt-5.2-codex",description:"Frontier agentic coding model"},{value:"gpt-5.1-codex-max",label:"gpt-5.1-codex-max",description:"Codex-optimized flagship for deep and fast reasoning"},{value:"gpt-5.4-mini",label:"gpt-5.4-mini",description:"Smaller frontier agentic coding model"},{value:"gpt-5.3-codex",label:"gpt-5.3-codex",description:"Frontier Codex-optimized agentic coding model"},{value:"gpt-5.3-codex-spark",label:"gpt-5.3-codex-spark",description:"Ultra-fast coding model"},{value:"gpt-5.2",label:"gpt-5.2",description:"Optimized for professional work and long-running agents"},{value:"gpt-5.1-codex-mini",label:"gpt-5.1-codex-mini",description:"Optimized for codex. Cheaper, faster, but less capable"}]'
   );
 
   // ── Patch 54: q_6 fallback short-circuit for openai ──
@@ -307,10 +308,12 @@ module.exports = function applyProviders({ patch }) {
   // and future Claude Code sessions. For other/previous model names, specify
   // with --model." sillyx users on an OpenAI backend see the word "Claude"
   // in a GPT-only picker — semantic mismatch. Replace at anchor with a
-  // provider-aware expression; firstParty keeps the original string.
+  // provider-aware expression; firstParty keeps the original string. Mirror
+  // Codex CLI's exact wording ("Access legacy models by running <cli> -m
+  // <model_name>") for consistency.
   patch('55-model-heading-openai',
     '$??"Switch between Claude models. Applies to this session and future Claude Code sessions. For other/previous model names, specify with --model."',
-    '$??((typeof pq==="function"&&pq()==="openai")?"Switch between Codex models. Applies to this session and future sessions. For other/previous model names, specify with --model.":"Switch between Claude models. Applies to this session and future Claude Code sessions. For other/previous model names, specify with --model.")'
+    '$??((typeof pq==="function"&&pq()==="openai")?"Select a Codex model. Access legacy models by running sillyx --model <model_name>.":"Switch between Claude models. Applies to this session and future Claude Code sessions. For other/previous model names, specify with --model.")'
   );
 
   // ── Patch 60: Model display name ──

@@ -19,15 +19,16 @@
 // and the tierNames metadata. The adapter's inline _codexModelTable mirrors
 // the slug list; see the "KEEP IN SYNC" marker inside _openaiAdapter.
 const CODEX_MODELS = [
-  { slug: 'gpt-5.4',            display: 'GPT-5.4',            ctx: 272000 },
-  { slug: 'gpt-5.4-mini',       display: 'GPT-5.4 Mini',       ctx: 272000 },
-  { slug: 'gpt-5.3-codex',      display: 'GPT-5.3 Codex',      ctx: 272000 },
-  { slug: 'gpt-5.2-codex',      display: 'GPT-5.2 Codex',      ctx: 272000 },
-  { slug: 'gpt-5.2',            display: 'GPT-5.2',            ctx: 272000 },
-  { slug: 'gpt-5.1-codex-max',  display: 'GPT-5.1 Codex Max',  ctx: 400000 },
-  { slug: 'gpt-5.1-codex-mini', display: 'GPT-5.1 Codex Mini', ctx: 272000 },
-  { slug: 'gpt-5.1-codex',      display: 'GPT-5.1 Codex',      ctx: 272000 },
-  { slug: 'gpt-5.1',            display: 'GPT-5.1',            ctx: 272000 },
+  { slug: 'gpt-5.4',             display: 'gpt-5.4',             ctx: 272000 },
+  { slug: 'gpt-5.4-mini',        display: 'gpt-5.4-mini',        ctx: 272000 },
+  { slug: 'gpt-5.3-codex',       display: 'gpt-5.3-codex',       ctx: 272000 },
+  { slug: 'gpt-5.3-codex-spark', display: 'gpt-5.3-codex-spark', ctx: 272000 },
+  { slug: 'gpt-5.2-codex',       display: 'gpt-5.2-codex',       ctx: 272000 },
+  { slug: 'gpt-5.2',             display: 'gpt-5.2',             ctx: 272000 },
+  { slug: 'gpt-5.1-codex-max',   display: 'gpt-5.1-codex-max',   ctx: 400000 },
+  { slug: 'gpt-5.1-codex-mini',  display: 'gpt-5.1-codex-mini',  ctx: 272000 },
+  { slug: 'gpt-5.1-codex',       display: 'gpt-5.1-codex',       ctx: 272000 },
+  { slug: 'gpt-5.1',             display: 'gpt-5.1',             ctx: 272000 },
 ];
 const OAI_LEGACY_MODELS = [
   { slug: 'gpt-4o',      display: 'GPT-4o',      ctx: 128000 },
@@ -149,17 +150,18 @@ async function _openaiAdapter(url, init) {
     // Opus 4.6 menu slot → flagship. Previously pointed at gpt-5.1-codex-max, but
     // chatgpt.com Codex OAuth rejects that slug ("not supported when using Codex
     // with a ChatGPT account"); Codex CLI itself migrates 5.1-codex-max → 5.4.
-    'claude-opus-4-6':    'gpt-5.4',
-    'claude-opus-4-6[1m]':'gpt-5.4',
-    'gpt-5.1-codex-mini': 'gpt-5.1-codex-mini',
-    'gpt-5.1-codex-max':  'gpt-5.1-codex-max',
-    'gpt-5.1-codex':      'gpt-5.1-codex',
-    'gpt-5.2-codex':      'gpt-5.2-codex',
-    'gpt-5.3-codex':      'gpt-5.3-codex',
-    'gpt-5.4-mini':       'gpt-5.4-mini',
-    'gpt-5.4':            'gpt-5.4',
-    'gpt-5.2':            'gpt-5.2',
-    'gpt-5.1':            'gpt-5.1',
+    'claude-opus-4-6':      'gpt-5.4',
+    'claude-opus-4-6[1m]':  'gpt-5.4',
+    'gpt-5.1-codex-mini':   'gpt-5.1-codex-mini',
+    'gpt-5.1-codex-max':    'gpt-5.1-codex-max',
+    'gpt-5.1-codex':        'gpt-5.1-codex',
+    'gpt-5.2-codex':        'gpt-5.2-codex',
+    'gpt-5.3-codex':        'gpt-5.3-codex',
+    'gpt-5.3-codex-spark':  'gpt-5.3-codex-spark',
+    'gpt-5.4-mini':         'gpt-5.4-mini',
+    'gpt-5.4':              'gpt-5.4',
+    'gpt-5.2':              'gpt-5.2',
+    'gpt-5.1':              'gpt-5.1',
     default: 'gpt-5.4',
   };
   // Mirrors OAUTH_MODEL_MIGRATIONS at file top — inlined because the adapter is

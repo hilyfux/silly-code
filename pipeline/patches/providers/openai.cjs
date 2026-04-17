@@ -215,7 +215,13 @@ async function _openaiAdapter(url, init) {
     // (returns HTTP 400 "Unsupported parameter"). Let GPT Pro use its own token limit.
     if (_b.temperature != null) _req.temperature = _b.temperature;
     if (_b.top_p != null) _req.top_p = _b.top_p;
-    if (_fastTier) _req.service_tier = 'priority';
+    // service_tier: only opt-in via SILLY_CODEX_FAST=1 on /codex/responses.
+    // 2026-04-17: user reported 7/10 retry storms after bff322e auto-injected
+    // "priority" for effort>=high. chatgpt.com's Codex OAuth endpoint does not
+    // officially document service_tier; assume reject / rate-limit until a
+    // successful dump proves otherwise. SILLY_CODEX_FAST=1 remains available
+    // for users who want to test.
+    if (_fastTier && process.env.SILLY_CODEX_FAST === '1') _req.service_tier = 'priority';
     if (_tools.length) {
       _req.tools = _tools.map(t => ({ type: 'function', name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } }));
       // Serial tool execution — parallel calls cause agent loop confusion with GPT Pro

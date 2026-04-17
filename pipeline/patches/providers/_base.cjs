@@ -174,6 +174,16 @@ function msgsToResponsesInput(system, messages) {
 }
 
 /**
+ * Translate an OpenAI finish_reason to an Anthropic stop_reason.
+ * Shared by streaming + non-streaming + Responses API paths so all three
+ * agree on the mapping (previously copy-pasted in three places).
+ */
+function mapOaiStopReason(finishReason, hasTools) {
+  const _m={'tool_calls':'tool_use','function_calls':'tool_use','stop':'end_turn','length':'max_tokens','content_filter':'end_turn'};
+  return _m[finishReason] || (hasTools ? 'tool_use' : 'end_turn');
+}
+
+/**
  * Convert an OpenAI Chat Completions SSE response to an Anthropic Messages
  * SSE ReadableStream.
  *
@@ -184,7 +194,7 @@ function msgsToResponsesInput(system, messages) {
 function makeSseStream(oaiResp, model) {
   const _enc=new TextEncoder(),_dec=new TextDecoder();
   const _msgId='msg_sc_'+Date.now();
-  let _sentStart=false,_blockIdx=0,_blockOpen=false,_outTok=0,_inTok=0,_hasTools=false,_finished=false,_pendingStop=null;
+  let _sentStart=false,_blockIdx=0,_blockOpen=false,_outTok=0,_inTok=0,_hasTools=false,_finished=false,_pendingStop=null,_usageRead=false;
   // Track active tool block indices to properly close them
   const _openToolBlocks=new Set();
   // Buffer tool args per block index — send cleaned JSON at finish_reason
@@ -215,9 +225,8 @@ function makeSseStream(oaiResp, model) {
         if(_d==='[DONE]'){_finish(_hasTools?'tool_use':'end_turn');return;}
         let _chunk;try{_chunk=JSON.parse(_d)}catch{continue}
         if(!_sentStart){_sentStart=true;_send('message_start',{type:'message_start',message:{id:_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,stop_sequence:null,usage:{input_tokens:0,output_tokens:0}}});}
-        // Final usage chunk (OpenAI sends it when stream_options.include_usage=true):
-        // choices array is empty but usage is populated. Capture before continue.
-        if(_chunk.usage){_inTok=_chunk.usage.prompt_tokens||_inTok;_outTok=_chunk.usage.completion_tokens||_outTok;}
+        // Trailing usage chunk arrives exactly once when stream_options.include_usage=true.
+        if(!_usageRead&&_chunk.usage){_usageRead=true;_inTok=_chunk.usage.prompt_tokens||_inTok;_outTok=_chunk.usage.completion_tokens||_outTok;}
         const _ch=_chunk.choices?.[0];if(!_ch)continue;
         const _dt=_ch.delta||{};
         if(_dt.content!=null){
@@ -240,17 +249,12 @@ function makeSseStream(oaiResp, model) {
             if(tc.function?.arguments)_argsMap.set(_bi,(_argsMap.get(_bi)||'')+tc.function.arguments);
           }
         }
-        if(_ch.finish_reason){
-          const _sr={'tool_calls':'tool_use','function_calls':'tool_use','stop':'end_turn','length':'max_tokens','content_filter':'end_turn'};
-          // Defer _finish() so we still process the trailing usage chunk that OpenAI
-          // emits when stream_options.include_usage=true. Real [DONE] (or stream end)
-          // calls _finish — it reuses _pendingStop and is idempotent.
-          _pendingStop=_sr[_ch.finish_reason]||(_hasTools?'tool_use':'end_turn');
-        }
+        // Defer finish so the trailing usage chunk (OpenAI's include_usage) still gets processed.
+        if(_ch.finish_reason)_pendingStop=mapOaiStopReason(_ch.finish_reason,_hasTools);
       }
     }
-    // Stream ended without [DONE] or finish_reason — clean up
-    if(_sentStart){_finish(_hasTools?'tool_use':'end_turn');}else{ctrl.close();}
+    // Stream ended without [DONE] — _pendingStop preserves finish_reason if we got one.
+    if(_sentStart){_finish(_pendingStop||(_hasTools?'tool_use':'end_turn'));}else{ctrl.close();}
     }catch(e){ctrl.error(e);}
   }});
 }
@@ -266,12 +270,15 @@ function makeSseStream(oaiResp, model) {
 function makeResponsesSseStream(oaiResp, model) {
   const _enc=new TextEncoder(),_dec=new TextDecoder();
   const _msgId='msg_sc_'+Date.now();
-  let _blockIdx=0,_blockOpen=false,_outTok=0,_inTok=0,_sentStart=false,_hasTools=false,_thinkOpen=false,_argsBuf='';
+  let _blockIdx=0,_blockOpen=false,_outTok=0,_inTok=0,_sentStart=false,_hasTools=false,_thinkOpen=false,_argsBuf='',_finished=false;
   return new ReadableStream({async start(ctrl){
     const _rd=oaiResp.body.getReader();let _buf='';
     const _send=(ev,d)=>ctrl.enqueue(_enc.encode('event: '+ev+'\ndata: '+JSON.stringify(d)+'\n\n'));
     const _ensureStart=()=>{if(!_sentStart){_sentStart=true;_send('message_start',{type:'message_start',message:{id:_msgId,type:'message',role:'assistant',content:[],model,stop_reason:null,stop_sequence:null,usage:{input_tokens:0,output_tokens:0}}});}};
+    // Idempotent — response.completed may race with [DONE] or response.incomplete.
     const _finish=(sr,usage)=>{
+      if(_finished)return;
+      _finished=true;
       if(_blockOpen){_send('content_block_stop',{type:'content_block_stop',index:_blockIdx});_blockOpen=false;}
       _send('message_delta',{type:'message_delta',delta:{stop_reason:sr,stop_sequence:null},usage:{input_tokens:_inTok,output_tokens:usage||_outTok}});
       _send('message_stop',{type:'message_stop'});ctrl.close();
@@ -410,7 +417,7 @@ function oaiToAnthropicResponse(oaiJson, model) {
   return new Response(JSON.stringify({
     id: 'msg_' + (oaiJson.id || Date.now()), type: 'message', role: 'assistant',
     content: _ct, model,
-    stop_reason: ({'tool_calls':'tool_use','function_calls':'tool_use','stop':'end_turn','length':'max_tokens','content_filter':'end_turn'})[_c?.finish_reason]||(_mg.tool_calls?'tool_use':'end_turn'),
+    stop_reason: mapOaiStopReason(_c?.finish_reason, !!_mg.tool_calls),
     usage: { input_tokens: oaiJson.usage?.prompt_tokens || 0, output_tokens: oaiJson.usage?.completion_tokens || 0 }
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
@@ -632,4 +639,4 @@ async function collectResponsesSse(oaiResp, model) {
   return new Response(JSON.stringify({ id: _msgId, type: 'message', role: 'assistant', content: _ct, model, stop_reason: _stopReason, stop_sequence: null, usage: { input_tokens: _inTokens, output_tokens: _outTokens } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
-module.exports = { mapModel, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, findOpenTodos };
+module.exports = { mapModel, mapOaiStopReason, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, findOpenTodos };

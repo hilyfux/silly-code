@@ -128,6 +128,20 @@ async function _openaiAdapter(url, init) {
   // Everything else runs through the harness and CAN work.
   const _CC_UNUSABLE = new Set(['RemoteTrigger']);
   const _tools = ((_b.tools || []).filter(t => !_CC_UNUSABLE.has(t.name)));
+
+  // /fast command parity with Codex CLI. Codex's "fast mode" sets service_tier:
+  // "priority" — ~2× cost, ~2× speed, single-gear toggle. Claude Code has a
+  // multi-gear /effort (low/medium/high/xhigh); map high+ to Codex fast.
+  // Overrides (highest wins): SILLY_CODEX_FAST=1 force on · =0 force off.
+  // n8z is upstream's effort getter; rename-tracked in upstream-upgrade skill.
+  const _sillyFastTier = () => {
+    const _env = process.env.SILLY_CODEX_FAST;
+    if (_env != null && _env !== '') return /^(1|true|on|yes)$/i.test(_env);
+    try {
+      const _e = typeof n8z === 'function' ? n8z() : undefined;
+      return _e === 'high' || _e === 'xhigh';
+    } catch { return false; }
+  };
   const _clean = (t) => cleanIdentityForProvider(tameSkillPrompts(t), _provName);
   if (_b.system) {
     if (typeof _b.system === 'string') _b.system = enforceContinuation(_clean(_b.system), _b.messages, _tools);
@@ -159,6 +173,10 @@ async function _openaiAdapter(url, init) {
     // (returns HTTP 400 "Unsupported parameter"). Let GPT Pro use its own token limit.
     if (_b.temperature != null) _req.temperature = _b.temperature;
     if (_b.top_p != null) _req.top_p = _b.top_p;
+    // /fast parity with Codex CLI: effort high/xhigh → priority tier (~2× cost, ~2× speed).
+    // SILLY_CODEX_FAST=1|0 overrides. n8z is the rename-tracked effort getter; wrap in
+    // try/catch so rename regressions don't crash the adapter.
+    if (_sillyFastTier()) _req.service_tier = 'priority';
     if (_tools.length) {
       _req.tools = _tools.map(t => ({ type: 'function', name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } }));
       // Serial tool execution — parallel calls cause agent loop confusion with GPT Pro
@@ -206,6 +224,8 @@ async function _openaiAdapter(url, init) {
     // never sees the true context size and auto-compact never fires until chatgpt.com
     // itself rejects with "prompt is too long" (rendered as "Context limit reached").
     if (_b.stream) _req.stream_options = { include_usage: true };
+    // /fast parity — effort high/xhigh (or SILLY_CODEX_FAST=1) → priority tier.
+    if (_sillyFastTier()) _req.service_tier = 'priority';
     if (_b.tools && _b.tools.length) {
       _req.tools = _b.tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } } }));
       _req.tool_choice = 'auto';

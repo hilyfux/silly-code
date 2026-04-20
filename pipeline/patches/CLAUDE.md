@@ -12,7 +12,7 @@
 ## When Changing
 - MATCH constants → edit pipeline/match-registry.cjs (shared by patch modules + upgrade tools)
 - Provider configs → @pipeline/patches/providers/CLAUDE.md
-- Patch numbering → check ordering: provider-core(10-15) → provider-ux(50-55b/53g/53h) → provider-identity(60-67); equality(20-28): 22 loop-opt-in(SILLY_ENABLE_LOOP), 27 shutdown-cancel, 28a/28b durable-scheduler-disable, 28c clear-cancels-loop
+- Patch numbering → check ordering: provider-core(10-15) → provider-ux(50-55b/53g/53h) → provider-identity(60-67); equality(20-28): 27 shutdown-cancel, 28a/28b durable-scheduler-disable
 - Adding new provider → update _providers.cjs loader + provider-core.cjs
 ## Conventions
 - Each .cjs exports function({patch, patchAll}) → void

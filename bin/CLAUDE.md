@@ -16,3 +16,4 @@
 - install-upgrade-cron.sh = writes StartCalendarInterval plist; prefers ~/.local/share/silly-code
 - Shared functions go in silly-common.sh (ensure_patched_binary, logging, update banner)
 - All launchers check both -auth.json and -oauth.json for login detection
+- Local install binary lives at ~/.local/share/silly-code/pipeline/build/cli-patched.js; after rebuild in dev repo, cp pipeline/build/cli-patched.js ~/.local/share/silly-code/pipeline/build/cli-patched.js to update it

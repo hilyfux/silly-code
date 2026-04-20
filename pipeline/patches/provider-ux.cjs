@@ -60,11 +60,12 @@ module.exports = function applyProviderUx({ patch }) {
   // early-return + _sO47 helper) and wrap every return with _sO47(...)
   // so Opus 4.7 appears regardless of which internal branch fires.
   const gptList = '[{value:"gpt-5.4",label:"gpt-5.4",description:"Latest frontier agentic coding model"},{value:"gpt-5.2-codex",label:"gpt-5.2-codex",description:"Frontier agentic coding model (\\u2192 gpt-5.4)"},{value:"gpt-5.1-codex-max",label:"gpt-5.1-codex-max",description:"Codex-optimized flagship for deep and fast reasoning (\\u2192 gpt-5.4)"},{value:"gpt-5.4-mini",label:"gpt-5.4-mini",description:"Smaller frontier agentic coding model"},{value:"gpt-5.3-codex",label:"gpt-5.3-codex",description:"Frontier Codex-optimized agentic coding model"},{value:"gpt-5.3-codex-spark",label:"gpt-5.3-codex-spark",description:"Ultra-fast coding model (\\u2192 gpt-5.3-codex)"},{value:"gpt-5.2",label:"gpt-5.2",description:"Optimized for professional work and long-running agents (\\u2192 gpt-5.4)"},{value:"gpt-5.1-codex-mini",label:"gpt-5.1-codex-mini",description:"Optimized for codex. Cheaper, faster, but less capable (\\u2192 gpt-5.4)"}]';
+  const opus46Item = '{value:"claude-opus-4-6",label:"Opus 4.6",description:"Opus 4.6 \\xB7 Fast & capable (powers fast mode)"}';
   const opus47Item = '{value:"claude-opus-4-7",label:"Opus 4.7",description:"Opus 4.7 \\xB7 Most capable for complex work"}';
 
   patch('53-menu-entry',
     'function z85(H=!1){',
-    `function z85(H=!1){if(typeof uq==="function"&&uq()==="openai")return ${gptList};var _sO47=function(x){if(!x.some(function(y){return y&&y.value==="claude-opus-4-7"}))x.push(${opus47Item});return x};`
+    `function z85(H=!1){if(typeof uq==="function"&&uq()==="openai")return ${gptList};var _sO47=function(x){if(!x.some(function(y){return y&&y.value==="claude-opus-4-6"}))x.push(${opus46Item});if(!x.some(function(y){return y&&y.value==="claude-opus-4-7"}))x.push(${opus47Item});return x};`
   );
   patch('53c-menu-hq-sub',
     'return $.push(l$7),$',
@@ -88,6 +89,22 @@ module.exports = function applyProviderUx({ patch }) {
   patch('53b-no-model-cache',
     'for(let A of w_().additionalModelOptionsCache??[])if(!_.some((z)=>z.value===A.value))_.push(A);',
     'void 0;'
+  );
+
+  // Patch 53g: suppress additionalModelOptionsCache write for openai provider.
+  // Without this, sillyx bootstrap writes gpt-* models into settings.json, and
+  // the real claude code (which shares ~/.claude) reads them into its picker.
+  patch('53g-no-oai-cache-write',
+    'additionalModelOptionsCache:q,additionalModelCostsCache:K',
+    'additionalModelOptionsCache:(typeof uq==="function"&&uq()==="openai")?[]:q,additionalModelCostsCache:K'
+  );
+
+  // Patch 53h: whitelist claude-opus-4-6 in MqH availability filter.
+  // claude-opus-4-6 is not in availableModels (it's fast-mode only), so MqH
+  // returns false and BMH strips it from the menu. Force-allow it for firstParty.
+  patch('53h-opus-46-available',
+    'function MqH(H){let _=C8()||{}',
+    'function MqH(H){if(typeof uq==="function"&&uq()==="firstParty"&&H==="claude-opus-4-6")return !0;let _=C8()||{}'
   );
 
   // ── Patch 54: q_6 fallback short-circuit for openai ──

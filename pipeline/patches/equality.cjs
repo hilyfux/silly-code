@@ -92,6 +92,26 @@ module.exports = function applyEquality({ patch }) {
     'async function Nb_(H,_,q,K,O){let T=U$9.randomUUID().slice(0,8),$={id:T,cron:H,prompt:_,createdAt:Date.now(),...q&&{recurring:!0}};return tOH({...$,...O&&{agentId:O}}),T}'
   )
 
+  // Patch 28c: Cancel any pending /loop crons on /clear.
+  // clearConversation resets conversation state but leaves in-memory cron timers
+  // alive — a surviving ScheduleWakeup self-replicates into the fresh context.
+  // Defense-in-depth alongside patch 22 gate; also protects users who enable
+  // SILLY_ENABLE_LOOP=1, run /loop, then /clear expecting full reset.
+  patch('28c-clear-cancels-loop',
+    'l("tengu_cache_eviction_hint",{scope:"conversation_clear",last_request_id:j});let D=new Set,M=[]',
+    'l("tengu_cache_eviction_hint",{scope:"conversation_clear",last_request_id:j});try{Qi(!1);YU(Yh().map(W=>W.id))}catch{}let D=new Set,M=[]'
+  )
+
+  // Patch 28d: Disable cron resurrection on session resume.
+  // Upstream td5() iterates CronCreate calls in conversation history and
+  // re-arms them with tOH() on resume (-c). This causes killed /loop sessions
+  // to self-resurrect — "Running scheduled task" fires again after restart.
+  // Session close = loop dies; resume should restore conversation, not timers.
+  patch('28d-no-cron-resurrect',
+    'function td5({calls:H,results:_,deletedCronIds:q}){if(!OW())return;',
+    'function td5({calls:H,results:_,deletedCronIds:q}){return;if(!OW())return;'
+  )
+
   // Patch 27: Cancel /loop on session shutdown.
   // Upstream WK() never disables the cron scheduler nor clears sessionCronTasks,
   // so /loop keeps firing wakeups while the process winds down — visible as

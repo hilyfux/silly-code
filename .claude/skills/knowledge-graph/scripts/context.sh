@@ -30,15 +30,11 @@ case "$CMD" in
       exit 0
     fi
 
-    # Restore previous session state (consume-once: clear after reading so next
-    # fresh session starts clean and doesn't re-continue the paused work).
+    # Restore previous session state
     SNAPSHOT="$KG_DATA/work-snapshot.md"
     if [ -f "$SNAPSHOT" ]; then
       SNAP_CONTENT=$(cat "$SNAPSHOT" 2>/dev/null)
-      if [ -n "$SNAP_CONTENT" ]; then
-        CONTEXT="$CONTEXT\n$SNAP_CONTENT"
-        > "$SNAPSHOT"  # consume-once: clear so next startup is clean
-      fi
+      [ -n "$SNAP_CONTENT" ] && CONTEXT="$CONTEXT\n$SNAP_CONTENT"
     fi
 
     # Auto-update: trigger when active modules lack CLAUDE.md/SKILL.md.

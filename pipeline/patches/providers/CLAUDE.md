@@ -3,6 +3,7 @@
 - Adding require() or module-scope refs in adapter/auth functions → serialization safeguard will reject (bf38f75)
 - Manually editing sentinel-injected tables in adapter functions → they are auto-generated from file-top constants by provider-core.cjs
 - Using bare import() without 'node:' prefix → checkSerialization blocks non-node imports
+- Calling fetch from adapter with a fresh AbortController and ignoring `init.signal` → upstream Ctrl+C / WK session shutdown can't cancel in-flight requests, /loop appears to ignore cancellation for up to the fetch timeout; use `AbortSignal.any([init.signal, AbortSignal.timeout(N)])` (063f22d)
 ## When Changing
 - Shared protocol functions → @pipeline/patches/providers/_base.cjs has mapModel, msgToOai, flattenSystem, oaiToAnthropicResponse, SSE streams
 - Auth file naming → update bin/ launchers too @bin/CLAUDE.md

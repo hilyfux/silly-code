@@ -2,12 +2,14 @@
 .claude/CLAUDE.md: .claude/node
 .claude/skills/knowledge-graph/scripts/CLAUDE.md: scripts/scripts
 .claude/skills/knowledge-graph/SKILL.md: knowledge-graph
+.claude/skills/self-evolution/SKILL.md: self-evolution
 .claude/skills/sillyx-behavior/SKILL.md: sillyx-behavior
 .claude/skills/upstream-upgrade/SKILL.md: upstream-upgrad
 .github/CLAUDE.md: .github/github
 .github/workflows/CLAUDE.md: workflows/workf
 bin/CLAUDE.md: bin/launcher
 CLAUDE.md: root/sillycode
+docs/agent/CLAUDE.md: agent/agent
 docs/features/CLAUDE.md: features/featur
 docs/guide/CLAUDE.md: guide/user
 docs/memory/CLAUDE.md: memory/memory

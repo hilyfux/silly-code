@@ -5,6 +5,7 @@
 - Using require()/module/exports/__dirname/__filename in serialized adapter functions → only `await import('node:...')` is allowed; checkSerialization() enforces this at build time
 - Reading `pipeline/patches/providers` as a file path → it is a directory; use `pipeline/patches/providers/<file>.cjs` or list contents first (EISDIR observed)
 - Editing MATCH constants directly in patch modules → all MATCH strings live in `pipeline/match-registry.cjs`; patch modules import them read-only
+- Injecting bare upstream symbols (Si, Ci, nL, hv, etc.) into REPLACEMENT side without echoing them in FIND string → patch passes at build, crashes silently at runtime when upstream renames; MUST register in BARE_INJECT_TOKENS in match-registry.cjs with a structural regex guard (063f22d)
 ## When Changing
 - MATCH constants → edit pipeline/match-registry.cjs (shared by patch modules + upgrade tools)
 - Provider configs → @pipeline/patches/providers/CLAUDE.md

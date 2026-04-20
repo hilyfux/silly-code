@@ -35,7 +35,7 @@ function applyProviderCore({ patch }) {
 
   // ── Patch 10: Provider detection ──
   const detectChain = sorted.map(p =>
-    `S6(process.env.${p.envKey})?"${p.runtimeId}"`
+    `EH(process.env.${p.envKey})?"${p.runtimeId}"`
   ).join(':');
   patch('10-provider-detection',
     MATCH.DETECT,
@@ -84,12 +84,12 @@ function applyProviderCore({ patch }) {
 
   const adapterBranches = adaptersWithCode.map(p => {
     const adapterName = p.adapter.name;
-    return `if(P==="${p.runtimeId}"){return new ${MATCH.CONSTRUCTOR}({...M,apiKey:'${p.key}-placeholder',fetch:${adapterName}});}`;
+    return `if(M==="${p.runtimeId}"){return new ${MATCH.CONSTRUCTOR}({...q,apiKey:'${p.key}-placeholder',fetch:${adapterName}});}`;
   }).join('');
 
   patch('11-12-provider-adapters',
     MATCH.INJECT,
-    `P=YM(_);${injectionCode};${adapterBranches}if(P==="bedrock")`
+    `M=uM(q);${injectionCode};${adapterBranches}if(M==="bedrock")`
   );
 
   // ── Patch 15: Model defaults ──

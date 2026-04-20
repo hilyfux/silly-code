@@ -8,8 +8,8 @@
 module.exports = function applyPrivacy({ patch, patchAll }) {
   // Patch 30: Block Statsig telemetry
   patch('30-statsig-block',
-    'return HU.fetch(`${K}/api/eval/${_}`',
-    'return Promise.resolve(new Response("{}",{status:200}));HU.fetch(`${K}/api/eval/${_}`'
+    'return bU.fetch(`${_}/api/eval/${q}`',
+    'return Promise.resolve(new Response("{}",{status:200}));bU.fetch(`${_}/api/eval/${q}`'
   )
 
   // Patch 31: Block metrics reporting
@@ -82,8 +82,8 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
   //   Priority: SILLY_TIMEZONE env → IP geolocation lookup → "UTC" fallback.
   //   Result cached in c11 (one lookup per process lifetime).
   patch('45-timezone-privacy',
-    'function _F6(){if(!T71)T71=Intl.DateTimeFormat().resolvedOptions().timeZone;return T71}',
-    'function _F6(){if(!T71){T71=process.env.SILLY_TIMEZONE;if(!T71){try{T71=require("child_process").execSync("curl -s --max-time 3 http://ip-api.com/line/?fields=timezone",{encoding:"utf8",stdio:["pipe","pipe","pipe"]}).trim()}catch{}}if(!T71||!T71.includes("/"))T71="UTC"}return T71}'
+    'function ngH(){if(!k16)k16=Intl.DateTimeFormat().resolvedOptions().timeZone;return k16}',
+    'function ngH(){if(!k16){k16=process.env.SILLY_TIMEZONE;if(!k16){try{k16=require("child_process").execSync("curl -s --max-time 3 http://ip-api.com/line/?fields=timezone",{encoding:"utf8",stdio:["pipe","pipe","pipe"]}).trim()}catch{}}if(!k16||!k16.includes("/"))k16="UTC"}return k16}'
   )
 
   // Patch 46: Neutralize steganographic apostrophe in system prompt date string
@@ -94,8 +94,8 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
   // no-proxy/no-lab baseline so every user looks identical. (The previous
   // replacement used \u2019 which is itself a "known proxy" signal value.)
   patch('46-apostrophe-steganography',
-    'function OKz(q,K){if(!q&&!K)return"\'";if(q&&!K)return"\u2019";if(!q&&K)return"\u02BC";return"\u02B9"}',
-    'function OKz(){return"\'"}'
+    'function O71(H,_){if(!H&&!_)return"\'";if(H&&!_)return"\u2019";if(!H&&_)return"\u02BC";return"\u02B9"}',
+    'function O71(){return"\'"}'
   )
 
   // Patch 47: Force cnTZ=false so date separator is always "-" (international)
@@ -105,8 +105,8 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
   // defense-in-depth, also neutralize the proxy/lab hostname checks
   // so no information about ANTHROPIC_BASE_URL leaks via the system prompt.
   patch('47-geo-fingerprint-neutralize',
-    'function To6(){if(S9())return null;',
-    'function To6(){return{known:!1,labKw:!1,cnTZ:!1,host:null};if(S9())return null;'
+    'function K71(){if(RY())return null;',
+    'function K71(){return{known:!1,labKw:!1,cnTZ:!1,host:null};if(RY())return null;'
   )
 
   // Patch 40: Block event_logging batch endpoint (EventLogger default path)
@@ -146,7 +146,7 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
   // web_search_tool, session_memory, speculation, …) silently drop to 5-minute
   // TTL. Users on long sessions pay repeated cache-write costs instead of the
   // 0.1× cache-read. Restore parity with telemetry-on behavior by widening the
-  // fallback allowlist to "*" (wildcard matches every querySource). i7()/overage
+  // fallback allowlist to "*" (wildcard matches every querySource). Hq()/overage
   // guards above still gate non-subscribers, so free users aren't affected.
   patch('48-prompt-cache-1h-allowlist',
     '"tengu_prompt_cache_1h_config",{allowlist:["repl_main_thread*","sdk","auto_mode"]}',

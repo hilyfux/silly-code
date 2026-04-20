@@ -16,7 +16,7 @@
       "description": "JavaScript runtime"
     },
     "upstream": {
-      "version": "2.1.112",
+      "version": "2.1.114",
       "package": "@anthropic-ai/claude-code",
       "required": true,
       "description": "Upstream Claude Code binary — MATCH constants are validated against this version"

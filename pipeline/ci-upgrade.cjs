@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync, spawnSync } = require('child_process');
 const { scan } = require('./upgrade.cjs');
+const { fetchAndStageFromBunBinary, extractCliJs, wrapForNode } = require('./bun-extract.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE = __dirname;
@@ -365,10 +366,23 @@ function fetchTarball(version) {
 }
 
 // ── 3. Stage upstream files ─────────────────────────────────
-function stageUpstream(packageDir) {
+// Since upstream 2.1.113 the npm wrapper no longer contains cli.js — the real
+// source lives embedded inside the Bun-compiled native binary shipped via
+// `@anthropic-ai/claude-code-<platform>`. Detect that layout and fall back to
+// bun-extract.cjs, which stages an equivalent cli.js so the rest of the
+// pipeline (varmap/content-anchor/regex patches) runs unchanged.
+function stageUpstream(packageDir, version) {
   if (shouldSkipRealUpgradeWork()) return;
-  fs.copyFileSync(path.join(packageDir, 'cli.js'), path.join(UPSTREAM_DIR, 'package/cli.js'));
-  fs.copyFileSync(path.join(packageDir, 'package.json'), path.join(UPSTREAM_DIR, 'package/package.json'));
+  const cliSrc = path.join(packageDir, 'cli.js');
+  const stagedDir = path.join(UPSTREAM_DIR, 'package');
+  if (fs.existsSync(cliSrc)) {
+    fs.copyFileSync(cliSrc, path.join(stagedDir, 'cli.js'));
+    fs.copyFileSync(path.join(packageDir, 'package.json'), path.join(stagedDir, 'package.json'));
+    return;
+  }
+  log('  cli.js absent in wrapper tarball — falling back to bun-extract from native binary');
+  const r = fetchAndStageFromBunBinary(version, stagedDir);
+  log(`  bun-extract staged cli.js (${r.cliJsBytes.toLocaleString()} bytes) for ${r.platform}`);
 }
 
 // ── 4. Version string bumps ─────────────────────────────────
@@ -551,7 +565,7 @@ function writeOutput(kv) {
 
   log('fetching tarball...');
   const pkgDir = fetchTarball(latest);
-  stageUpstream(pkgDir);
+  stageUpstream(pkgDir, latest);
 
   log('bumping version refs...');
   bumpVersionRefs(current, latest);

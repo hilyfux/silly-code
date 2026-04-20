@@ -133,7 +133,18 @@ console.log('Build integrity tests\n');
     );
   }
 
-  const detectionFragment = `S6(process.env.${sorted[0].envKey})?"${sorted[0].runtimeId}"`;
+  // The env-truthy helper name (S6 in ≤2.1.112, EH in 2.1.114+) is resolved
+  // from the upstream varmap so this test tracks upstream renames without
+  // a manual edit each release.
+  const varmapDir = path.join(__dirname, '..', 'pipeline');
+  const versionedMaps = fs.readdirSync(varmapDir)
+    .filter(f => /^varmap-.+\.json$/.test(f))
+    .sort();
+  const latestMap = versionedMaps[versionedMaps.length - 1];
+  const envTruthy = latestMap
+    ? (JSON.parse(fs.readFileSync(path.join(varmapDir, latestMap), 'utf8')).isEnvTruthy_in_getAPIProvider || 'EH')
+    : 'EH';
+  const detectionFragment = `${envTruthy}(process.env.${sorted[0].envKey})?"${sorted[0].runtimeId}"`;
   assert.ok(
     build.includes(detectionFragment),
     `Detection chain fragment not found: ${detectionFragment}`
@@ -213,6 +224,63 @@ console.log('Build integrity tests\n');
     );
   }
   console.log('  Critical MATCH constants present in upstream: PASS');
+})();
+
+// ── 8. Patch 48 — 1h prompt cache allowlist wildcard survives in build ──
+
+(function testPromptCache1hAllowlist() {
+  if (!fs.existsSync(BUILD_PATH)) {
+    console.log('  Patch 48 1h cache allowlist (build not found, skipping): SKIP');
+    return;
+  }
+  const build = fs.readFileSync(BUILD_PATH, 'utf8');
+
+  assert.ok(
+    build.includes('"tengu_prompt_cache_1h_config",{allowlist:["*"]}'),
+    'Patch 48: allowlist must be ["*"] (wildcard) to match every querySource'
+  );
+
+  assert.ok(
+    !build.includes('"tengu_prompt_cache_1h_config",{allowlist:["repl_main_thread*","sdk","auto_mode"]}'),
+    'Patch 48: upstream default allowlist must NOT survive — would silently drop 28 querySources to 5min'
+  );
+
+  const td7Idx = build.indexOf('function td7(');
+  assert.ok(td7Idx !== -1, 'td7 (allowlist matcher) not found in build');
+  const td7 = build.substring(td7Idx, td7Idx + 500);
+  assert.ok(
+    td7.includes('q.endsWith("*")'),
+    'td7 wildcard semantics changed — rename or refactor. Re-anchor patch 48.'
+  );
+  console.log('  Patch 48 1h cache allowlist wildcard present: PASS');
+})();
+
+// ── 9. Patch 56 — cross-provider persisted-model guard in db() ──
+
+(function testCrossProviderModelGuard() {
+  if (!fs.existsSync(BUILD_PATH)) {
+    console.log('  Patch 56 cross-provider guard (build not found, skipping): SKIP');
+    return;
+  }
+  const build = fs.readFileSync(BUILD_PATH, 'utf8');
+
+  const dbIdx = build.indexOf('function db()');
+  assert.ok(dbIdx !== -1, 'db() not found in build — banner model resolver missing');
+  const dbBody = build.substring(dbIdx, dbIdx + 700);
+
+  assert.ok(
+    dbBody.includes('typeof uq==="function"'),
+    'Patch 56: db() missing provider-parity guard — cross-provider model will leak into banner'
+  );
+  assert.ok(
+    dbBody.includes('_isGpt='),
+    'Patch 56: gpt-prefix detector missing from db() guard'
+  );
+  assert.ok(
+    dbBody.includes('_p==="firstParty"&&_isGpt') && dbBody.includes('_p==="openai"&&!_isGpt'),
+    'Patch 56: symmetric cross-provider filter missing (both directions required)'
+  );
+  console.log('  Patch 56 cross-provider model guard present: PASS');
 })();
 
 console.log('\nAll build integrity tests passed.');

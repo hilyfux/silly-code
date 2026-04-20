@@ -39,10 +39,10 @@ function runCase(name, extraEnv) {
 
     assert.strictEqual(run.result.status, 0, run.combined);
     assert.match(run.combined, /current=2\.1\.108-test latest=2\.1\.109-test/);
-    assert.match(run.combined, /ci-upgrade couldn't fully resolve — invoking sillyx agent/);
+    assert.match(run.combined, /ci-upgrade exit 2 — manual rename sweep needed, will invoke sillyx/);
     assert.match(run.combined, /dry-run: would run git reset --hard HEAD --quiet/);
     assert.match(run.combined, /dry-run: would exec \/tmp\/fake-sillyx -p <prompt> --dangerously-skip-permissions/);
-    assert.match(run.combined, /ci-upgrade\.cjs just tried and exited 2 \(partial failure\)/);
+    assert.match(run.combined, /ci-upgrade\.cjs just ran and exited 2 \(partial failure/);
     assert.doesNotMatch(run.combined, /invoking claude agent/);
     assert.doesNotMatch(run.combined, /command -v claude/);
     assert.doesNotMatch(run.combined, /'sillyx' or 'claude'/);
@@ -56,7 +56,7 @@ function runCase(name, extraEnv) {
     });
 
     assert.strictEqual(run.result.status, 1, run.combined);
-    assert.match(run.combined, /no 'sillyx' binary is available — stopping/);
+    assert.match(run.combined, /no 'sillyx' binary available — stopping/);
     assert.doesNotMatch(run.combined, /command -v claude/);
     assert.doesNotMatch(run.combined, /'sillyx' or 'claude'/);
     assert.doesNotMatch(run.combined, /invoking claude agent/);

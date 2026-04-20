@@ -18,7 +18,7 @@ module.exports = function applyAuthBypass({ patch }) {
   // These endpoints are unreachable without Anthropic credentials.
   // When adapter env vars are set, return {success:true} immediately.
   patch('70-connectivity-bypass',
-    'function i2A(){try{let q=r7()',
-    'function i2A(){if(process.env.CLAUDE_CODE_USE_OPENAI)return Promise.resolve({success:!0});try{let q=r7()'
+    'function Zi5(){try{let H=t8()',
+    'function Zi5(){if(process.env.CLAUDE_CODE_USE_OPENAI)return Promise.resolve({success:!0});try{let H=t8()'
   )
 }

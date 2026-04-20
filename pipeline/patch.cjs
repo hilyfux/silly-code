@@ -51,6 +51,25 @@ if (fs.existsSync(depsPath)) {
 fs.mkdirSync(path.dirname(OUTPUT), { recursive: true })
 
 let src = fs.readFileSync(INPUT, 'utf8')
+// bun-extract (v2.1.113+) emits non-ASCII chars as \uXXXX escape sequences.
+// Upstream runtime behavior is identical, but our patch FINDs use literal
+// unicode (crafted against the older literal form). Decode BMP escapes back
+// to literals here so patches remain version-stable across extract formats.
+//
+// SAFETY: skip code points that must remain escaped in JS source:
+//   - ASCII (0x00-0x7F): never needed literal; decoding e.g. \u005C to `\`
+//     would corrupt escape sequences and strings
+//   - Line terminators 0x2028 / 0x2029: break string literals pre-ES2019
+//   - Surrogate range 0xD800-0xDFFF: must be written as a paired sequence;
+//     decoding one half produces a lone surrogate which Node's utf-8
+//     serializer replaces with U+FFFD, silently corrupting the source.
+src = src.replace(/\\u([0-9a-fA-F]{4})/g, (full, hex) => {
+  const cp = parseInt(hex, 16)
+  if (cp < 0x80) return full
+  if (cp === 0x2028 || cp === 0x2029) return full
+  if (cp >= 0xD800 && cp <= 0xDFFF) return full
+  return String.fromCharCode(cp)
+})
 const results = []
 
 // ── Patch helpers (shared by all modules) ────────────────────
@@ -118,6 +137,19 @@ if (fail > 0) {
 fs.writeFileSync(OUTPUT + '.tmp', src)
 fs.renameSync(OUTPUT + '.tmp', OUTPUT)
 console.log(`  Output: ${OUTPUT}\n`)
+
+// ── ESM/CJS override ────────────────────────────────────────────────────
+// Upstream 2.1.113+ ships a Bun-compiled native binary. bun-extract.cjs
+// carves the embedded CJS blob (wrapped in the Bun runtime's
+// `(function(exports, require, module, __filename, __dirname){…})` shim)
+// back into cli.js. The upstream npm package.json still declares
+// `"type": "module"`, which Node inherits into pipeline/build/ and then
+// refuses to execute the CJS shim (`file:///…cli-patched.js` ESM parse).
+// Force Node to parse pipeline/build/cli-patched.js as CommonJS.
+{
+  const buildPkg = path.join(path.dirname(OUTPUT), 'package.json')
+  fs.writeFileSync(buildPkg, JSON.stringify({ type: 'commonjs' }, null, 2) + '\n')
+}
 
 // ── Vendor symlink: ensure pipeline/build/vendor → ripgrep source ─────────
 // cli-patched.js uses import.meta.url to locate vendor/ripgrep/. Since it

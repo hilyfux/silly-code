@@ -63,4 +63,26 @@ function verifyAnchors(upstreamSrc) {
   }
 }
 
-module.exports = { MATCH, BARE_INJECT_TOKENS, verifyAnchors };
+// ── Varmap discovery ──
+// Returns the path to the newest varmap-<ver>.json under pipeline/, using
+// semver-aware ordering (so varmap-2.1.114 > varmap-2.1.2, which a plain
+// string sort would reverse). Returns null if none are present.
+function latestVarmap(pipelineDir) {
+  const fs = require('fs');
+  const path = require('path');
+  const files = fs.readdirSync(pipelineDir).filter(f => /^varmap-.+\.json$/.test(f));
+  if (files.length === 0) return null;
+  const parse = v => v.split('.').map(n => parseInt(n, 10) || 0);
+  files.sort((a, b) => {
+    const pa = parse(a.slice(7, -5));
+    const pb = parse(b.slice(7, -5));
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pa[i] || 0) - (pb[i] || 0);
+      if (d !== 0) return d;
+    }
+    return 0;
+  });
+  return path.join(pipelineDir, files[files.length - 1]);
+}
+
+module.exports = { MATCH, BARE_INJECT_TOKENS, verifyAnchors, latestVarmap };

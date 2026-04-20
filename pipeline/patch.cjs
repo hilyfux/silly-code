@@ -18,9 +18,8 @@ const { execSync } = require('child_process')
 const INPUT = process.argv[2] || path.join(__dirname, 'upstream/package/cli.js')
 const OUTPUT = process.argv[3] || path.join(__dirname, 'build/cli-patched.js')
 
-// ── Build-time git SHA (silly-code repo) ────────────────────
-// Embedded into version string so `sillyx --version` shows which exact
-// commit the binary was built from. Lets you instantly diff dev vs installed.
+// Git SHA embedded in version string so `sillyx --version` reveals the
+// exact commit the binary was built from — dev vs installed is instantly diffable.
 let SILLY_GIT_SHA = 'dev'
 try {
   SILLY_GIT_SHA = execSync('git rev-parse --short HEAD', {
@@ -51,18 +50,12 @@ if (fs.existsSync(depsPath)) {
 fs.mkdirSync(path.dirname(OUTPUT), { recursive: true })
 
 let src = fs.readFileSync(INPUT, 'utf8')
-// bun-extract (v2.1.113+) emits non-ASCII chars as \uXXXX escape sequences.
-// Upstream runtime behavior is identical, but our patch FINDs use literal
-// unicode (crafted against the older literal form). Decode BMP escapes back
-// to literals here so patches remain version-stable across extract formats.
-//
-// SAFETY: skip code points that must remain escaped in JS source:
-//   - ASCII (0x00-0x7F): never needed literal; decoding e.g. \u005C to `\`
-//     would corrupt escape sequences and strings
-//   - Line terminators 0x2028 / 0x2029: break string literals pre-ES2019
-//   - Surrogate range 0xD800-0xDFFF: must be written as a paired sequence;
-//     decoding one half produces a lone surrogate which Node's utf-8
-//     serializer replaces with U+FFFD, silently corrupting the source.
+// bun-extract (2.1.113+) emits non-ASCII as \uXXXX — our patch FINDs use the
+// old literal form. Decode BMP escapes so patches are version-stable, but
+// keep these escaped to avoid corrupting the source:
+//   ASCII (< 0x80)        — would break escape sequences / strings
+//   0x2028 / 0x2029       — break string literals pre-ES2019
+//   surrogates D800-DFFF  — lone halves become U+FFFD on utf-8 serialize
 src = src.replace(/\\u([0-9a-fA-F]{4})/g, (full, hex) => {
   const cp = parseInt(hex, 16)
   if (cp < 0x80) return full
@@ -138,23 +131,17 @@ fs.writeFileSync(OUTPUT + '.tmp', src)
 fs.renameSync(OUTPUT + '.tmp', OUTPUT)
 console.log(`  Output: ${OUTPUT}\n`)
 
-// ── ESM/CJS override ────────────────────────────────────────────────────
-// Upstream 2.1.113+ ships a Bun-compiled native binary. bun-extract.cjs
-// carves the embedded CJS blob (wrapped in the Bun runtime's
-// `(function(exports, require, module, __filename, __dirname){…})` shim)
-// back into cli.js. The upstream npm package.json still declares
-// `"type": "module"`, which Node inherits into pipeline/build/ and then
-// refuses to execute the CJS shim (`file:///…cli-patched.js` ESM parse).
-// Force Node to parse pipeline/build/cli-patched.js as CommonJS.
+// Force CJS parsing on the patched build. The upstream npm package.json
+// (2.1.113+) declares "type":"module", but bun-extract re-emits the
+// embedded binary as a CJS shim — Node would refuse it as ESM.
 {
   const buildPkg = path.join(path.dirname(OUTPUT), 'package.json')
   fs.writeFileSync(buildPkg, JSON.stringify({ type: 'commonjs' }, null, 2) + '\n')
 }
 
-// ── Vendor symlink: ensure pipeline/build/vendor → ripgrep source ─────────
-// cli-patched.js uses import.meta.url to locate vendor/ripgrep/. Since it
-// lives in pipeline/build/ (not the npm package dir), the vendor dir must
-// exist at pipeline/build/vendor/ or Glob/Grep silently fail with ENOENT.
+// Vendor symlink: cli-patched.js locates vendor/ripgrep/ relative to itself,
+// but lives in pipeline/build/ (not the npm package dir). Without this link
+// Glob/Grep silently fail with ENOENT.
 {
   const buildDir = path.dirname(OUTPUT)
   const vendorLink = path.join(buildDir, 'vendor')
@@ -191,10 +178,10 @@ console.log(`  Output: ${OUTPUT}\n`)
       if (existing === vendorSrc) needsLink = false
       else fs.unlinkSync(vendorLink)
     } catch (e) {
-      // readlinkSync throws EINVAL on a real directory (left over from an
-      // older install flow that populated vendor/ripgrep directly). Wipe it
-      // so the symlink below can take its place.
+      // EINVAL/EISDIR: a real directory exists here (old install flow). Wipe it.
+      // ENOENT: nothing at that path yet — leave needsLink=true so we create it.
       if (e.code === 'EINVAL' || e.code === 'EISDIR') fs.rmSync(vendorLink, { recursive: true, force: true })
+      else if (e.code !== 'ENOENT') throw e
     }
     if (needsLink) {
       fs.symlinkSync(vendorSrc, vendorLink, _symlinkType)

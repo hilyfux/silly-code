@@ -93,13 +93,9 @@ cd "$INSTALL_DIR"
 ok "Source: $INSTALL_DIR"
 
 # ── Install runtime deps ─────────────────────────────────────
-# The patched cli.js requires runtime modules (ws, etc.) from node_modules
-# at the repo root. Skip if already populated.
-if [ ! -d node_modules ] || [ ! -d node_modules/ws ]; then
-  info "Installing runtime dependencies (this may take a minute)..."
-  npm install --no-audit --no-fund --ignore-scripts 2>&1 | tail -3 || err "npm install failed"
-  ok "Runtime deps installed"
-fi
+# shellcheck source=bin/lib-deps.sh
+source "$INSTALL_DIR/bin/lib-deps.sh"
+ensure_runtime_deps "$INSTALL_DIR" || err "npm install failed"
 
 # ── Fetch upstream binary ────────────────────────────────────
 UPSTREAM_CLI="pipeline/upstream/package/cli.js"

@@ -13,11 +13,15 @@ const fs = require('fs');
 const path = require('path');
 
 const { checkSerialization } = require('../pipeline/patches/provider-core.cjs');
-const { MATCH, BARE_INJECT_TOKENS, verifyAnchors } = require('../pipeline/match-registry.cjs');
+const { MATCH, BARE_INJECT_TOKENS, verifyAnchors, latestVarmap } = require('../pipeline/match-registry.cjs');
 const { base, providers, sorted, fallback } = require('../pipeline/patches/_providers.cjs');
 
 const BUILD_PATH = path.join(__dirname, '..', 'pipeline', 'build', 'cli-patched.js');
 const UPSTREAM_PATH = path.join(__dirname, '..', 'pipeline', 'upstream', 'package', 'cli.js');
+
+// Read each 12MB artifact once; downstream tests reuse the cached string.
+const build = fs.existsSync(BUILD_PATH) ? fs.readFileSync(BUILD_PATH, 'utf8') : null;
+const upstream = fs.existsSync(UPSTREAM_PATH) ? fs.readFileSync(UPSTREAM_PATH, 'utf8') : null;
 
 console.log('Build integrity tests\n');
 
@@ -84,11 +88,10 @@ console.log('Build integrity tests\n');
 // ── 2. Sentinel injection: no __INJECT_ tokens in build output ──
 
 (function testNoSentinelsInBuild() {
-  if (!fs.existsSync(BUILD_PATH)) {
+  if (!build) {
     console.log('  Sentinel injection (build not found, skipping): SKIP');
     return;
   }
-  const build = fs.readFileSync(BUILD_PATH, 'utf8');
   const sentinels = build.match(/"__INJECT_[A-Za-z_]+__"/g);
   assert.strictEqual(sentinels, null, `Unreplaced sentinels found in build: ${sentinels}`);
   console.log('  No unreplaced sentinels in build: PASS');
@@ -97,11 +100,10 @@ console.log('Build integrity tests\n');
 // ── 3. Sentinel injection: verify injected data matches config ──
 
 (function testInjectedDataMatchesConfig() {
-  if (!fs.existsSync(BUILD_PATH)) {
+  if (!build) {
     console.log('  Injected data verification (build not found, skipping): SKIP');
     return;
   }
-  const build = fs.readFileSync(BUILD_PATH, 'utf8');
 
   for (const p of providers) {
     if (!p._injectableData) continue;
@@ -119,11 +121,10 @@ console.log('Build integrity tests\n');
 // ── 4. Provider detection chain in build ──
 
 (function testProviderDetectionChain() {
-  if (!fs.existsSync(BUILD_PATH)) {
+  if (!build) {
     console.log('  Provider detection chain (build not found, skipping): SKIP');
     return;
   }
-  const build = fs.readFileSync(BUILD_PATH, 'utf8');
 
   for (const p of sorted) {
     const fragment = `"${p.runtimeId}"`;
@@ -133,16 +134,11 @@ console.log('Build integrity tests\n');
     );
   }
 
-  // The env-truthy helper name (S6 in ≤2.1.112, EH in 2.1.114+) is resolved
-  // from the upstream varmap so this test tracks upstream renames without
-  // a manual edit each release.
-  const varmapDir = path.join(__dirname, '..', 'pipeline');
-  const versionedMaps = fs.readdirSync(varmapDir)
-    .filter(f => /^varmap-.+\.json$/.test(f))
-    .sort();
-  const latestMap = versionedMaps[versionedMaps.length - 1];
+  // env-truthy helper name (S6 in ≤2.1.112, EH in 2.1.114+) tracks upstream
+  // renames via varmap so no manual edit is needed on release bumps.
+  const latestMap = latestVarmap(path.join(__dirname, '..', 'pipeline'));
   const envTruthy = latestMap
-    ? (JSON.parse(fs.readFileSync(path.join(varmapDir, latestMap), 'utf8')).isEnvTruthy_in_getAPIProvider || 'EH')
+    ? (JSON.parse(fs.readFileSync(latestMap, 'utf8')).isEnvTruthy_in_getAPIProvider || 'EH')
     : 'EH';
   const detectionFragment = `${envTruthy}(process.env.${sorted[0].envKey})?"${sorted[0].runtimeId}"`;
   assert.ok(
@@ -155,11 +151,10 @@ console.log('Build integrity tests\n');
 // ── 5. BARE_INJECT_TOKENS guards match upstream ──
 
 (function testBareInjectGuards() {
-  if (!fs.existsSync(UPSTREAM_PATH)) {
+  if (!upstream) {
     console.log('  BARE_INJECT_TOKENS guards (upstream not found, skipping): SKIP');
     return;
   }
-  const upstream = fs.readFileSync(UPSTREAM_PATH, 'utf8');
 
   assert.doesNotThrow(
     () => verifyAnchors(upstream),
@@ -210,11 +205,10 @@ console.log('Build integrity tests\n');
 // ── 7. MATCH constants present in upstream ──
 
 (function testMatchConstantsInUpstream() {
-  if (!fs.existsSync(UPSTREAM_PATH)) {
+  if (!upstream) {
     console.log('  MATCH constants in upstream (upstream not found, skipping): SKIP');
     return;
   }
-  const upstream = fs.readFileSync(UPSTREAM_PATH, 'utf8');
 
   const criticalKeys = ['DETECT', 'INJECT', 'RESOLVE', 'FAMILY', 'CONSTRUCTOR', 'VERSION'];
   for (const key of criticalKeys) {
@@ -229,11 +223,10 @@ console.log('Build integrity tests\n');
 // ── 8. Patch 48 — 1h prompt cache allowlist wildcard survives in build ──
 
 (function testPromptCache1hAllowlist() {
-  if (!fs.existsSync(BUILD_PATH)) {
+  if (!build) {
     console.log('  Patch 48 1h cache allowlist (build not found, skipping): SKIP');
     return;
   }
-  const build = fs.readFileSync(BUILD_PATH, 'utf8');
 
   assert.ok(
     build.includes('"tengu_prompt_cache_1h_config",{allowlist:["*"]}'),
@@ -258,11 +251,10 @@ console.log('Build integrity tests\n');
 // ── 9. Patch 56 — cross-provider persisted-model guard in db() ──
 
 (function testCrossProviderModelGuard() {
-  if (!fs.existsSync(BUILD_PATH)) {
+  if (!build) {
     console.log('  Patch 56 cross-provider guard (build not found, skipping): SKIP');
     return;
   }
-  const build = fs.readFileSync(BUILD_PATH, 'utf8');
 
   const dbIdx = build.indexOf('function db()');
   assert.ok(dbIdx !== -1, 'db() not found in build — banner model resolver missing');
@@ -286,11 +278,10 @@ console.log('Build integrity tests\n');
 // ── 10. Patch 53 family — menu parity across provider branches ──
 
 (function testMenuParity() {
-  if (!fs.existsSync(BUILD_PATH)) {
+  if (!build) {
     console.log('  Patch 53 menu parity (build not found, skipping): SKIP');
     return;
   }
-  const build = fs.readFileSync(BUILD_PATH, 'utf8');
 
   const z85Idx = build.indexOf('function z85(');
   assert.ok(z85Idx !== -1, 'z85() (model menu renderer) not found in build');
@@ -352,11 +343,10 @@ console.log('Build integrity tests\n');
 // ── 11. Patch 55b — picker Current-model cross-provider filter ──
 
 (function testPickerCurrentModelFilter() {
-  if (!fs.existsSync(BUILD_PATH)) {
+  if (!build) {
     console.log('  Patch 55b picker filter (build not found, skipping): SKIP');
     return;
   }
-  const build = fs.readFileSync(BUILD_PATH, 'utf8');
   assert.ok(
     build.includes('uq()==="firstParty"&&q&&q.startsWith("gpt-")') &&
     build.includes('uq()==="openai"&&q&&!q.startsWith("gpt-")'),

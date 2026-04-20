@@ -1,8 +1,10 @@
 # pipeline/patches/ — Patch Modules
 ## Prohibitions
-- Using triple-backslash escapes (\\') in MATCH strings → use standard JS escape (\') to match binary content (f3ed5f9)
-- Referencing outer-scope variables in adapter/auth functions → they're .toString()'d and injected into minified binary
-- Using require()/module/exports/__dirname in serialized functions → only await import('node:...') allowed
+- Using triple-backslash escapes (\\') in MATCH strings → use standard JS escape (\') to match upstream minified content (f3ed5f9)
+- Referencing outer-scope variables (closures) in adapter/auth functions → they're serialized via .toString() and injected as string literals into the minified binary; checkSerialization() in provider-core.cjs will throw if require/module/exports/__dirname leak through
+- Using require()/module/exports/__dirname/__filename in serialized adapter functions → only `await import('node:...')` is allowed; checkSerialization() enforces this at build time
+- Reading `pipeline/patches/providers` as a file path → it is a directory; use `pipeline/patches/providers/<file>.cjs` or list contents first (EISDIR observed)
+- Editing MATCH constants directly in patch modules → all MATCH strings live in `pipeline/match-registry.cjs`; patch modules import them read-only
 ## When Changing
 - MATCH constants → edit pipeline/match-registry.cjs (shared by patch modules + upgrade tools)
 - Provider configs → @pipeline/patches/providers/CLAUDE.md

@@ -277,15 +277,22 @@ async function _openaiAdapter(url, init) {
       }, null, 2));
     } catch {}
     let _r, _rAttempt = 0;
+    // Composite signal: per-attempt 120s timeout + upstream abort (Ctrl+C /
+    // WK session shutdown). Without upstream forwarding, an in-flight Codex
+    // request keeps the process alive past WK() for up to 120s and /loop
+    // appears to ignore cancellation. AbortSignal.any handles listener
+    // teardown automatically (no manual add/remove inside the retry loop).
+    const _upSig = init && init.signal;
     while (true) {
-      const _ac = new AbortController();
-      const _fetchTimer = setTimeout(() => _ac.abort(), 120000);
+      const _signal = AbortSignal.any(
+        _upSig ? [_upSig, AbortSignal.timeout(120000)] : [AbortSignal.timeout(120000)]
+      );
       try {
         _r = await fetch('https://chatgpt.com/backend-api/codex/responses', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...cred.headers },
           body: _bodyStr,
-          signal: _ac.signal,
+          signal: _signal,
         });
       } catch (_fetchErr) {
         // fetch() threw — TLS / abort / DNS / socket reset. Dump the raw error so
@@ -315,8 +322,6 @@ async function _openaiAdapter(url, init) {
           console.error('[silly] fetch /codex/responses threw: ' + (_fetchErr && (_fetchErr.message || _fetchErr.name)) + ' (body ' + _bodyStr.length + ' bytes)');
         } catch {}
         throw _fetchErr;
-      } finally {
-        clearTimeout(_fetchTimer);
       }
       if (_r.status !== 429 || _rAttempt++ >= 2) break;
       // Cap at 30s: upstream has its own request timeout; waiting 120s risks racing it.

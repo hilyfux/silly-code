@@ -8,7 +8,7 @@
  *   Layer 1 (varmap): S6, pq, YM, KA, $Q, DR1 — auto-renamed by ci-upgrade
  *   Layer 2 (content-anchor): Tb1, pq4, Fq4, wB — auto-re-anchored via string tail
  *   Layer 2b (self-anchored): xW — function pattern → rename causes build fail
- *   Layer 3 (bare inject): qh, uvK — MUST have structural guard below
+ *   Layer 3 (bare inject): qh, uvK, Si, Ci, nL, sb8, Sn1 — MUST have structural guard below
  */
 
 // ── Match string constants (upstream v2.1.112) ──
@@ -42,6 +42,18 @@ const BARE_INJECT_TOKENS = [
     `function\\s+uvK\\b`,
     'Opus 4.6 menu item builder (patch 53 inject-only ref)',
     "grep -oE 'function uvK|\"Opus 4\\.6\"' upstream/package/cli.js"],
+  ['Si',
+    `function\\s+Si\\(q\\)\\{B8\\.scheduledTasksEnabled=q\\}`,
+    'scheduledTasksEnabled setter (patch 27 inject-only — disable /loop scheduler on shutdown)',
+    "grep -oE 'function Si.q.\\{B8.scheduledTasksEnabled' upstream/package/cli.js"],
+  ['Ci',
+    `function\\s+Ci\\(q\\)\\{if\\(q\\.length===0\\)return 0;[^{}]*sessionCronTasks`,
+    'sessionCronTasks remover (patch 27 inject-only — drop loop crons on shutdown)',
+    "grep -oE 'function Ci.q.\\{if.q.length' upstream/package/cli.js"],
+  ['nL',
+    `function\\s+nL\\(\\)\\{return\\s+B8\\.sessionCronTasks\\}`,
+    'sessionCronTasks getter (patch 27 inject-only — read loop crons on shutdown)',
+    "grep -oE 'function nL...return B8.sessionCronTasks' upstream/package/cli.js"],
 ];
 
 function verifyAnchors(upstreamSrc) {

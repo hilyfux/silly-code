@@ -64,16 +64,36 @@ module.exports = function applyProviderUx({ patch }) {
     'if(DP(q)){var _1mb=q?q.toLowerCase():"";if(!(pq()==="firstParty"&&_1mb.indexOf("opus-4-7")===-1&&!S6(process.env.SILLY_ENABLE_1M_CONTEXT)))K.push(Zo);}'
   );
 
-  // ── Patch 53: Restore Opus 4.6 option + native Codex menu for sillyx ──
-  patch('53-restore-opus-46-menu',
+  // ── Patch 53: Opus 4.7 + Opus 4.6 options + native Codex menu for sillyx ──
+  // Use direct model ID "claude-opus-4-7" (not alias "opus") to bypass
+  // alias resolution chain that can misroute to opus46.
+  patch('53-model-menu',
     'O.push(xvK),O',
-    'O.push(xvK),O.push(uvK(q,!1)),pq()!=="openai"?O:[{value:"gpt-5.4",label:"gpt-5.4",description:"Latest frontier agentic coding model"},{value:"gpt-5.2-codex",label:"gpt-5.2-codex",description:"Frontier agentic coding model (→ gpt-5.4)"},{value:"gpt-5.1-codex-max",label:"gpt-5.1-codex-max",description:"Codex-optimized flagship for deep and fast reasoning (→ gpt-5.4)"},{value:"gpt-5.4-mini",label:"gpt-5.4-mini",description:"Smaller frontier agentic coding model"},{value:"gpt-5.3-codex",label:"gpt-5.3-codex",description:"Frontier Codex-optimized agentic coding model"},{value:"gpt-5.3-codex-spark",label:"gpt-5.3-codex-spark",description:"Ultra-fast coding model (→ gpt-5.3-codex)"},{value:"gpt-5.2",label:"gpt-5.2",description:"Optimized for professional work and long-running agents (→ gpt-5.4)"},{value:"gpt-5.1-codex-mini",label:"gpt-5.1-codex-mini",description:"Optimized for codex. Cheaper, faster, but less capable (→ gpt-5.4)"}]'
+    'O.push(xvK),O.push({value:"claude-opus-4-7",label:"Opus 4.7",description:"Opus 4.7 \xB7 Most capable for complex work"}),O.push(uvK(q,!1)),pq()!=="openai"?O:[{value:"gpt-5.4",label:"gpt-5.4",description:"Latest frontier agentic coding model"},{value:"gpt-5.2-codex",label:"gpt-5.2-codex",description:"Frontier agentic coding model (→ gpt-5.4)"},{value:"gpt-5.1-codex-max",label:"gpt-5.1-codex-max",description:"Codex-optimized flagship for deep and fast reasoning (→ gpt-5.4)"},{value:"gpt-5.4-mini",label:"gpt-5.4-mini",description:"Smaller frontier agentic coding model"},{value:"gpt-5.3-codex",label:"gpt-5.3-codex",description:"Frontier Codex-optimized agentic coding model"},{value:"gpt-5.3-codex-spark",label:"gpt-5.3-codex-spark",description:"Ultra-fast coding model (→ gpt-5.3-codex)"},{value:"gpt-5.2",label:"gpt-5.2",description:"Optimized for professional work and long-running agents (→ gpt-5.4)"},{value:"gpt-5.1-codex-mini",label:"gpt-5.1-codex-mini",description:"Optimized for codex. Cheaper, faster, but less capable (→ gpt-5.4)"}]'
+  );
+
+  // ── Patch 53b: Disable additionalModelOptionsCache in menu ──
+  // The bootstrap cache leaks models across providers (gpt-5.4 in Claude menu,
+  // sonnet in Codex menu). Since our menus are already comprehensive via
+  // patches 53/25, skip the cache entirely.
+  patch('53b-no-model-cache',
+    'for(let w of H8().additionalModelOptionsCache??[])if(!K.some(($)=>$.value===w.value))K.push(w);',
+    'void 0;'
   );
 
   // ── Patch 54: q_6 fallback short-circuit for openai ──
   patch('54-menu-fallback-openai-skip',
     '||K.some((w)=>w.value===Y))return RM6(K);else if(Y==="opusplan")',
     '||K.some((w)=>w.value===Y))return RM6(K);if(typeof pq==="function"&&pq()==="openai")return RM6(K);else if(Y==="opusplan")'
+  );
+
+  // ── Patch 55b: Block cross-provider "Current model" in picker ──
+  // When switching from sillyx→sillyes, the persisted model (e.g. gpt-5.1-codex-mini)
+  // leaks into the Claude menu as "Current model". Block GPT models in firstParty
+  // and Claude models in openai.
+  patch('55b-no-cross-provider-current',
+    'if(_!==null&&!R.some((p6)=>p6.value===_)){let p6;',
+    'if(_!==null&&!R.some((p6)=>p6.value===_)&&!(typeof pq==="function"&&((pq()==="firstParty"&&_&&_.startsWith("gpt-"))||(pq()==="openai"&&_&&!_.startsWith("gpt-"))))){let p6;'
   );
 
   // ── Patch 55: "/model" heading for openai ──

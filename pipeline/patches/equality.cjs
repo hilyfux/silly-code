@@ -54,4 +54,26 @@ module.exports = function applyEquality({ patch }) {
     'function uT6(q=!1){if(ch()||Yq6()){if(YX())return"Opus 4.7 with 1M context \xB7 Most capable for complex work";return"Opus 4.7 \xB7 Most capable for complex work"}return"Sonnet 4.6 \xB7 Best for everyday tasks"}',
     'function uT6(q=!1){return"Sonnet 4.6 \xB7 Best for everyday tasks"}'
   )
+
+  // Patch 26: Bypass availableModels filter on model menu.
+  // RM6 filters menu items against API-side availableModels, which reflects
+  // the real account tier — not our faked "max". This removes models the
+  // user's subscription doesn't technically include (e.g. Opus 4.7 on Pro).
+  // Since we already control the menu via patches 25/53, bypass the filter.
+  patch('26-model-menu-ungate',
+    'function RM6(q){if(!(y7()||{}).availableModels)return q;return q.filter((_)=>_.value===null||_.value!==null&&Kq6(_.value))}',
+    'function RM6(q){return q}'
+  )
+
+  // Patch 27: Cancel /loop on session shutdown.
+  // Upstream WK() never disables the cron scheduler nor clears sessionCronTasks,
+  // so /loop keeps firing wakeups while the process winds down — visible as
+  // "loop ignored my Ctrl+C" when an in-flight Codex fetch holds the process
+  // open. Inject right after WK's re-entry guard so cleanup runs exactly once
+  // per shutdown. try/catch protects WK if Si/Ci/nL get renamed upstream
+  // (layer-3 bare-inject; structural guards live in match-registry.cjs).
+  patch('27-cancel-loop-on-shutdown',
+    'if(sb8=!0,_?.suppressResumeHint)Sn1=!0;',
+    'if(sb8=!0,_?.suppressResumeHint)Sn1=!0;try{Si(!1);Ci(nL().map(W=>W.id))}catch{}'
+  )
 }

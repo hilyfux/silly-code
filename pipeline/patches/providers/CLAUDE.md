@@ -7,6 +7,7 @@
 - Shared protocol functions → @pipeline/patches/providers/_base.cjs has mapModel, msgToOai, flattenSystem, oaiToAnthropicResponse, SSE streams
 - Auth file naming → update bin/ launchers too @bin/CLAUDE.md
 - Adding new provider → needs unique key, runtimeId, envKey, priority; engine validates schema
+- Patch module changes → co-changes frequently with @pipeline/patches/CLAUDE.md (cochange freq 8)
 ## Conventions
 - _base.cjs = shared functions serialized into same scope as adapters
 - Each provider .cjs exports: key, runtimeId, envKey, priority, identity, models, contextWindow, tierNames, adapter, auth

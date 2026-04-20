@@ -6,10 +6,11 @@
 - Reading `pipeline/patches/providers` as a file path → it is a directory; use `pipeline/patches/providers/<file>.cjs` or list contents first (EISDIR observed)
 - Editing MATCH constants directly in patch modules → all MATCH strings live in `pipeline/match-registry.cjs`; patch modules import them read-only
 - Injecting bare upstream symbols (Si, Ci, nL, hv, etc.) into REPLACEMENT side without echoing them in FIND string → patch passes at build, crashes silently at runtime when upstream renames; MUST register in BARE_INJECT_TOKENS in match-registry.cjs with a structural regex guard (063f22d)
+- Leaving durable scheduled-task persistence (`.claude/scheduled_tasks.json`) enabled → tasks armed in one project auto-resume in fresh sessions of unrelated projects after `/clear`; autonomous work the user didn't schedule. Patches 28a/28b neuter Qy6 (read) and UR8 (write) to session-only
 ## When Changing
 - MATCH constants → edit pipeline/match-registry.cjs (shared by patch modules + upgrade tools)
 - Provider configs → @pipeline/patches/providers/CLAUDE.md
-- Patch numbering → check ordering: provider-core(10-15) → provider-ux(50-55) → provider-identity(60-67)
+- Patch numbering → check ordering: provider-core(10-15) → provider-ux(50-55) → provider-identity(60-67); equality(20-28): 27 shutdown-cancel, 28a/28b durable-scheduler-disable
 - Adding new provider → update _providers.cjs loader + provider-core.cjs
 ## Conventions
 - Each .cjs exports function({patch, patchAll}) → void

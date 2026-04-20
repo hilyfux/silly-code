@@ -65,6 +65,29 @@ module.exports = function applyEquality({ patch }) {
     'function RM6(q){return q}'
   )
 
+  // Patch 28a: Disable durable scheduled-task READ.
+  // Upstream persists `durable:true` CronCreate jobs to <cwd>/.claude/scheduled_tasks.json
+  // and auto-resumes them on every session launch (including a `missed while Claude
+  // was not running` catch-up banner). Observed failure: a task armed in one project
+  // fires autonomously in a fresh session of another project after `/clear` — user has
+  // no memory of scheduling it. Neuter the loader so stale .json files are ignored and
+  // no task ever auto-fires in a session that didn't explicitly arm it.
+  patch('28a-durable-read-disable',
+    'async function Qy6(q){let K=V8(),_;try{_=await K.readFile(Ls(q),{encoding:"utf-8"})}catch(O){if(D5(O))return[];return j6(O),[]}let z=k5(_,!1);if(!z||typeof z!=="object")return[];let Y=z;if(!Array.isArray(Y.tasks))return[];let A=[];for(let O of Y.tasks){if(!O||typeof O.id!=="string"||typeof O.cron!=="string"||typeof O.prompt!=="string"||typeof O.createdAt!=="number"){E(`[ScheduledTasks] skipping malformed task: ${I6(O)}`);continue}if(!gj6(O.cron)){E(`[ScheduledTasks] skipping task ${O.id} with invalid cron \'${O.cron}\'`);continue}A.push({id:O.id,cron:O.cron,prompt:O.prompt,createdAt:O.createdAt,...typeof O.lastFiredAt==="number"&&{lastFiredAt:O.lastFiredAt},...O.recurring&&{recurring:!0},...O.permanent&&{permanent:!0}})}return A}',
+    'async function Qy6(q){return[]}'
+  )
+
+  // Patch 28b: Force CronCreate to session-only (never write .json).
+  // Pair with 28a — write side would otherwise leave orphan .json files that read
+  // as [] but still clutter the project tree. Redirect durable=true to the same
+  // in-memory DY6 branch as durable=false. User-facing cost: a user who says
+  // "persist this across sessions" gets silent degradation; acceptable because
+  // silly-code's philosophy is no-autonomous-work > cross-session continuity.
+  patch('28b-durable-write-disable',
+    'async function UR8(q,K,_,z,Y){let A=X4z().slice(0,8),O={id:A,cron:q,prompt:K,createdAt:Date.now(),..._&&{recurring:!0}};if(!z)return DY6({...O,...Y&&{agentId:Y}}),A;let w=await Qy6();return w.push(O),await WU1(w),A}',
+    'async function UR8(q,K,_,z,Y){let A=X4z().slice(0,8),O={id:A,cron:q,prompt:K,createdAt:Date.now(),..._&&{recurring:!0}};return DY6({...O,...Y&&{agentId:Y}}),A}'
+  )
+
   // Patch 27: Cancel /loop on session shutdown.
   // Upstream WK() never disables the cron scheduler nor clears sessionCronTasks,
   // so /loop keeps firing wakeups while the process winds down — visible as

@@ -283,4 +283,86 @@ console.log('Build integrity tests\n');
   console.log('  Patch 56 cross-provider model guard present: PASS');
 })();
 
+// ── 10. Patch 53 family — menu parity across provider branches ──
+
+(function testMenuParity() {
+  if (!fs.existsSync(BUILD_PATH)) {
+    console.log('  Patch 53 menu parity (build not found, skipping): SKIP');
+    return;
+  }
+  const build = fs.readFileSync(BUILD_PATH, 'utf8');
+
+  const z85Idx = build.indexOf('function z85(');
+  assert.ok(z85Idx !== -1, 'z85() (model menu renderer) not found in build');
+
+  // Walk braces to find the end of z85.
+  let depth = 0, started = false, z85End = -1;
+  for (let k = z85Idx; k < z85Idx + 10000; k++) {
+    const c = build[k];
+    if (c === '{') { depth++; started = true; }
+    else if (c === '}') { depth--; if (started && depth === 0) { z85End = k + 1; break; } }
+  }
+  assert.ok(z85End !== -1, 'could not parse z85() body');
+  const z85 = build.substring(z85Idx, z85End);
+
+  // 53: openai early-return with exactly 8 GPT items + no claude leak
+  assert.ok(
+    z85.startsWith('function z85(H=!1){if(typeof uq==="function"&&uq()==="openai")return ['),
+    'Patch 53: openai early-return missing from z85 entry'
+  );
+  const openaiCount = (z85.match(/value:"gpt-5\./g) || []).length;
+  assert.ok(openaiCount >= 8, `Patch 53: openai GPT list shrank (${openaiCount} items, expected 8+)`);
+  // Extract only the openai GPT list (between [ and the matching ]) and
+  // assert no claude-* value leaks into it. The _sO47 helper below does
+  // reference "claude-opus-4-7" but that is outside the list.
+  const listStart = z85.indexOf('uq()==="openai")return [');
+  const listOpen = z85.indexOf('[', listStart);
+  let bracketDepth = 0, listEnd = -1;
+  for (let k = listOpen; k < z85.length; k++) {
+    if (z85[k] === '[') bracketDepth++;
+    else if (z85[k] === ']') { bracketDepth--; if (bracketDepth === 0) { listEnd = k + 1; break; } }
+  }
+  const openaiList = z85.substring(listOpen, listEnd);
+  assert.ok(
+    !/value:"claude-/.test(openaiList),
+    'Patch 53: claude model leaked into openai menu branch'
+  );
+
+  // 53-family: _sO47 wrapper must be defined and applied at every firstParty return site
+  assert.ok(z85.includes('var _sO47=function(x)'), 'Patch 53: _sO47 helper not defined in z85');
+  // 53c/53d/53e/53f wrap 4 return sites — each produces one `_sO47(` call.
+  const sO47Calls = (z85.match(/_sO47\(/g) || []).length;
+  assert.ok(
+    sO47Calls >= 4,
+    `Patch 53 family: _sO47 applied at only ${sO47Calls} return sites, expected 4 (53c/d/e/f)`
+  );
+
+  // No unwrapped return that pushes l$7 or r$7 at a firstParty branch
+  assert.ok(
+    !/(?<!_sO47\()return \$\.push\(l\$7\),\$/.test(z85),
+    'Patch 53c: found unwrapped "return $.push(l$7),$" — Opus 4.7 will not appear in Hq sub branch'
+  );
+  assert.ok(
+    !/(?<!_sO47\()return T\.push\(l\$7\),T/.test(z85),
+    'Patch 53d: found unwrapped "return T.push(l$7),T" — Opus 4.7 will not appear in Hq default branch'
+  );
+  console.log('  Patch 53 family menu parity present: PASS');
+})();
+
+// ── 11. Patch 55b — picker Current-model cross-provider filter ──
+
+(function testPickerCurrentModelFilter() {
+  if (!fs.existsSync(BUILD_PATH)) {
+    console.log('  Patch 55b picker filter (build not found, skipping): SKIP');
+    return;
+  }
+  const build = fs.readFileSync(BUILD_PATH, 'utf8');
+  assert.ok(
+    build.includes('uq()==="firstParty"&&q&&q.startsWith("gpt-")') &&
+    build.includes('uq()==="openai"&&q&&!q.startsWith("gpt-")'),
+    'Patch 55b: /model picker Current-model filter missing — cross-provider model would appear as current'
+  );
+  console.log('  Patch 55b picker current-model filter present: PASS');
+})();
+
 console.log('\nAll build integrity tests passed.');

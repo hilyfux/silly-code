@@ -285,6 +285,15 @@ case "${1:-}" in
         fi
         if git pull --ff-only origin main 2>/dev/null; then
           ok "Updated to $(git rev-parse --short HEAD)"
+          # Refresh runtime deps if package.json moved forward or node_modules
+          # is missing entirely (install.sh < 9d73e2a never seeded them).
+          if [ -f "$ROOT_DIR/package.json" ] && \
+             { [ ! -d "$ROOT_DIR/node_modules" ] || \
+               [ "$ROOT_DIR/package.json" -nt "$ROOT_DIR/node_modules" ]; }; then
+            info "Refreshing runtime dependencies..."
+            (cd "$ROOT_DIR" && npm install --no-audit --no-fund --ignore-scripts >/dev/null 2>&1) \
+              || warn "npm install failed — rebuild may crash at launch"
+          fi
           info "Rebuilding patched binary..."
           if node "$ROOT_DIR/pipeline/patch.cjs"; then
             ok "Binary updated"

@@ -23,10 +23,11 @@ module.exports = function applyEquality({ patch }) {
     'function Hq(){return!0}'
   )
 
-  // Patch 22: Enable /loop dynamic mode — bypass statsig feature flag
+  // Patch 22: Enable /loop dynamic mode — opt-in via SILLY_ENABLE_LOOP env var.
+  // Default OFF: prevents ghost wakeups from self-replicating ScheduleWakeup calls.
   patch('22-loop-dynamic-enable',
     'function J91(){return I_("tengu_kairos_loop_dynamic",!1)}',
-    'function J91(){return!0}'
+    'function J91(){return!!process.env.SILLY_ENABLE_LOOP}'
   )
 
   // Patch 24: Enable /loop prompt preamble — bypass statsig feature flag
@@ -90,6 +91,15 @@ module.exports = function applyEquality({ patch }) {
   patch('28b-durable-write-disable',
     'async function Nb_(H,_,q,K,O){let T=U$9.randomUUID().slice(0,8),$={id:T,cron:H,prompt:_,createdAt:Date.now(),...q&&{recurring:!0}};if(!K)return tOH({...$,...O&&{agentId:O}}),T;let A=await LyH();return A.push($),await hF6(A),T}',
     'async function Nb_(H,_,q,K,O){let T=U$9.randomUUID().slice(0,8),$={id:T,cron:H,prompt:_,createdAt:Date.now(),...q&&{recurring:!0}};return tOH({...$,...O&&{agentId:O}}),T}'
+  )
+
+  // Patch 28c: Cancel loop crons on /clear.
+  // clearConversation resets conversation state but leaves in-memory cron timers
+  // alive — a surviving ScheduleWakeup self-replicates into the fresh context.
+  // Inject cleanup right after the unique "conversation_clear" telemetry anchor.
+  patch('28c-clear-cancels-loop',
+    'l("tengu_cache_eviction_hint",{scope:"conversation_clear",last_request_id:j});let D=new Set,M=[]',
+    'l("tengu_cache_eviction_hint",{scope:"conversation_clear",last_request_id:j});try{Qi(!1);YU(Yh().map(W=>W.id))}catch{}let D=new Set,M=[]'
   )
 
   // Patch 27: Cancel /loop on session shutdown.

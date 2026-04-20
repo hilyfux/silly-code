@@ -710,7 +710,16 @@ function enforceContinuation(text, messages, tools) {
   // Detect ScheduleWakeup in tools — /loop sessions require it to be called every turn
   const _toolNames = Array.isArray(tools) ? tools.map(t => t.name || '') : [];
   const _hasScheduleWakeup = _toolNames.includes('ScheduleWakeup');
-  const _loopBlock = _hasScheduleWakeup
+  let _isActiveLoop = false;
+  if (_hasScheduleWakeup && Array.isArray(messages)) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role !== 'assistant') continue;
+      const blocks = Array.isArray(m.content) ? m.content : [];
+      if (blocks.some(b => b.type === 'tool_use' && b.name === 'ScheduleWakeup')) { _isActiveLoop = true; break; }
+    }
+  }
+  const _loopBlock = _isActiveLoop
     ? '\n\nLOOP ENFORCEMENT: This is a /loop session. ScheduleWakeup is available. You MUST call ScheduleWakeup before ending your response to schedule the next iteration. Failing to call ScheduleWakeup = the autonomous loop permanently dies. After completing your work, call ScheduleWakeup with a delaySeconds appropriate to the task (60-300 seconds).'
     : '';
 

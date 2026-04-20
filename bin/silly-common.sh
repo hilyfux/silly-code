@@ -118,6 +118,14 @@ CLAUDE_CRED="$HOME/.claude/.credentials.json"
 ensure_patched_binary() {
   local root="${1:-$ROOT_DIR}"
   PATCHED="$root/pipeline/build/cli-patched.js"
+  # Runtime deps (ws, etc.) must be present — cli.js resolves them from
+  # node_modules at the repo root. install.sh installs these, but existing
+  # installs that only `git pull` will be missing them after upstream bumps.
+  if [ ! -d "$root/node_modules/ws" ]; then
+    info "Installing runtime dependencies (this may take a minute)..."
+    (cd "$root" && npm install --no-audit --no-fund --ignore-scripts >/dev/null 2>&1) \
+      || { err "npm install failed — run it manually in $root"; exit 1; }
+  fi
   if [ ! -f "$PATCHED" ]; then
     info "Building patched binary (first run)..."
     node "$root/pipeline/patch.cjs" || { err "Patch build failed"; exit 1; }

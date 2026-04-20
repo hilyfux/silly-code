@@ -190,7 +190,12 @@ console.log(`  Output: ${OUTPUT}\n`)
       const existing = fs.readlinkSync(vendorLink)
       if (existing === vendorSrc) needsLink = false
       else fs.unlinkSync(vendorLink)
-    } catch {}
+    } catch (e) {
+      // readlinkSync throws EINVAL on a real directory (left over from an
+      // older install flow that populated vendor/ripgrep directly). Wipe it
+      // so the symlink below can take its place.
+      if (e.code === 'EINVAL' || e.code === 'EISDIR') fs.rmSync(vendorLink, { recursive: true, force: true })
+    }
     if (needsLink) {
       fs.symlinkSync(vendorSrc, vendorLink, _symlinkType)
       console.log(`  → vendor: ${vendorLink}`)

@@ -714,23 +714,11 @@ function enforceContinuation(text, messages, tools) {
     ? '\n\nLOOP ENFORCEMENT: This is a /loop session. ScheduleWakeup is available. You MUST call ScheduleWakeup before ending your response to schedule the next iteration. Failing to call ScheduleWakeup = the autonomous loop permanently dies. After completing your work, call ScheduleWakeup with a delaySeconds appropriate to the task (60-300 seconds).'
     : '';
 
-  // Detect narration loop: consecutive assistant turns with zero tool calls
-  let _narrationStreak = 0;
-  if (Array.isArray(messages)) {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role !== 'assistant') continue;
-      const _hasTool = Array.isArray(m.content) ? m.content.some(b => b.type === 'tool_use') : false;
-      if (!_hasTool) _narrationStreak++; else break;
-    }
+  if (text.includes('<continuation-discipline>')) {
+    // Already injected — refresh the open-todos tail so it reflects current state.
+    return text.replace(/\n\nYour own TodoWrite list[\s\S]*?<\/continuation-discipline>/, openBlock + _loopBlock + '\n</continuation-discipline>');
   }
-  const _narrationBlock = _narrationStreak >= 2
-    ? '\n\nCRITICAL — NARRATION LOOP (' + _narrationStreak + ' text-only turns): You keep announcing action but calling ZERO tools. This response MUST begin with a tool call. No preamble, no confirmation, no "好的" — call the tool that does the work.'
-    : '';
-
-  // Strip stale block if present — always rebuild with current dynamic state
-  text = text.replace(/\n\n<continuation-discipline>[\s\S]*?<\/continuation-discipline>/, '');
-  const block = '\n\n<continuation-discipline>\nYou are running in autonomous agent mode. The user is NOT waiting between your responses — there is no "natural pause" where you hand control back for approval.\n\nHARD RULES:\n1. If your TodoWrite list has any item with status "pending" or "in_progress" — you MUST call another tool in this same response. Not stop.\n2. Narration like "我会继续 / 继续下一批 / 还在继续 / 收到 / 好的 / 马上执行 / I\'ll continue / next batch / let me keep going" is NOT a substitute for action. Write narration → call the tool in the SAME response.\n3. "Natural stopping points" (one batch clean, one test passing, one file done, one lint rule cleared) are NOT stopping points here — they are mid-stream. Keep going.\n4. Do NOT announce "I\'ll process the remaining items next" and then stop. Process them now.\n\nTOOL LOADING (ToolSearch protocol): Some tools require schema loading before use. If you get an InputValidationError or a tool schema is listed as [TOOL LOADING REQUIRED], call ToolSearch first: ToolSearch({query:"select:ToolName"}) → then retry the tool call. Do NOT stop because a tool schema is missing — load it and continue.\n\nStop ONLY when:\n  (a) every TodoWrite item is marked completed AND no announced work remains outstanding; OR\n  (b) you hit an error you cannot recover from without user input (say what you need); OR\n  (c) the user explicitly said "stop" in THIS conversation.\n\nBefore writing the last token of your response, self-check:\n  • "Are there pending/in_progress todos?" → if yes, call the next tool NOW.\n  • "Did I just say I\'ll keep going?" → then keep going in this turn, not the next.\n  • "Am I stopping because it feels like a polite handoff?" → don\'t stop.' + _narrationBlock + openBlock + _loopBlock + '\n</continuation-discipline>';
+  const block = '\n\n<continuation-discipline>\nYou are running in autonomous agent mode. The user is NOT waiting between your responses — there is no "natural pause" where you hand control back for approval.\n\nHARD RULES:\n1. If your TodoWrite list has any item with status "pending" or "in_progress" — you MUST call another tool in this same response. Not stop.\n2. Narration like "我会继续 / 继续下一批 / 还在继续 / I\'ll continue / next batch / let me keep going" is NOT a substitute for action. Write narration → call the tool in the SAME response.\n3. "Natural stopping points" (one batch clean, one test passing, one file done, one lint rule cleared) are NOT stopping points here — they are mid-stream. Keep going.\n4. Do NOT announce "I\'ll process the remaining items next" and then stop. Process them now.\n\nTOOL LOADING (ToolSearch protocol): Some tools require schema loading before use. If you get an InputValidationError or a tool schema is listed as [TOOL LOADING REQUIRED], call ToolSearch first: ToolSearch({query:"select:ToolName"}) → then retry the tool call. Do NOT stop because a tool schema is missing — load it and continue.\n\nStop ONLY when:\n  (a) every TodoWrite item is marked completed AND no announced work remains outstanding; OR\n  (b) you hit an error you cannot recover from without user input (say what you need); OR\n  (c) the user explicitly said "stop" in THIS conversation.\n\nBefore writing the last token of your response, self-check:\n  • "Are there pending/in_progress todos?" → if yes, call the next tool NOW.\n  • "Did I just say I\'ll keep going?" → then keep going in this turn, not the next.\n  • "Am I stopping because it feels like a polite handoff?" → don\'t stop.' + openBlock + _loopBlock + '\n</continuation-discipline>';
   return text + block;
 }
 

@@ -152,4 +152,17 @@ module.exports = function applyPrivacy({ patch, patchAll }) {
     '"tengu_prompt_cache_1h_config",{allowlist:["repl_main_thread*","sdk","auto_mode"]}',
     '"tengu_prompt_cache_1h_config",{allowlist:["*"]}'
   )
+
+  // Patch 48b: Remove isUsingOverage gate from 1h cache check (td7).
+  // lk.isUsingOverage is parsed from the `anthropic-ratelimit-unified-overage-status`
+  // response header — when a user's account has exceeded its extra-usage budget,
+  // Anthropic flips this flag and td7() falls back to 5-minute TTL silently.
+  // With patch 21 (Hq()=true) and patch 48 (allowlist="*"), the only remaining
+  // path to 5m TTL is this overage flag. Removing it guarantees 1h for all
+  // querySources as long as FORCE_PROMPT_CACHING_5M is not set — matching the
+  // user's stated requirement: "大模型的缓存时间要保证是正常的一小时".
+  patch('48b-cache-overage-bypass',
+    'if(!Hq()||lk.isUsingOverage)return!1;',
+    'if(!Hq())return!1;'
+  )
 }

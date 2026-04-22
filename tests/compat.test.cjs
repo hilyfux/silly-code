@@ -594,6 +594,26 @@ test('cross-platform: msgsToResponsesInput output is pure JSON (safe to serializ
   assert.doesNotThrow(() => JSON.parse(json));
 });
 
+// ── Tool-description identity cleaning ──────────────────────
+test('tool descriptions: cleanIdentityForProvider removes "Claude Code" from built-in tool descriptions', () => {
+  // Upstream binary ships ~18 tool descriptions like "Cost of the Claude Code
+  // subscription" / "Diagnose and verify your Claude Code install" that leak
+  // the Claude brand into GPT's tool catalog. The adapter must run _clean on
+  // the description field before forwarding the tool list.
+  const samples = [
+    'Cost of the Claude Code subscription',
+    'Spawn a remote Claude Code task',
+    'Submit feedback about Claude Code',
+    'Diagnose and verify your Claude Code install',
+    'Discover Claude Code plugins',
+  ];
+  for (const desc of samples) {
+    const cleaned = cleanIdentityForProvider(desc, 'OpenAI Codex');
+    assert(!/\bClaude Code\b/.test(cleaned), `leaked Claude Code: ${desc} → ${cleaned}`);
+    assert(/Silly Code/.test(cleaned), `replacement missing: ${cleaned}`);
+  }
+});
+
 // ── End-to-end: tame → clean → continuation order ────────────
 test('pipeline order: tame strips hard-gate, clean renames Claude, continuation appends', () => {
   const raw = '<HARD-GATE>\nBlock unless approved.\n</HARD-GATE>\nYou are Claude Code, serving @anthropic-ai/claude-code.';

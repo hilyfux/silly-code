@@ -241,7 +241,10 @@ async function _openaiAdapter(url, init) {
     // for users who want to test.
     if (_fastTier && process.env.SILLY_CODEX_FAST === '1') _req.service_tier = 'priority';
     if (_tools.length) {
-      _req.tools = _tools.map(t => ({ type: 'function', name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } }));
+      // Clean tool descriptions too — 18+ upstream built-in tools (Spawn remote,
+      // Submit feedback, Discover plugins, etc.) have "Claude Code" in their
+      // description text, leaking identity into GPT's tool catalog.
+      _req.tools = _tools.map(t => ({ type: 'function', name: t.name, description: _clean(t.description || ''), parameters: t.input_schema || { type: 'object', properties: {} } }));
       // Serial tool execution — parallel calls cause agent loop confusion with GPT Pro
       _req.parallel_tool_calls = false;
     }
@@ -375,7 +378,8 @@ async function _openaiAdapter(url, init) {
     if (_b.stream) _req.stream_options = { include_usage: true };
     if (_fastTier) _req.service_tier = 'priority';
     if (_b.tools && _b.tools.length) {
-      _req.tools = _b.tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } } }));
+      // Clean tool descriptions — same reason as Responses API path above.
+      _req.tools = _b.tools.map(t => ({ type: 'function', function: { name: t.name, description: _clean(t.description || ''), parameters: t.input_schema || { type: 'object', properties: {} } } }));
       _req.tool_choice = 'auto';
     }
     const _r = await fetch('https://api.openai.com/v1/chat/completions', {

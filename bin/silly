@@ -454,11 +454,16 @@ $(cat "$STAGE/context.txt")
 
 Bundle path: \`$BUNDLE\`
 "
+        # Use only labels that exist on hilyfux/silly-code (verified 2026-04-22:
+        # bug, documentation, duplicate, enhancement, good first issue, help
+        # wanted, invalid, question, wontfix, auto-upgrade, upstream).
+        # Lesson 6d32082: gh issue create --label on a non-existent label
+        # fails the command, so keep this to the single known-safe label.
         URL=$(gh issue create \
           --repo hilyfux/silly-code \
           --title "$TITLE" \
           --body "$BODY" \
-          --label "bug,user-report" 2>/dev/null)
+          --label "bug" 2>/dev/null)
         if [ -n "$URL" ]; then
           ok "Issue opened: $URL"
           echo "  Next: drag $BUNDLE into the issue comments to attach."

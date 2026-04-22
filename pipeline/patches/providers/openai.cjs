@@ -385,10 +385,18 @@ async function _openaiAdapter(url, init) {
       _req.tools = _tools.map(t => ({ type: 'function', function: { name: t.name, description: _clean(t.description || ''), parameters: t.input_schema || { type: 'object', properties: {} } } }));
       _req.tool_choice = 'auto';
     }
+    // Parity with Responses API path: composite abort signal (upstream Ctrl+C
+    // + 120s per-attempt timeout) so fetch hangs don't keep the process alive
+    // past user-initiated cancellation.
+    const _ccUpSig = init && init.signal;
+    const _ccSignal = AbortSignal.any(
+      _ccUpSig ? [_ccUpSig, AbortSignal.timeout(120000)] : [AbortSignal.timeout(120000)]
+    );
     const _r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...cred.headers },
       body: JSON.stringify(_req),
+      signal: _ccSignal,
     });
     if (!_r.ok) { let _e = await _r.text(); try { _e = JSON.parse(_e).error?.message || _e; } catch {} throw new Error('OpenAI API error ' + _r.status + ': ' + _e); }
     if (_b.stream) return new Response(makeSseStream(_r, _b.model), { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });

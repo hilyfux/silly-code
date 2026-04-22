@@ -614,6 +614,34 @@ test('tool descriptions: cleanIdentityForProvider removes "Claude Code" from bui
   }
 });
 
+// ── Build-output: Anthropic SDK non-streaming pre-flight throw must be neutered ────
+test('build: calculateNonstreamingTimeout throw removed (sillyx high max_tokens fix)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const built = path.join(__dirname, '..', 'pipeline', 'build', 'cli-patched.js');
+  if (!fs.existsSync(built)) {
+    // Dev check runs pre-build; tolerate missing output in that case.
+    return;
+  }
+  const src = fs.readFileSync(built, 'utf8');
+  // Both method variants must return 600000 without throwing. The pre-flight
+  // throw rejected chatgpt.com non-streaming callers even though the adapter
+  // owns the transport — observed as "API Error: Streaming is required for
+  // operations that may take longer than 10 minutes" on sillyx.
+  assert(
+    /_calculateNonstreamingTimeout\(H\)\{return 600000\}/.test(src),
+    'patch 29a missing: _calculateNonstreamingTimeout still throws'
+  );
+  assert(
+    /calculateNonstreamingTimeout\(H,_\)\{return 600000\}/.test(src),
+    'patch 29b missing: calculateNonstreamingTimeout(H,_) still throws'
+  );
+  assert(
+    !/Streaming is required for operations that may take longer than 10 minutes/.test(src),
+    'Anthropic SDK "Streaming is required…" error string still present — pre-flight throw not fully neutered'
+  );
+});
+
 // ── End-to-end: tame → clean → continuation order ────────────
 test('pipeline order: tame strips hard-gate, clean renames Claude, continuation appends', () => {
   const raw = '<HARD-GATE>\nBlock unless approved.\n</HARD-GATE>\nYou are Claude Code, serving @anthropic-ai/claude-code.';

@@ -112,6 +112,34 @@ module.exports = function applyEquality({ patch }) {
     'function td5({calls:H,results:_,deletedCronIds:q}){return;if(!OW())return;'
   )
 
+  // Patch 29a/29b: Neutralize Anthropic SDK's non-streaming pre-flight throw.
+  //
+  // The SDK's calculateNonstreamingTimeout() refuses any non-streaming request
+  // whose max_tokens implies >10 minutes of work (formula: max_tokens > 21333,
+  // or > xA_[model] cap e.g. 8192 for claude-opus-4-*). It throws BEFORE the
+  // request hits our injected fetch adapter, so sillyx users saw
+  //   "API Error: Streaming is required for operations that may take longer
+  //    than 10 minutes"
+  // even though chatgpt.com/backend-api/codex/responses requires stream:true
+  // and our adapter would have streamed anyway (collectResponsesSse drains
+  // the SSE into a static response for non-streaming callers).
+  //
+  // Neutering the throw is correct because:
+  //   - sillyx: adapter owns the transport; the SDK check is moot.
+  //   - sillye: a real >10-min non-stream request will still error out at the
+  //     network layer on timeout — we just don't pre-block it, so short
+  //     realistic calls with high max_tokens headroom succeed.
+  //   - privacy/equality: removes an opaque ceiling the user didn't set,
+  //     aligned with patches 20-28 (no hidden gates).
+  patch('29a-nonstream-timeout-noop-short',
+    '_calculateNonstreamingTimeout(H){if(3600*H/128000>600)throw new xq("Streaming is required for operations that may take longer than 10 minutes. See https://github.com/anthropics/anthropic-sdk-typescript#streaming-responses for more details");return 600000}',
+    '_calculateNonstreamingTimeout(H){return 600000}'
+  )
+  patch('29b-nonstream-timeout-noop-long',
+    'calculateNonstreamingTimeout(H,_){if(3600000*H/128000>600000||_!=null&&H>_)throw new xq("Streaming is required for operations that may take longer than 10 minutes. See https://github.com/anthropics/anthropic-sdk-typescript#long-requests for more details");return 600000}',
+    'calculateNonstreamingTimeout(H,_){return 600000}'
+  )
+
   // Patch 27: Cancel /loop on session shutdown.
   // Upstream WK() never disables the cron scheduler nor clears sessionCronTasks,
   // so /loop keeps firing wakeups while the process winds down — visible as

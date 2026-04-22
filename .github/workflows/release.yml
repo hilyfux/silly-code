@@ -1,11 +1,9 @@
 name: release
 
 # Fires on push to main. If deps.json's upstream.version changed vs the
-# previous commit, cut a GitHub release tagged v<upstream-version>.
-#
-# Releases are markers only — users install via `git clone` + local rebuild,
-# so we don't ship the 13 MB patched binary as a release asset. The release
-# notes link to the varmap diff and to the upstream Claude Code changelog.
+# previous commit, build the patched tarball and cut a release on the PUBLIC
+# mirror (hilyfux/silly-code). The release asset silly-code.tar.gz is what
+# install.sh / install.ps1 download from releases/latest.
 
 on:
   push:
@@ -13,9 +11,15 @@ on:
     paths:
       - 'deps.json'
       - 'pipeline/upstream/package/cli.js'
+  workflow_dispatch:
+    inputs:
+      force_version:
+        description: 'Force release for a specific version (leave empty to auto-detect)'
+        required: false
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release
@@ -24,15 +28,29 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      PUBLIC_REPO: hilyfux/silly-code
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # need HEAD^ to diff
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Detect version change
         id: diff
         run: |
+          set -euo pipefail
+          FORCE="${{ github.event.inputs.force_version }}"
+          if [ -n "$FORCE" ]; then
+            echo "new=$FORCE" >> $GITHUB_OUTPUT
+            echo "old=(forced)" >> $GITHUB_OUTPUT
+            echo "changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           OLD=$(git show HEAD^:deps.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).deps.upstream.version" 2>/dev/null || echo "")
           NEW=$(node -p "require('./deps.json').deps.upstream.version")
           echo "old=$OLD" >> $GITHUB_OUTPUT
@@ -43,43 +61,38 @@ jobs:
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
-      - uses: actions/setup-node@v4
-        if: steps.diff.outputs.changed == 'true'
-        with:
-          node-version: '20'
-
-      - name: Verify build + tests before tagging
-        if: steps.diff.outputs.changed == 'true'
-        run: |
-          node pipeline/patch.cjs
-          node tests/base.test.cjs
-          node tests/schema.test.cjs
-
-      - name: Check tag does not already exist
+      - name: Check tag does not already exist on public mirror
         if: steps.diff.outputs.changed == 'true'
         id: tag_check
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
         run: |
+          set -euo pipefail
           TAG="v${{ steps.diff.outputs.new }}"
-          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            echo "Tag $TAG already exists — skipping release"
+          if gh release view "$TAG" --repo "$PUBLIC_REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists on $PUBLIC_REPO — skipping"
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create tag
+      - name: Build patched binary + run tests
         if: steps.diff.outputs.changed == 'true' && steps.tag_check.outputs.exists == 'false'
         run: |
-          git config user.name "silly-code-bot"
-          git config user.email "silly-code-bot@users.noreply.github.com"
-          git tag "v${{ steps.diff.outputs.new }}" -m "upstream ${{ steps.diff.outputs.new }}"
-          git push origin "v${{ steps.diff.outputs.new }}"
+          node pipeline/patch.cjs
+          node tests/base.test.cjs
+          node tests/schema.test.cjs
 
-      - name: Create GitHub release
+      - name: Package release tarball
+        if: steps.diff.outputs.changed == 'true' && steps.tag_check.outputs.exists == 'false'
+        run: node pipeline/package-release.cjs
+
+      - name: Create release on public mirror
         if: steps.diff.outputs.changed == 'true' && steps.tag_check.outputs.exists == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
         run: |
+          set -euo pipefail
           NEW="${{ steps.diff.outputs.new }}"
           OLD="${{ steps.diff.outputs.old }}"
           CHANGELOG_URL="https://github.com/anthropics/claude-code/releases/tag/v${NEW}"
@@ -87,7 +100,7 @@ jobs:
           NOTES="$(cat <<EOF
           **Upstream: Claude Code \`${OLD}\` → \`${NEW}\`**
 
-          Patched downstream by [silly-code](https://github.com/hilyfux/silly-code) with:
+          Patched downstream by silly-code with:
           - 3 providers (Claude / OpenAI Codex / GitHub Copilot)
           - zero telemetry (10 endpoints blocked)
           - zero tier gating
@@ -98,11 +111,7 @@ jobs:
           **macOS / Linux**
 
           \`\`\`bash
-          # New install
           curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
-
-          # Existing install
-          silly update apply
           \`\`\`
 
           **Windows PowerShell**
@@ -111,19 +120,16 @@ jobs:
           irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex
           \`\`\`
 
-          If you installed an earlier Windows build, run the installer again to refresh the `.cmd` launchers.
-
-          ### Variable map
-          See \`pipeline/varmap-${NEW}.json\` for the minified identifier snapshot.
-
           ### Upstream notes
           [Claude Code ${NEW} release notes](${CHANGELOG_URL})
           EOF
           )"
 
           gh release create "v${NEW}" \
+            --repo "$PUBLIC_REPO" \
             --title "silly-code v${NEW}" \
-            --notes "$NOTES"
+            --notes "$NOTES" \
+            silly-code.tar.gz
 
       - name: Summary
         if: always()
@@ -136,3 +142,4 @@ jobs:
           echo "| New version | \`${{ steps.diff.outputs.new }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Changed? | ${{ steps.diff.outputs.changed }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tag existed? | ${{ steps.tag_check.outputs.exists || 'n/a' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | \`$PUBLIC_REPO\` |" >> $GITHUB_STEP_SUMMARY

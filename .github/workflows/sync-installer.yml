@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: hilyfux/silly-code
-          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          token: ${{ secrets.PUBLIC_REPO_PAT }}
           path: public-mirror
           fetch-depth: 1
 

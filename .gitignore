@@ -4,6 +4,7 @@ pipeline/build/
 pipeline/.upgrade-tmp/
 # varmap-*.json kept tracked — ci-upgrade diffs old vs new for rename sweep
 *.tgz
+silly-code.tar.gz
 .env
 dist/
 cli

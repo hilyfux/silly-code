@@ -18,7 +18,10 @@ jobs:
           node-version: "20"
 
       - name: Run unit tests
-        run: node tests/base.test.cjs && node tests/schema.test.cjs && node tests/providers.test.cjs
+        run: node tests/base.test.cjs && node tests/schema.test.cjs && node tests/providers.test.cjs && node tests/compat.test.cjs
 
       - name: Build patched binary
         run: node pipeline/patch.cjs
+
+      - name: Build integrity tests (post-build)
+        run: node tests/build-integrity.test.cjs

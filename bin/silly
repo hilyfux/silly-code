@@ -169,6 +169,20 @@ case "${1:-}" in
       warn "Provider fallback: no providers authenticated"
     fi
 
+    # Adapter compatibility (dev installs only — tests/ not shipped in dist)
+    COMPAT_TEST="$ROOT_DIR/tests/compat.test.cjs"
+    if [ -f "$COMPAT_TEST" ]; then
+      echo ""
+      if COMPAT_OUT=$(node "$COMPAT_TEST" 2>&1); then
+        PASSED=$(echo "$COMPAT_OUT" | grep -E "^[[:space:]]+[0-9]+ passed" | awk '{print $1}')
+        ok "Adapter compat: ${PASSED:-all} assertions green"
+      else
+        FAILED=$(echo "$COMPAT_OUT" | grep -c "^  ✗ " || true)
+        err "Adapter compat: $FAILED assertion(s) failed — run 'node tests/compat.test.cjs' for details"
+        MISSING=true
+      fi
+    fi
+
     echo ""
     [ "$MISSING" = true ] && { err "Some checks failed. Fix the issues above."; exit 1; }
     ok "Ready for use."

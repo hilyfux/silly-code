@@ -23,6 +23,8 @@ const {
   msgToOai,
   msgsToResponsesInput,
   flattenSystem,
+  _cleanToolArgs,
+  agentBudgetLog,
 } = base;
 
 let pass = 0, fail = 0;
@@ -405,6 +407,191 @@ test('flattenSystem: array joins .text parts, strips cache_control', () => {
   ]);
   assert(/A/.test(s) && /B/.test(s));
   assert(!/cache_control/.test(s));
+});
+
+// ── Harness integration: hooks / subagents / skill frontmatter ─
+test('hooks: cleanIdentityForProvider preserves PreToolUse additionalContext prose', () => {
+  // Upstream Claude Code hooks inject additionalContext via stdin JSON; the text
+  // reaches the LLM as a system-reminder message. Identity cleaning runs on that
+  // text and must NOT delete the user's custom guidance.
+  const s = 'PreToolUse:Read hook additional context: [kg:size-guard] large file, prefer Grep first.';
+  const o = cleanIdentityForProvider(s, 'OpenAI Codex');
+  assert(/kg:size-guard/.test(o), 'custom hook tag dropped');
+  assert(/prefer Grep first/.test(o), 'hook guidance prose dropped');
+  assert(/hook additional context/.test(o), 'hook context marker dropped');
+});
+
+test('hooks: cleanIdentityForProvider preserves SessionStart hook restoration context', () => {
+  const s = 'SessionStart hook additional context: [上下文已压缩] 工作状态恢复\n## 活跃模块\n- bin (r:23 w:19)';
+  const o = cleanIdentityForProvider(s, 'OpenAI Codex');
+  assert(/SessionStart hook/.test(o));
+  assert(/工作状态恢复/.test(o), 'Chinese restoration context damaged');
+  assert(/活跃模块/.test(o));
+});
+
+test('hooks: tameSkillPrompts preserves hook additionalContext body wrapped in system-reminder', () => {
+  // Hook bodies reach the model wrapped in <system-reminder>...</system-reminder>.
+  // Only UserPromptSubmit hook is stripped (it's a harness-internal signal);
+  // other hook types (PreToolUse/PostToolUse/SessionStart) must survive.
+  const s = '<system-reminder>\nPreToolUse:Bash hook additional context: warn if rm -rf\n</system-reminder>';
+  const o = tameSkillPrompts(s);
+  assert(/rm -rf/.test(o), 'PreToolUse hook guidance stripped (should only strip UserPromptSubmit)');
+});
+
+test('subagent: cleanIdentityForProvider rewrites "You are Claude" in subagent prompts', () => {
+  // Subagents are spawned with system prompts like "You are Claude, Anthropic's
+  // official CLI for Claude." — without identity cleaning, the GPT-driven subagent
+  // would introspect itself as Claude and potentially refuse provider-specific tasks.
+  const s = "You are Claude, Anthropic's official CLI for Claude. Today is 2026-04-22.";
+  const o = cleanIdentityForProvider(s, 'OpenAI Codex');
+  assert(!/You are Claude\b(?!\.)/.test(o), 'subagent still self-identifies as Claude: ' + o);
+  assert(/multi-provider/.test(o), 'provider-agnostic rewrite missing');
+  assert(/2026-04-22/.test(o), 'date context lost');
+});
+
+test('subagent: cleanIdentityForProvider rewrites "interactive agent that helps"', () => {
+  // Agent tool subagent system prompts mention "interactive agent".
+  const s = "You are Claude Code. You are an interactive agent that helps users with software engineering tasks.";
+  const o = cleanIdentityForProvider(s, 'OpenAI Codex');
+  assert(/Silly Code/.test(o));
+  assert(/interactive agent that helps users/.test(o), 'agent role description damaged');
+  assert(!/Claude Code/.test(o));
+});
+
+test('skills: tameSkillPrompts preserves frontmatter description: line verbatim', () => {
+  // Skills are surfaced with frontmatter `name:` / `description:` lines in the
+  // skill catalog. These are the LLM's primary discovery signal and must not be
+  // mangled by taming.
+  const s = [
+    '---',
+    'name: brainstorming',
+    'description: Use when exploring multiple approaches before committing',
+    '---',
+    '## Red Flags',
+    '| X | Y |',
+    '| - | - |',
+    '| a | b |',
+    'body continues',
+  ].join('\n');
+  const o = tameSkillPrompts(s);
+  assert(/name: brainstorming/.test(o), 'skill name frontmatter dropped');
+  assert(/description: Use when/.test(o), 'skill description frontmatter dropped');
+  assert(!/Red Flags/.test(o), 'Red Flags block should still be stripped');
+  assert(/body continues/.test(o), 'skill body dropped');
+});
+
+test('skills: tameSkillPrompts preserves skill catalog entry (name + 1-line description)', () => {
+  const s = '- /brainstorming skill. Description: Use when exploring approaches. Triggers on: "brainstorm", "explore".';
+  const o = tameSkillPrompts(s);
+  assert(/brainstorming skill/.test(o));
+  assert(/Use when exploring approaches/.test(o), 'description stripped along with triggers');
+  assert(!/Triggers on/.test(o), 'triggers tail not stripped');
+});
+
+// ── Responses API thinking-block round-trip ──────────────────
+test('thinking: msgsToResponsesInput drops thinking blocks (no signature leak)', () => {
+  // On session resume, prior-assistant messages may contain Claude-internal
+  // thinking blocks with opaque signature payloads. Resubmitting those to GPT
+  // via Responses API would either be rejected (unknown signature scheme) or
+  // leak internal state. Must be dropped silently.
+  const msgs = [
+    { role: 'assistant', content: [
+      { type: 'thinking', thinking: 'internal step 1', signature: 'sig_opaque_claude_payload' },
+      { type: 'redacted_thinking', data: 'encrypted_blob' },
+      { type: 'text', text: 'Here is my answer.' },
+      { type: 'tool_use', id: 'tu_1', name: 'Read', input: { file_path: '/x' } },
+    ]},
+    { role: 'user', content: [
+      { type: 'tool_result', tool_use_id: 'tu_1', content: 'ok' },
+    ]},
+  ];
+  const out = msgsToResponsesInput(null, msgs);
+  const s = JSON.stringify(out);
+  assert(!/sig_opaque_claude_payload/.test(s), 'thinking signature leaked into Responses API input');
+  assert(!/encrypted_blob/.test(s), 'redacted_thinking leaked');
+  assert(/Here is my answer/.test(s), 'assistant text lost');
+  assert(/function_call/.test(s), 'tool_use → function_call translation broken');
+  assert(/function_call_output/.test(s), 'tool_result → function_call_output translation broken');
+});
+
+test('thinking: msgToOai (Chat Completions path) also drops signature payload', () => {
+  const msg = { role: 'assistant', content: [
+    { type: 'thinking', thinking: 'hidden', signature: 'sig_leak_attempt' },
+    { type: 'text', text: 'visible' },
+  ]};
+  const out = msgToOai(msg);
+  assert(!/sig_leak_attempt/.test(JSON.stringify(out)));
+});
+
+// ── MCP naming / tool_use argument cleanup ──────────────────
+test('MCP: mcp__<server>__<tool> name format survives msgToOai tool_calls translation', () => {
+  const msg = { role: 'assistant', content: [
+    { type: 'tool_use', id: 'tu_m', name: 'mcp__playwright__browser_snapshot', input: { url: 'https://x' } },
+  ]};
+  const out = msgToOai(msg);
+  const m = Array.isArray(out) ? out[0] : out;
+  assert.strictEqual(m.tool_calls[0].function.name, 'mcp__playwright__browser_snapshot',
+    'MCP double-underscore name mangled: ' + m.tool_calls[0].function.name);
+});
+
+test('MCP: mcp__<server>__<tool> name format survives msgsToResponsesInput function_call translation', () => {
+  const msgs = [{ role: 'assistant', content: [
+    { type: 'tool_use', id: 'tu_m', name: 'mcp__pencil__batch_get', input: { patterns: ['x'] } },
+  ]}];
+  const out = msgsToResponsesInput(null, msgs);
+  const fc = out.find(p => p.type === 'function_call');
+  assert(fc, 'no function_call emitted');
+  assert.strictEqual(fc.name, 'mcp__pencil__batch_get', 'MCP name mangled in Responses API path');
+});
+
+test('_cleanToolArgs: strips empty-string optional params that GPT emits', () => {
+  const cleaned = _cleanToolArgs('{"file_path":"/x","pages":"","offset":null,"limit":10}');
+  assert.strictEqual(cleaned.file_path, '/x');
+  assert.strictEqual(cleaned.limit, 10);
+  assert(!('pages' in cleaned), 'empty string pages should be stripped');
+  assert(!('offset' in cleaned), 'null offset should be stripped');
+});
+
+test('_cleanToolArgs: returns null on invalid JSON, {} on empty string (raw || "{}" fallback)', () => {
+  assert.strictEqual(_cleanToolArgs('not json'), null);
+  // Empty string collapses to '{}' via `raw || '{}'`, yielding an empty object.
+  assert.deepStrictEqual(_cleanToolArgs(''), {});
+  assert.deepStrictEqual(_cleanToolArgs(null), {});
+  assert.deepStrictEqual(_cleanToolArgs(undefined), {});
+});
+
+// ── Cross-platform path semantics (agentBudgetLog) ──────────
+test('cross-platform: agentBudgetLog no-op when SILLY_AGENT_CORE unset (privacy default)', async () => {
+  // Privacy default: zero logging unless explicitly opted in.
+  const prev = process.env.SILLY_AGENT_CORE;
+  delete process.env.SILLY_AGENT_CORE;
+  try {
+    await agentBudgetLog({ model: 'test' });  // must not throw, must not write
+  } finally {
+    if (prev !== undefined) process.env.SILLY_AGENT_CORE = prev;
+  }
+});
+
+test('cross-platform: agentBudgetLog uses node:path.join (not hardcoded "/")', () => {
+  // Smoke test: the function body must reference node:path and node:os for
+  // cross-platform home resolution, not hard-coded POSIX separators. We inspect
+  // the stringified function since the function itself is serialized into the
+  // patched binary the same way.
+  const body = agentBudgetLog.toString();
+  assert(/node:path/.test(body), 'must import node:path for cross-platform separator');
+  assert(/node:os/.test(body), 'must import node:os for homedir()');
+  assert(/homedir\(\)/.test(body), 'must call homedir() not hardcoded ~/');
+  // No naked POSIX path concatenation.
+  assert(!/['"]\/\.silly-code['"]/.test(body), 'hardcoded posix path found');
+});
+
+test('cross-platform: msgsToResponsesInput output is pure JSON (safe to serialize on any OS)', () => {
+  const msgs = [{ role: 'user', content: 'hi' }];
+  const out = msgsToResponsesInput('system', msgs);
+  const json = JSON.stringify(out);
+  assert(json.length > 0);
+  // Ensure no functions/symbols/undefined leaked.
+  assert.doesNotThrow(() => JSON.parse(json));
 });
 
 // ── End-to-end: tame → clean → continuation order ────────────

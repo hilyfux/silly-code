@@ -13,6 +13,26 @@ const rootDir = path.resolve(__dirname, '..');
 const command = process.env.SILLY_TARGET_COMMAND;
 const isWindows = process.platform === 'win32';
 
+// Resolve the patched binary, preferring dist layout (versions/<ver>) over
+// dev layout (pipeline/build/cli-patched.js). Returns { path, mode } where
+// mode is 'dist' | 'dev' | 'missing'. Single source of truth — consumed by
+// runOnWindows (launch/login/doctor) so the rest of the code stays unaware
+// of install layout.
+function resolvePatched(root) {
+  try {
+    const versionsDir = path.join(root, 'versions');
+    const entries = fs.readdirSync(versionsDir)
+      .filter(f => !f.startsWith('.'))
+      .sort();
+    if (entries.length) {
+      return { path: path.join(versionsDir, entries[entries.length - 1]), mode: 'dist' };
+    }
+  } catch {}
+  const devPath = path.join(root, 'pipeline', 'build', 'cli-patched.js');
+  if (fs.existsSync(devPath)) return { path: devPath, mode: 'dev' };
+  return { path: devPath, mode: 'missing' };
+}
+
 if (!command) {
   console.error('Missing SILLY_TARGET_COMMAND');
   process.exit(1);
@@ -33,7 +53,12 @@ async function runOnWindows() {
   // Pin the resolved dataDir for every child process (login.mjs, cli-patched.js)
   // so a bare HOME env or cwd change can never re-route tokens.
   process.env.SILLY_CODE_DATA = dataDir;
-  const patched = path.join(rootDir, 'pipeline', 'build', 'cli-patched.js');
+  const resolved = resolvePatched(rootDir);
+  const patched = resolved.path;
+  // Cache the resolution mode on the path object's parent scope via a module
+  // local — used by ensurePatched to decide whether to rebuild (dev) or fail
+  // fast with a reinstall hint (dist).
+  process.env.__SILLY_PATCHED_MODE = resolved.mode;
 
   const providers = {
     sillyx: { env: 'CLAUDE_CODE_USE_OPENAI', label: 'OpenAI Codex', authKey: 'codex' },
@@ -54,8 +79,22 @@ async function runOnWindows() {
 
 function ensurePatched(patched) {
   if (fs.existsSync(patched)) return;
+  const mode = process.env.__SILLY_PATCHED_MODE;
+  if (mode === 'dist') {
+    // dist install lost its binary — reinstall rather than attempt to rebuild
+    // (pipeline/patch.cjs is not shipped in the tarball).
+    console.error('[silly] Patched binary missing from install. Reinstall:');
+    console.error('  irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex');
+    process.exit(1);
+  }
+  const patchScript = path.join(rootDir, 'pipeline', 'patch.cjs');
+  if (!fs.existsSync(patchScript)) {
+    console.error('[silly] Patched binary missing and no pipeline/patch.cjs to rebuild it.');
+    console.error('[silly] Reinstall: irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex');
+    process.exit(1);
+  }
   console.log('[silly] Building patched binary (first run)...');
-  const r = spawnSync(process.execPath, [path.join(rootDir, 'pipeline', 'patch.cjs')], { stdio: 'inherit', cwd: rootDir });
+  const r = spawnSync(process.execPath, [patchScript], { stdio: 'inherit', cwd: rootDir });
   if (r.status !== 0) {
     console.error('[silly] Patch build failed');
     process.exit(r.status ?? 1);
@@ -206,6 +245,15 @@ function cmdLogout(provider, dataDir) {
 }
 
 function cmdUpdate() {
+  // dist install: no git, no patch.cjs. Point user at the installer.
+  if (resolvePatched(rootDir).mode === 'dist') {
+    console.log('[silly] Updating via installer...');
+    const r = spawnSync('powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+       'irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex'],
+      { stdio: 'inherit' });
+    process.exit(r.status ?? 0);
+  }
   const r = spawnSync('git', ['-C', rootDir, 'pull', '--ff-only', 'origin', 'main'], { stdio: ['inherit', 'pipe', 'inherit'] });
   if (r.status !== 0) {
     console.error('[silly] git pull failed. Re-run the installer to recover:');

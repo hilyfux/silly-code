@@ -49,11 +49,7 @@ case "${1:-}" in
         ;;
       claude)
         info "Launching Silly Code — use /login inside the TUI to sign in to claude.ai"
-        PATCHED="$ROOT_DIR/pipeline/build/cli-patched.js"
-        if [ ! -f "$PATCHED" ]; then
-          info "Building patched binary (first run)..."
-          node "$ROOT_DIR/pipeline/patch.cjs" || { err "Patch build failed"; exit 1; }
-        fi
+        ensure_patched_binary "$ROOT_DIR"
         exec node "$PATCHED"
         ;;
       "")
@@ -100,9 +96,15 @@ case "${1:-}" in
     echo -e "  ${B}silly-code doctor${N}"
     echo ""
 
-    # Version / commit
-    VERSION=$(cd "$ROOT_DIR" && git describe --tags --always 2>/dev/null || echo "unknown")
-    COMMIT=$(cd "$ROOT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    # Version / commit — read from git when available (dev), deps.json otherwise (dist)
+    resolve_install_mode "$ROOT_DIR"
+    if [ "$SILLY_INSTALL_MODE" = dist ]; then
+      VERSION="$SILLY_INSTALL_VERSION"
+      COMMIT="dist"
+    else
+      VERSION=$(cd "$ROOT_DIR" && git describe --tags --always 2>/dev/null || echo "unknown")
+      COMMIT=$(cd "$ROOT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    fi
     ok "Version: $VERSION (commit $COMMIT)"
     ok "Platform: $(uname -s) $(uname -m)"
 
@@ -120,8 +122,13 @@ case "${1:-}" in
     fi
     command -v git >/dev/null 2>&1 && ok "Git: $(git --version | head -1)" || warn "Git: not found (optional)"
     command -v rg >/dev/null 2>&1 && ok "ripgrep: $(rg --version | head -1)" || warn "ripgrep: not found (file search will be slow)"
-    PATCHED="$ROOT_DIR/pipeline/build/cli-patched.js"
-    [ -f "$PATCHED" ] && ok "Patched binary: found" || { err "Patched binary: missing (run: node pipeline/patch.cjs)"; MISSING=true; }
+    # Resolve binary via the same contract as launchers (dist versions/<ver> or dev build)
+    if [ "$SILLY_INSTALL_MODE" = dist ]; then
+      PATCHED="$ROOT_DIR/versions/$SILLY_INSTALL_VERSION"
+    else
+      PATCHED="$ROOT_DIR/pipeline/build/cli-patched.js"
+    fi
+    [ -f "$PATCHED" ] && ok "Patched binary: found ($PATCHED)" || { err "Patched binary: missing. Reinstall: curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"; MISSING=true; }
 
     # Provider auth
     echo ""
@@ -221,27 +228,35 @@ case "${1:-}" in
     echo -e "  ${B}silly-code update${N}"
     echo ""
 
-    # Read deps.json for version info
+    UPDATE_MODE="${2:-apply}"
+    resolve_install_mode "$ROOT_DIR"
+
+    # ── dist install: re-run installer ──
+    if [ "$SILLY_INSTALL_MODE" = dist ]; then
+      info "Install mode: dist ($SILLY_INSTALL_VERSION)"
+      if [ "$UPDATE_MODE" != "apply" ]; then
+        info "(probe-only mode; run 'silly update' without args to apply)"
+        exit 0
+      fi
+      info "Fetching latest release via installer..."
+      exec bash -c 'curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash'
+    fi
+
+    # ── dev install: git pull + rebuild ──
     DEPS_JSON="$ROOT_DIR/deps.json"
     if [ ! -f "$DEPS_JSON" ]; then
       err "deps.json not found at $ROOT_DIR"
       exit 1
     fi
 
-    # Default: detect + apply. Pass `check` for probe-only.
-    UPDATE_MODE="${2:-apply}"
-
-    # ── Check dependencies ──
     info "Checking dependencies..."
 
-    # Node
     if command -v node >/dev/null 2>&1; then
       ok "Node: $(node --version)"
     else
       warn "Node: not installed (required)"
     fi
 
-    # ripgrep
     WANT_RG=$(node -e "console.log(require('$DEPS_JSON').deps.ripgrep.version)")
     if command -v rg >/dev/null 2>&1; then
       CUR_RG=$(rg --version | head -1 | awk '{print $2}')
@@ -250,14 +265,12 @@ case "${1:-}" in
       warn "ripgrep: not installed (want >= $WANT_RG)"
     fi
 
-    # Git
     if command -v git >/dev/null 2>&1; then
       ok "Git: $(git --version | awk '{print $3}')"
     else
       warn "Git: not installed"
     fi
 
-    # ── Check self-update (silly-code repo) ──
     echo ""
     info "Checking for silly-code updates..."
     LOCAL_COMMIT=$(cd "$ROOT_DIR" && git rev-parse HEAD 2>/dev/null || echo "unknown")
@@ -278,7 +291,6 @@ case "${1:-}" in
       if [ "$UPDATE_MODE" = "apply" ]; then
         info "Pulling latest..."
         cd "$ROOT_DIR"
-        # Backup current binary before updating
         PATCHED="$ROOT_DIR/pipeline/build/cli-patched.js"
         if [ -f "$PATCHED" ]; then
           cp "$PATCHED" "$PATCHED.bak"
@@ -309,7 +321,6 @@ case "${1:-}" in
       fi
     fi
 
-    # ── npm deps freshness ──
     echo ""
     if [ -f "$ROOT_DIR/bun.lock" ]; then
       ok "Lock file: bun.lock present"
@@ -317,7 +328,6 @@ case "${1:-}" in
       warn "Lock file: missing (run bun install)"
     fi
 
-    # Save check timestamp
     mkdir -p "$DATA_DIR"
     echo "{\"lastChecked\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$DATA_DIR/deps-state.json"
 
@@ -383,12 +393,18 @@ case "${1:-}" in
       " 2>/dev/null || warn "  failed to anonymize $(basename "$f")"
     done
 
-    # Add context: version, git HEAD, OS
+    # Add context: version, git HEAD (if dev), OS
+    resolve_install_mode "$ROOT_DIR"
+    if [ "$SILLY_INSTALL_MODE" = dist ]; then
+      CTX_VERSION="$SILLY_INSTALL_VERSION (dist)"
+    else
+      CTX_VERSION=$(cd "$ROOT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo unknown)
+    fi
     cat > "$STAGE/context.txt" <<CTX
 silly-code report
 =================
 timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-version: $(cd "$ROOT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo unknown)
+version: $CTX_VERSION
 upstream: $(node -p "require('$ROOT_DIR/deps.json').deps.upstream.version" 2>/dev/null || echo unknown)
 node: $(node --version 2>/dev/null || echo unknown)
 os: $(uname -srv)

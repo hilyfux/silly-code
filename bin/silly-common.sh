@@ -117,12 +117,49 @@ CLAUDE_CRED="$HOME/.claude/.credentials.json"
 # shellcheck source=bin/lib-deps.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib-deps.sh"
 
+# Resolve install layout: dist (tarball → versions/<ver>) or dev (repo → pipeline/build/).
+# Exports SILLY_INSTALL_MODE and SILLY_INSTALL_VERSION. Safe to call repeatedly.
+# Same contract as resolvePatched() in silly-launcher.js — keep in sync.
+resolve_install_mode() {
+  local root="${1:-$ROOT_DIR}"
+  SILLY_INSTALL_MODE=dev
+  SILLY_INSTALL_VERSION=""
+  if [ -d "$root/versions" ]; then
+    local latest
+    latest=$(ls -1 "$root/versions" 2>/dev/null | grep -v '^\.' | sort | tail -n1)
+    if [ -n "$latest" ] && [ -f "$root/versions/$latest" ]; then
+      SILLY_INSTALL_MODE=dist
+      SILLY_INSTALL_VERSION="$latest"
+    fi
+  fi
+}
+
 ensure_patched_binary() {
   local root="${1:-$ROOT_DIR}"
+  resolve_install_mode "$root"
+
+  if [ "$SILLY_INSTALL_MODE" = dist ]; then
+    PATCHED="$root/versions/$SILLY_INSTALL_VERSION"
+    if [ ! -f "$PATCHED" ]; then
+      err "Patched binary missing from install ($PATCHED). Reinstall:"
+      err "  curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
+      exit 1
+    fi
+    return 0
+  fi
+
+  # dev mode: install workspace deps + rebuild if missing. In dist mode, the
+  # tarball ships .deps/node_modules/ws — no runtime npm install.
   PATCHED="$root/pipeline/build/cli-patched.js"
   ensure_runtime_deps "$root"
   if [ ! -f "$PATCHED" ]; then
-    info "Building patched binary (first run)..."
-    node "$root/pipeline/patch.cjs" || { err "Patch build failed"; exit 1; }
+    if [ -f "$root/pipeline/patch.cjs" ]; then
+      info "Building patched binary (first run)..."
+      node "$root/pipeline/patch.cjs" || { err "Patch build failed"; exit 1; }
+    else
+      err "Patched binary missing and no pipeline/patch.cjs to rebuild. Reinstall:"
+      err "  curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
+      exit 1
+    fi
   fi
 }

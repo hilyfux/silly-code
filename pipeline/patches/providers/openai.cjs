@@ -377,9 +377,12 @@ async function _openaiAdapter(url, init) {
     // itself rejects with "prompt is too long" (rendered as "Context limit reached").
     if (_b.stream) _req.stream_options = { include_usage: true };
     if (_fastTier) _req.service_tier = 'priority';
-    if (_b.tools && _b.tools.length) {
-      // Clean tool descriptions — same reason as Responses API path above.
-      _req.tools = _b.tools.map(t => ({ type: 'function', function: { name: t.name, description: _clean(t.description || ''), parameters: t.input_schema || { type: 'object', properties: {} } } }));
+    if (_tools.length) {
+      // Use the already-filtered _tools (same as Responses API path) so the
+      // Chat Completions path doesn't leak CC-unusable tools (RemoteTrigger)
+      // into GPT's tool list. Clean tool descriptions for the same reason as
+      // the Responses API path above.
+      _req.tools = _tools.map(t => ({ type: 'function', function: { name: t.name, description: _clean(t.description || ''), parameters: t.input_schema || { type: 'object', properties: {} } } }));
       _req.tool_choice = 'auto';
     }
     const _r = await fetch('https://api.openai.com/v1/chat/completions', {

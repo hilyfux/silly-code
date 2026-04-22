@@ -7,8 +7,17 @@ on:
     branches: [ "main" ]
 
 jobs:
+  # Primary unit-test matrix — catches Windows path/encoding/line-ending
+  # regressions that Linux-only CI misses. macos-latest included so the
+  # bash launcher suite (upgrade-check.test.cjs) gets a non-Linux run too.
+  # Windows skips upgrade-check.test.cjs (requires bash); everything else
+  # is pure Node and must pass on all three.
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -17,8 +26,12 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Run unit tests
+      - name: Run cross-platform unit tests
         run: node tests/base.test.cjs && node tests/schema.test.cjs && node tests/providers.test.cjs && node tests/compat.test.cjs
+
+      - name: Run bash-dependent tests (Unix only)
+        if: runner.os != 'Windows'
+        run: node tests/upgrade-check.test.cjs
 
       - name: Build patched binary
         run: node pipeline/patch.cjs

@@ -117,4 +117,28 @@ No additional code needed beyond the existing INSTALL object + launchers. Will a
 
 ## 8. Change log
 
-- 2026-04-22: Created from three parallel research portraits (Codex CLI Rust / Claude Code upstream primitives / silly-code bridge map). No code changes in this doc.
+- 2026-04-22: Created from three parallel research portraits (Codex CLI Rust / Claude Code upstream primitives / silly-code bridge map).
+- 2026-04-22: **P0 + partial P1/P2 shipped** in commits `d80c4d1` → `5098807`:
+  - `d80c4d1`: compat.test.cjs extended 43→60 assertions; CI wiring; `silly doctor` compat probe.
+  - `702b142`: closed 18 Claude-Code identity leaks in tool descriptions forwarded to GPT.
+  - `6522ed1`: Chat Completions tool filter aligned with Responses API path (RemoteTrigger filter both).
+  - `7fd66bf`: Windows `silly-launcher.js` doctor now probes compat (parity with bash `silly`).
+  - `5098807`: Chat Completions `AbortSignal.any([init.signal, timeout])` forwarding (parity with Responses API).
+
+## 9. Status after 2026-04-22 sweep
+
+**Shipped (P0 + P1 partial):**
+- ✓ All 7 design-doc invariant assertions present in `tests/compat.test.cjs`.
+- ✓ Plus 10 additional assertions (Chinese context preservation, subagent role preservation, skill frontmatter, MCP multi-path naming, cross-platform paths, _cleanToolArgs edge cases, tool-description cleaning).
+- ✓ CI gates on compat + build-integrity every push.
+- ✓ `silly doctor` (bash + js launcher) surfaces compat count to end users.
+- ✓ Privacy leak vectors: 18 tool descriptions + both adapter paths cleaned.
+- ✓ Both adapter paths share identical tool filter + abort signal discipline.
+
+**Outstanding:**
+- P2.6: Windows smoke-test for INSTALL root walk-up (requires Windows machine).
+- P2.7: Linux fresh-install smoke-test for `~/.silly-code/` dir creation.
+- P3.8: Include provider + pathway tag in SILLY_DEBUG_DUMP filename.
+- P3.9: `silly report` parity on Windows launcher (currently bash-only).
+
+Outstanding items are low-severity convenience improvements; core two-track compat is shipped.

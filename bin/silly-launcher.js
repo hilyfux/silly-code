@@ -9,29 +9,45 @@ import { AUTH_FILES, authState } from './silly-auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, '..');
 const command = process.env.SILLY_TARGET_COMMAND;
 const isWindows = process.platform === 'win32';
 
-// Resolve the patched binary, preferring dist layout (versions/<ver>) over
-// dev layout (pipeline/build/cli-patched.js). Returns { path, mode } where
-// mode is 'dist' | 'dev' | 'missing'. Single source of truth — consumed by
-// runOnWindows (launch/login/doctor) so the rest of the code stays unaware
-// of install layout.
-function resolvePatched(root) {
-  try {
-    const versionsDir = path.join(root, 'versions');
-    const entries = fs.readdirSync(versionsDir)
-      .filter(f => !f.startsWith('.'))
-      .sort();
-    if (entries.length) {
-      return { path: path.join(versionsDir, entries[entries.length - 1]), mode: 'dist' };
+// Single source of truth for all install paths. Two layouts exist:
+//   dist (tarball): <root>/versions/<ver>, <root>/bin/.lib/{login.mjs,uninstall.ps1,silly-launcher.js}
+//   dev  (repo):    <root>/pipeline/build/cli-patched.js, <root>/pipeline/login.mjs, <root>/installer/uninstall.ps1
+// Root is taken from SILLY_INSTALL_DIR (set by install.ps1 .cmd wrappers) or
+// discovered by walking up from __dirname until a marker directory appears.
+const INSTALL = (() => {
+  const root = (() => {
+    if (process.env.SILLY_INSTALL_DIR) return process.env.SILLY_INSTALL_DIR;
+    let cur = __dirname;
+    for (let i = 0; i < 5; i++) {
+      if (fs.existsSync(path.join(cur, 'versions')) || fs.existsSync(path.join(cur, 'pipeline'))) return cur;
+      const parent = path.dirname(cur);
+      if (parent === cur) break;
+      cur = parent;
     }
+    return path.resolve(__dirname, '..');
+  })();
+
+  let versions = [];
+  try {
+    versions = fs.readdirSync(path.join(root, 'versions')).filter(f => !f.startsWith('.')).sort();
   } catch {}
-  const devPath = path.join(root, 'pipeline', 'build', 'cli-patched.js');
-  if (fs.existsSync(devPath)) return { path: devPath, mode: 'dev' };
-  return { path: devPath, mode: 'missing' };
-}
+
+  const mode = versions.length ? 'dist' : 'dev';
+  const patched = mode === 'dist'
+    ? path.join(root, 'versions', versions[versions.length - 1])
+    : path.join(root, 'pipeline', 'build', 'cli-patched.js');
+
+  const pick = (dist, dev) => fs.existsSync(dist) ? dist : dev;
+  const login = pick(path.join(__dirname, 'login.mjs'), path.join(root, 'pipeline', 'login.mjs'));
+  const uninstallPs1 = pick(path.join(__dirname, 'uninstall.ps1'), path.join(root, 'installer', 'uninstall.ps1'));
+  const patchScript = path.join(root, 'pipeline', 'patch.cjs');
+
+  return { root, mode, patched, login, uninstallPs1, patchScript };
+})();
+const rootDir = INSTALL.root;
 
 if (!command) {
   console.error('Missing SILLY_TARGET_COMMAND');
@@ -53,12 +69,7 @@ async function runOnWindows() {
   // Pin the resolved dataDir for every child process (login.mjs, cli-patched.js)
   // so a bare HOME env or cwd change can never re-route tokens.
   process.env.SILLY_CODE_DATA = dataDir;
-  const resolved = resolvePatched(rootDir);
-  const patched = resolved.path;
-  // Cache the resolution mode on the path object's parent scope via a module
-  // local — used by ensurePatched to decide whether to rebuild (dev) or fail
-  // fast with a reinstall hint (dist).
-  process.env.__SILLY_PATCHED_MODE = resolved.mode;
+  const patched = INSTALL.patched;
 
   const providers = {
     sillyx: { env: 'CLAUDE_CODE_USE_OPENAI', label: 'OpenAI Codex', authKey: 'codex' },
@@ -79,22 +90,15 @@ async function runOnWindows() {
 
 function ensurePatched(patched) {
   if (fs.existsSync(patched)) return;
-  const mode = process.env.__SILLY_PATCHED_MODE;
-  if (mode === 'dist') {
-    // dist install lost its binary — reinstall rather than attempt to rebuild
-    // (pipeline/patch.cjs is not shipped in the tarball).
-    console.error('[silly] Patched binary missing from install. Reinstall:');
+  if (INSTALL.mode === 'dist' || !fs.existsSync(INSTALL.patchScript)) {
+    // dist install lost its binary, or dev install has no patch.cjs — either
+    // way, pointing at the installer is the only recovery.
+    console.error('[silly] Patched binary missing. Reinstall:');
     console.error('  irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex');
     process.exit(1);
   }
-  const patchScript = path.join(rootDir, 'pipeline', 'patch.cjs');
-  if (!fs.existsSync(patchScript)) {
-    console.error('[silly] Patched binary missing and no pipeline/patch.cjs to rebuild it.');
-    console.error('[silly] Reinstall: irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex');
-    process.exit(1);
-  }
   console.log('[silly] Building patched binary (first run)...');
-  const r = spawnSync(process.execPath, [patchScript], { stdio: 'inherit', cwd: rootDir });
+  const r = spawnSync(process.execPath, [INSTALL.patchScript], { stdio: 'inherit', cwd: rootDir });
   if (r.status !== 0) {
     console.error('[silly] Patch build failed');
     process.exit(r.status ?? 1);
@@ -112,7 +116,7 @@ function launchProvider(name, info, dataDir, patched, userArgs) {
     if (name === 'sillyx') {
       console.log(`\n  ${name} — ${info.label}\n`);
       console.log('[silly] Not logged in. Starting login now...\n');
-      const r = spawnSync(process.execPath, [path.join(rootDir, 'pipeline', 'login.mjs'), 'codex'], { stdio: 'inherit' });
+      const r = spawnSync(process.execPath, [INSTALL.login, 'codex'], { stdio: 'inherit' });
       if (r.status !== 0 || !providerLoggedIn(info.authKey, dataDir)) {
         console.log('\n[silly] Login was cancelled. Run the command again when ready.');
         process.exit(1);
@@ -214,7 +218,7 @@ function cmdDoctor(dataDir, patched) {
 
 function cmdLogin(provider, patched) {
   if (provider === 'codex') {
-    const r = spawnSync(process.execPath, [path.join(rootDir, 'pipeline', 'login.mjs'), 'codex'], { stdio: 'inherit' });
+    const r = spawnSync(process.execPath, [INSTALL.login, 'codex'], { stdio: 'inherit' });
     process.exit(r.status ?? 0);
   }
   if (provider === 'claude') {
@@ -246,7 +250,7 @@ function cmdLogout(provider, dataDir) {
 
 function cmdUpdate() {
   // dist install: no git, no patch.cjs. Point user at the installer.
-  if (resolvePatched(rootDir).mode === 'dist') {
+  if (INSTALL.mode === 'dist') {
     console.log('[silly] Updating via installer...');
     const r = spawnSync('powershell.exe',
       ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
@@ -266,7 +270,7 @@ function cmdUpdate() {
     console.log('[silly] Already up to date — skipping patch rebuild.');
     return;
   }
-  const patchR = spawnSync(process.execPath, [path.join(rootDir, 'pipeline', 'patch.cjs')], { stdio: 'inherit', cwd: rootDir });
+  const patchR = spawnSync(process.execPath, [INSTALL.patchScript], { stdio: 'inherit', cwd: rootDir });
   if (patchR.status !== 0) {
     console.error('[silly] Patch rebuild failed. Re-run the installer or file an issue.');
     process.exit(patchR.status ?? 1);
@@ -275,14 +279,13 @@ function cmdUpdate() {
 }
 
 function cmdUninstall() {
-  const ps1 = path.join(rootDir, 'uninstall.ps1');
-  if (!fs.existsSync(ps1)) {
+  if (!fs.existsSync(INSTALL.uninstallPs1)) {
     console.error('uninstall.ps1 missing. Reinstall first or remove files manually:');
     console.error(`  ${path.join(os.homedir(), '.local', 'share', 'silly-code')}`);
     console.error(`  ${path.join(os.homedir(), '.local', 'bin', 'silly*.{cmd,ps1}')}`);
     process.exit(1);
   }
-  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1], { stdio: 'inherit' });
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', INSTALL.uninstallPs1], { stdio: 'inherit' });
   child.on('exit', code => process.exit(code ?? 0));
   child.on('error', err => { console.error(err.message); process.exit(1); });
 }

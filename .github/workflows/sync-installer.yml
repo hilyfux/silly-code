@@ -1,0 +1,56 @@
+name: sync-installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'installer/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout private source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Checkout public mirror
+        uses: actions/checkout@v4
+        with:
+          repository: hilyfux/silly-code
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          path: public-mirror
+          fetch-depth: 1
+
+      - name: Sync installer/ → public root
+        run: |
+          set -euo pipefail
+          cd public-mirror
+          rm -f install.sh install.ps1 uninstall.sh uninstall.ps1 README.md
+          cd ..
+          cp installer/install.sh      public-mirror/install.sh
+          cp installer/install.ps1     public-mirror/install.ps1
+          cp installer/uninstall.sh    public-mirror/uninstall.sh
+          cp installer/uninstall.ps1   public-mirror/uninstall.ps1
+          cp installer/README.md       public-mirror/README.md
+
+      - name: Commit + push if changed
+        working-directory: public-mirror
+        run: |
+          set -euo pipefail
+          git config user.name "silly-code-bot"
+          git config user.email "silly-code-bot@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "No changes — nothing to sync"
+            exit 0
+          fi
+          SHA=$(cd .. && git rev-parse --short HEAD)
+          git add install.sh install.ps1 uninstall.sh uninstall.ps1 README.md
+          git commit -m "chore: sync installer from silly-code-src@${SHA}"
+          git push origin main

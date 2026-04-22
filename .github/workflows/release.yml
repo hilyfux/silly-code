@@ -40,6 +40,15 @@ jobs:
         with:
           node-version: '20'
 
+      # Prophylactic: future annotated-tag or signed-commit steps will fail with
+      # "empty ident name" without this. See lesson 7293857 (upstream-upgrade.yml
+      # hit this; release.yml uses `gh release create` today but we set identity
+      # now so the next addition of a git op doesn't trip the same wire).
+      - name: Configure git identity
+        run: |
+          git config user.name  "silly-code-bot"
+          git config user.email "silly-code-bot@users.noreply.github.com"
+
       - name: Detect version change
         id: diff
         run: |

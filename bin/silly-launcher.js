@@ -156,6 +156,10 @@ async function handleSilly(args, dataDir, patched) {
       return cmdUninstall();
     case 'update':
       return cmdUpdate();
+    case 'cron':
+      return cmdCron(rest);
+    case 'report':
+      return cmdReport(dataDir, rest);
     default:
       console.error(`Unknown subcommand: ${sub}`);
       console.error("Run 'silly help' for usage.");
@@ -312,6 +316,7 @@ function cmdHelp() {
   console.log('    silly models          List available models');
   console.log('    silly doctor          Check prerequisites');
   console.log('    silly update          Pull latest and rebuild patched binary');
+  console.log('    silly report          Collect anonymized debug dumps for a bug report');
   console.log('    silly uninstall       Remove silly-code completely');
   console.log('    silly help            Show this help');
   console.log('');
@@ -319,4 +324,107 @@ function cmdHelp() {
   console.log('    sillyx                Start with Codex');
   console.log('    sillye                Start with Claude');
   console.log('');
+}
+
+// Windows parity for `silly cron` (Unix provides launchd/cron auto-update).
+// Schedulers here are platform-specific:
+//   - macOS/Linux: launchd / crontab (see bin/silly + install-upgrade-cron.sh)
+//   - Windows:     Task Scheduler (not yet implemented; direct user to manual update)
+// Keeping this as a helpful stub instead of silently exiting means Windows
+// users get a clear explanation + workaround rather than "Unknown subcommand".
+function cmdCron(rest) {
+  const sub = rest[0] || 'status';
+  console.log('');
+  console.log('  silly cron — background updates');
+  console.log('');
+  if (sub === 'install' || sub === 'uninstall' || sub === 'status' || sub === 'run') {
+    console.log('  Automatic background updates on Windows are not yet supported.');
+    console.log('  (macOS/Linux use launchd / crontab; a Task Scheduler port is pending.)');
+    console.log('');
+    console.log('  Workaround: run `silly update` manually, or schedule via Windows');
+    console.log('  Task Scheduler to execute:');
+    console.log(`    node "${path.join(rootDir, 'bin', 'upgrade-check.sh')}"   (Git Bash / WSL)`);
+    console.log('');
+    console.log('  Track progress: https://github.com/hilyfux/silly-code/issues');
+    console.log('');
+    return;
+  }
+  console.error(`  Unknown cron subcommand: ${sub}`);
+  console.error('  Usage: silly cron {install|uninstall|status|run}');
+  process.exit(1);
+}
+
+// Windows parity for `silly report`. Produces an anonymized debug bundle the
+// user can attach to a GitHub issue. Mirrors the bash version in bin/silly but
+// uses cross-platform APIs (os.tmpdir, path.join, fs.*) instead of tar/whoami.
+function cmdReport(dataDir, rest) {
+  const debugDir = path.join(os.tmpdir(), 'silly-debug');
+  const reportsDir = path.join(dataDir, 'reports');
+  let dumps = [];
+  try { dumps = fs.readdirSync(debugDir).filter(f => f.endsWith('.json')); } catch {}
+  if (!dumps.length) {
+    console.log('');
+    console.log('  No debug dumps found in ' + debugDir);
+    console.log('');
+    console.log('  To capture one:');
+    console.log('    set SILLY_DEBUG_DUMP=1 && sillyx      (PowerShell: $env:SILLY_DEBUG_DUMP=1)');
+    console.log('');
+    console.log('  Reproduce the issue, then re-run `silly report`.');
+    console.log('');
+    process.exit(1);
+  }
+  fs.mkdirSync(reportsDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const stage = path.join(reportsDir, stamp);
+  fs.mkdirSync(stage, { recursive: true });
+
+  const user = (os.userInfo().username || '').trim();
+  const home = os.homedir();
+  const redact = (s) => {
+    if (home) s = s.split(home).join('REDACTED_HOME');
+    if (user) s = s.split(user).join('REDACTED_USER');
+    return s
+      .replace(/Bearer\s+[A-Za-z0-9._\-]{10,}/g, 'Bearer REDACTED_TOKEN')
+      .replace(/sk-[A-Za-z0-9_\-]{10,}/g, 'REDACTED_SK')
+      .replace(/eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+/g, 'REDACTED_JWT')
+      .replace(/gho_[A-Za-z0-9]{30,}/g, 'REDACTED_GH_TOKEN')
+      .replace(/ghp_[A-Za-z0-9]{30,}/g, 'REDACTED_GH_PAT');
+  };
+  let kept = 0;
+  for (const f of dumps) {
+    try {
+      const src = fs.readFileSync(path.join(debugDir, f), 'utf8');
+      fs.writeFileSync(path.join(stage, f), redact(src));
+      kept++;
+    } catch {}
+  }
+
+  const upstream = (() => {
+    try { return JSON.parse(fs.readFileSync(path.join(rootDir, 'deps.json'), 'utf8')).deps.upstream.version; }
+    catch { return 'unknown'; }
+  })();
+  fs.writeFileSync(path.join(stage, 'context.txt'),
+    `silly-code report\n` +
+    `=================\n` +
+    `timestamp: ${new Date().toISOString()}\n` +
+    `version:   ${INSTALL.mode}${INSTALL.mode === 'dev' ? '' : ''}\n` +
+    `upstream:  ${upstream}\n` +
+    `node:      ${process.version}\n` +
+    `os:        ${process.platform} ${process.arch} ${os.release()}\n` +
+    `dumps:     ${kept}\n`
+  );
+
+  console.log('');
+  console.log(`  Report staged: ${stage}`);
+  console.log(`    ${kept} anonymized dump(s) + context.txt (no PII)`);
+  console.log('');
+  console.log('  Next steps:');
+  console.log(`    1. Zip the folder:  Compress-Archive "${stage}" "${stage}.zip"`);
+  console.log('    2. Open https://github.com/hilyfux/silly-code/issues/new');
+  console.log('    3. Drag the .zip into the issue comment');
+  console.log('');
+  if ((rest || [])[0] === '--submit') {
+    console.log('  (`--submit` requires gh CLI; not implemented on Windows launcher.)');
+    console.log('');
+  }
 }

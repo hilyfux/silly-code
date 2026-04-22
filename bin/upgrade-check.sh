@@ -81,20 +81,19 @@ resolve_agent_cmd() {
 }
 
 read_upgrade_snapshot() {
+  # Pure bash — no python3 dependency (avoids Windows/minimal-container gap).
+  # Strips CR, collapses leading/trailing whitespace, truncates at 4000 chars.
   local snapshot_file="$ROOT_DIR/.knowledge-graph/work-snapshot.md"
   if [ ! -f "$snapshot_file" ]; then
     return 0
   fi
-  python3 - <<'PY' "$snapshot_file"
-from pathlib import Path
-import sys
-text = Path(sys.argv[1]).read_text().strip()
-if not text:
-    print("")
-else:
-    text = text.replace("\r", "")
-    print(text[:4000])
-PY
+  local text
+  text="$(tr -d '\r' < "$snapshot_file")"
+  # trim leading/trailing whitespace (bash extglob-free)
+  text="${text#"${text%%[![:space:]]*}"}"
+  text="${text%"${text##*[![:space:]]}"}"
+  [ -z "$text" ] && return 0
+  printf '%s\n' "${text:0:4000}"
 }
 
 # ── Task 2: Privacy audit ─────────────────────────────────────────────────────

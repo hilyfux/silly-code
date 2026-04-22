@@ -1,0 +1,28 @@
+# Force LF on shell + Node + config (Windows checkout must not corrupt these)
+*.sh         text eol=lf
+*.bash       text eol=lf
+*.mjs        text eol=lf
+*.cjs        text eol=lf
+*.js         text eol=lf
+*.json       text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+*.md         text eol=lf
+
+# Unix-only launchers have no extension; keep LF
+bin/silly    text eol=lf
+bin/sillyx   text eol=lf
+bin/sillye   text eol=lf
+bin/silly-common.sh text eol=lf
+
+# PowerShell + cmd must be CRLF on Windows checkouts
+*.ps1        text eol=crlf
+*.cmd        text eol=crlf
+*.bat        text eol=crlf
+
+# Binary artifacts — never touch
+*.tar.gz     binary
+*.tgz        binary
+*.zip        binary
+*.png        binary
+*.jpg        binary

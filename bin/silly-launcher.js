@@ -213,6 +213,17 @@ function cmdDoctor(dataDir, patched) {
   renderAuthLines(dataDir);
   console.log('');
   console.log('  Mode: patched binary (upstream + silly-code patches)');
+  // Adapter compat probe — dev installs only (tests/ not in dist)
+  const compatTest = path.join(rootDir, 'tests', 'compat.test.cjs');
+  if (fs.existsSync(compatTest)) {
+    const r = spawnSync(process.execPath, [compatTest], { encoding: 'utf8' });
+    if (r.status === 0) {
+      const m = /(\d+) passed, 0 failed/.exec(r.stdout || '');
+      console.log(`  ✓ Adapter compat: ${m ? m[1] : 'all'} assertions green`);
+    } else {
+      console.log('  ✗ Adapter compat: FAILED — run: node tests/compat.test.cjs');
+    }
+  }
   console.log('');
 }
 

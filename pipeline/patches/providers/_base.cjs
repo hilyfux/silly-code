@@ -265,23 +265,33 @@ function msgsToResponsesInput(system, messages) {
       }
       else if(p.type==='tool_result'){
         _flush();
-        // Extract text + image content from tool results (e.g., screenshots)
+        // Extract text + image content from tool results (e.g., screenshots).
+        // Responses API function_call_output.output is string-only — so we
+        // emit any text inline, then append a follow-up user message carrying
+        // the actual image(s) as input_image multi-part so GPT Pro can see them.
+        // Truncating data URLs (old behavior) loses the image entirely.
         let _c;
+        const _trailingImages=[];
         if(typeof p.content==='string'){_c=p.content;}
         else if(Array.isArray(p.content)){
-          // Responses API function_call_output only supports string output,
-          // but images from tool results (screenshots, charts) are critical.
-          // Serialize images as data URLs inline so GPT Pro can see them.
           const _txts=[];
           for(const c of p.content){
             if(c.type==='text')_txts.push(c.text||'');
-            else if(c.type==='image')_txts.push('[image: data:'+(c.source?.media_type||'image/png')+';base64,'+(c.source?.data||'').slice(0,100)+'...]');
+            else if(c.type==='image'){
+              const _mt=c.source?.media_type||'image/png';
+              const _dt=c.source?.data||'';
+              if(_dt){
+                _txts.push('[image attached — see next user message]');
+                _trailingImages.push({type:'input_image',image_url:'data:'+_mt+';base64,'+_dt});
+              }
+            }
             else _txts.push(c.text||JSON.stringify(c));
           }
           _c=_txts.join('\n');
         }else{_c=String(p.content||'');}
         if(p.is_error)_c='[ERROR] '+_c;
         _parts.push({type:'function_call_output',call_id:p.tool_use_id,output:_c});
+        if(_trailingImages.length){_parts.push({type:'message',role:'user',content:_trailingImages});}
       }
       // Handle MCP/server tool blocks in Responses API path
       else if(p.type==='server_tool_use'||p.type==='mcp_tool_use'){

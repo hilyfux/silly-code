@@ -207,6 +207,20 @@ if ($pathEntries -notcontains $normalizedBinDir) {
 $state = "{`"lastChecked`": `"$([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))`"}"
 Set-Content -Path (Join-Path $dataDir 'deps-state.json') -Value $state -Encoding UTF8
 
+# ── Self-smoke test ───────────────────────────────────────────
+# Immediately invoke one of the just-created .cmd wrappers so any boot-time
+# breakage surfaces at install time, not at first user invocation. A silent
+# install followed by a silent `sillye` hang is the exact failure mode this
+# pass exists to eliminate.
+Info 'Self-smoke test...'
+$smoke = & "$binDir\sillye.cmd" --version 2>&1
+if ($LASTEXITCODE -ne 0) {
+  Warn "Self-smoke failed (exit=$LASTEXITCODE): $smoke"
+  Warn 'Try: $env:SILLY_TRACE_BOOT=1; sillye --version'
+} else {
+  Ok "Self-smoke: $smoke"
+}
+
 Write-Host ''
 Ok 'Installation complete!'
 Write-Host ''

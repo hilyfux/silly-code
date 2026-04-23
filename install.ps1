@@ -142,14 +142,44 @@ if (-not (Test-Path $wsPkg)) {
 }
 
 # ── Create Windows .cmd launchers ─────────────────────────────
-# Each wrapper just spawns `node <install>\bin\<cmd>.js` directly. No env-var
-# threading, no NODE_PATH, no double-spawn — Node's standard module resolution
-# finds ws via pipeline\build\node_modules\ws.
+# Each wrapper spawns `node <install>\bin\<cmd>.js` directly, but first
+# guarantees a visible heartbeat even when node itself cannot start:
+#
+#   * `@echo off` suppresses command echo, so any silent failure below would
+#     leave the user with zero output — that is exactly the Windows silent-
+#     hang class we are eliminating here.
+#   * The `where node` probe short-circuits with an actionable, ALWAYS-on
+#     stderr line (exit /b 127) when Node is not on PATH. No env-flag gate —
+#     that failure mode is FATAL and must always print.
+#   * SILLY_TRACE_BOOT=1 adds timestamped "entry at %time%" heartbeats from
+#     the shim itself, which fire BEFORE any Node instrumentation. Combined
+#     with the 5s pre-launcher watchdog in bin\*.js and the 30s in-launcher
+#     watchdog, users always get a trace chain that points at the exact
+#     frame where boot stopped advancing.
+#   * All shim output redirects to stderr (1>&2) so it never pollutes the
+#     adapter stdout pipe.
+#   * `exit /b %_exit%` propagates Node's exit code so PowerShell/cmd
+#     $LASTEXITCODE remains accurate.
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 foreach ($cmd in @('silly', 'sillyx', 'sillye', 'sillyxs', 'sillyes')) {
   $jsPath = Join-Path $installDir "bin\$cmd.js"
-  $cmdContent = "@echo off`r`nnode `"$jsPath`" %*`r`n"
-  Set-Content -Path (Join-Path $binDir "$cmd.cmd") -Value $cmdContent -Encoding ASCII
+  $cmdContent = @"
+@echo off
+REM silly-boot heartbeat — must always print even if node fails
+if "%SILLY_TRACE_BOOT%"=="1" (
+  echo [silly-boot +0ms shim] $cmd.cmd entry at %time% 1>&2
+  echo [silly-boot +0ms shim] node path: "$jsPath" 1>&2
+)
+where node >nul 2>&1 || (echo [silly][FATAL] 'node' not found in PATH. Install Node.js 20+ from https://nodejs.org 1>&2 & exit /b 127)
+node "$jsPath" %*
+set _exit=%errorlevel%
+if "%SILLY_TRACE_BOOT%"=="1" echo [silly-boot shim] node exited code=%_exit% 1>&2
+exit /b %_exit%
+"@
+  # PowerShell here-strings emit LF line endings; Windows batch tolerates LF
+  # but some tooling and older CMD versions expect CRLF. Normalize to CRLF.
+  $cmdContent = ($cmdContent -replace "`r?`n", "`r`n")
+  Set-Content -Path (Join-Path $binDir "$cmd.cmd") -Value $cmdContent -Encoding ASCII -NoNewline
 }
 # silly-diag is a standalone install diagnostic — if sillye hangs for a user
 # we tell them to run `silly-diag`, which walks the dep chain layer-by-layer

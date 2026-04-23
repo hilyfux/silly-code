@@ -591,17 +591,30 @@ function tameSkillPrompts(text) {
   text = text.replace(
     /<system-reminder>\s*The following deferred tools are now available via ToolSearch\.([\s\S]*?)<\/system-reminder>/g,
     (_evt, body) => {
-      // Extract tool names from the body (one per line after the header)
-      const names = (body.match(/^\s*(\w+)\s*$/gm) || []).map(s => s.trim()).filter(Boolean);
+      // Extract tool names from the body (one per line after the header).
+      // Claude hook/tool ecosystems may render names as bullets, code spans,
+      // or namespaced MCP identifiers, all of which GPT still needs intact.
+      const names = [];
+      const re = /^\s*(?:[-*]\s*)?`?([A-Za-z][\w:-]*)`?\s*$/gm;
+      let m;
+      while ((m = re.exec(body))) names.push(m[1]);
       if (!names.length) return '';
       return '[TOOL LOADING REQUIRED] Load these via ToolSearch before use: ' +
         names.join(', ') + '. ' +
         'Use ToolSearch({query:"select:ToolName"}), then call the tool.';
     }
   );
-  // Strip UserPromptSubmit hook results (PUA activation, frustration hooks) —
-  // these are harness-to-Claude signals with no meaning for GPT Pro.
-  text = text.replace(/<system-reminder>\s*UserPromptSubmit hook[\s\S]*?<\/system-reminder>/g, '');
+  // UserPromptSubmit hooks are mixed: legacy PUA/frustration hooks are harmful
+  // noise for GPT, but modern hook ecosystems use the same channel for skill,
+  // verifier, MCP-tool, and project-specific routing context. Default-preserve
+  // non-toxic context so sillyx doesn't silently break hook-based workflows.
+  text = text.replace(/<system-reminder>\s*UserPromptSubmit hook([\s\S]*?)<\/system-reminder>/g, (_all, body) => {
+    const raw = String(body || '').replace(/^\s*(additional context|hook additional context)\s*:\s*/i, '').trim();
+    if (!raw) return '';
+    if (/\b(PUA|frustration|rage bait|emotional coercion)\b/i.test(raw)) return '';
+    return '[HOOK CONTEXT] UserPromptSubmit: ' + raw +
+      (/\bSkill\b/.test(raw) ? ' If the Skill schema is not loaded, call ToolSearch({query:"select:Skill"}) first.' : '');
+  });
   // Strip the EXTREMELY-IMPORTANT blocks that force skill invocation
   text = text.replace(/<EXTREMELY-IMPORTANT>[\s\S]*?<\/EXTREMELY-IMPORTANT>/g, '');
   text = text.replace(/<EXTREMELY_IMPORTANT>[\s\S]*?<\/EXTREMELY_IMPORTANT>/g, '');

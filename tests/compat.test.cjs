@@ -112,11 +112,43 @@ test('taming: rewrites <system-reminder>ToolSearch deferred tools into usable pl
   assert(/ToolSearch/.test(o), 'must still tell GPT to call ToolSearch');
 });
 
-test('taming: strips UserPromptSubmit hook system-reminder', () => {
+test('taming: strips non-actionable UserPromptSubmit PUA hook system-reminder', () => {
   const s = 'keep\n<system-reminder>\nUserPromptSubmit hook additional context: Activate PUA\n</system-reminder>\nkeep';
   const o = tameSkillPrompts(s);
   assert(!/UserPromptSubmit hook/.test(o));
   assert(o.split('keep').length === 3, 'surrounding text damaged');
+});
+
+test('taming: preserves actionable UserPromptSubmit skill hook guidance', () => {
+  const s = '<system-reminder>\nUserPromptSubmit hook additional context: [kg auto-trigger] Invoke Skill tool (skill: knowledge-graph) before starting.\n</system-reminder>';
+  const o = tameSkillPrompts(s);
+  assert(/HOOK CONTEXT/.test(o), 'hook context marker missing');
+  assert(/knowledge-graph/.test(o), 'skill name dropped');
+  assert(/ToolSearch\(\{query:"select:Skill"\}\)/.test(o), 'Skill schema loading fallback missing');
+});
+
+test('taming: preserves generic UserPromptSubmit hook guidance for verifier workflows', () => {
+  const s = '<system-reminder>\nUserPromptSubmit hook additional context: Run the generated-SDK verifier before editing checked-in protocol fixtures.\n</system-reminder>';
+  const o = tameSkillPrompts(s);
+  assert(/HOOK CONTEXT/.test(o), 'hook context marker missing');
+  assert(/generated-SDK verifier/.test(o), 'generic verifier guidance dropped');
+  assert(/protocol fixtures/.test(o), 'project-specific hook guidance dropped');
+});
+
+test('taming: preserves UserPromptSubmit mcp_tool hook context without requiring Skill keywords', () => {
+  const s = '<system-reminder>\nUserPromptSubmit hook additional context: mcp_tool github/get_issue returned upstream claude-code 2.1.118 subagent cwd regression notes.\n</system-reminder>';
+  const o = tameSkillPrompts(s);
+  assert(/HOOK CONTEXT/.test(o), 'hook context marker missing');
+  assert(/mcp_tool github\/get_issue/.test(o), 'mcp_tool hook context dropped');
+  assert(/subagent cwd regression/.test(o), 'hook result details dropped');
+});
+
+test('taming: deferred ToolSearch parser accepts bullets, code spans, and namespaced tools', () => {
+  const s = '<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail:\n- `mcp__computer_use__click`\n* ScheduleWakeup\nWeb-Fetch:beta\n</system-reminder>';
+  const o = tameSkillPrompts(s);
+  assert(/mcp__computer_use__click/.test(o), 'namespaced tool lost');
+  assert(/ScheduleWakeup/.test(o), 'bulleted tool lost');
+  assert(/Web-Fetch:beta/.test(o), 'hyphen/colon tool lost');
 });
 
 test('taming: strips x-anthropic-billing-header line', () => {
@@ -431,8 +463,9 @@ test('hooks: cleanIdentityForProvider preserves SessionStart hook restoration co
 
 test('hooks: tameSkillPrompts preserves hook additionalContext body wrapped in system-reminder', () => {
   // Hook bodies reach the model wrapped in <system-reminder>...</system-reminder>.
-  // Only UserPromptSubmit hook is stripped (it's a harness-internal signal);
-  // other hook types (PreToolUse/PostToolUse/SessionStart) must survive.
+  // Non-UserPromptSubmit hook types (PreToolUse/PostToolUse/SessionStart)
+  // must survive. UserPromptSubmit is filtered separately because it mixes
+  // obsolete PUA noise with useful skill/verifier/project routing context.
   const s = '<system-reminder>\nPreToolUse:Bash hook additional context: warn if rm -rf\n</system-reminder>';
   const o = tameSkillPrompts(s);
   assert(/rm -rf/.test(o), 'PreToolUse hook guidance stripped (should only strip UserPromptSubmit)');

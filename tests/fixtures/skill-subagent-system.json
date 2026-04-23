@@ -3,7 +3,7 @@
   "system": [
     {
       "type": "text",
-      "text": "You are Claude Code, Anthropic's official CLI for Claude.\nYou are an interactive agent that helps users with software engineering tasks.\n- /using-superpowers skill. Description: Use when starting any conversation. Triggers on: \"start\", \"conversation\".\n- /boost skill. Description: Use when optimizing, improving, or evolving a target over time. Triggers on: \"optimize\", \"improve\", \"升级\".\n<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail:\nMonitor\nScheduleWakeup\nWebFetch\n</system-reminder>"
+      "text": "You are Claude Code, Anthropic's official CLI for Claude.\nYou are an interactive agent that helps users with software engineering tasks.\n- /using-superpowers skill. Description: Use when starting any conversation. Triggers on: \"start\", \"conversation\".\n- /boost skill. Description: Use when optimizing, improving, or evolving a target over time. Triggers on: \"optimize\", \"improve\", \"升级\".\n<system-reminder>\nUserPromptSubmit hook additional context: [kg auto-trigger] Invoke Skill tool (skill: knowledge-graph) before starting.\n</system-reminder>\n<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail:\nMonitor\nScheduleWakeup\nWebFetch\n</system-reminder>"
     }
   ],
   "messages": [

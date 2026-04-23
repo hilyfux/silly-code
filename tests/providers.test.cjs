@@ -264,6 +264,8 @@ function loadFixture(name) {
       assert.ok(!/Triggers on:/.test(call.body.instructions), 'skill trigger tails not stripped');
       assert.ok(/ToolSearch/.test(call.body.instructions), 'ToolSearch guidance lost');
       assert.ok(/ScheduleWakeup/.test(call.body.instructions), 'deferred-tool names lost');
+      assert.ok(/knowledge-graph/.test(call.body.instructions), 'UserPromptSubmit skill hook context lost');
+      assert.ok(/select:Skill/.test(call.body.instructions), 'Skill ToolSearch fallback missing');
       assert.ok(/interactive agent that helps users/.test(call.body.instructions), 'subagent role description damaged');
       assert.ok(!/Claude Code/.test(call.body.instructions), 'Claude identity leaked');
       assert.ok(/<continuation-discipline>/.test(call.body.instructions), 'continuation discipline missing');

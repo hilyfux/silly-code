@@ -145,6 +145,10 @@ ensure_patched_binary() {
       err "  curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
       exit 1
     fi
+    # Runtime deps (ws) live at .deps/node_modules — expose to Node's resolver
+    if [ -d "$root/.deps/node_modules" ]; then
+      export NODE_PATH="$root/.deps/node_modules${NODE_PATH:+:$NODE_PATH}"
+    fi
     return 0
   fi
 

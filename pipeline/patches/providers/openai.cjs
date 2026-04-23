@@ -456,7 +456,7 @@ module.exports = {
     systemPrompt: 'You are Silly Code, a multi-provider AI coding assistant, currently running with OpenAI GPT as the backend model.',
     agentPrompt: 'You are a Silly Code agent, running with OpenAI GPT.',
     simplePrompt: 'You are Silly Code (OpenAI GPT).',
-    sdkPrompt: null,
+    sdkPrompt: 'You are Silly Code, a multi-provider AI coding assistant, running with OpenAI GPT within the Agent SDK.',
     modelDisplayNames: Object.assign(
       Object.fromEntries(ALL_MODELS.map(m => [m.slug, m.display])),
       Object.fromEntries(Object.entries(CODEX_ALIASES).map(([a, s]) => [a, ALL_MODELS.find(m => m.slug === s).display])),

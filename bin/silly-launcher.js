@@ -7,10 +7,27 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { AUTH_FILES, authState } from './silly-auth.js';
 
+// Make silent-failure impossible. Iter 100 cascade taught us that on Windows a
+// spawn-and-vanish (no stderr, just a returned prompt) is the worst possible UX
+// because users cannot self-diagnose. Globally surface every uncaught error to
+// stderr with a clear marker, and emit a one-line trace of every step when
+// SILLY_DEBUG=1 — cheap, opt-in, lets `silly report` capture full launch trail.
+process.on('uncaughtException', (e) => {
+  process.stderr.write(`[silly-launcher] uncaught: ${e && e.stack || e}\n`);
+  process.exit(2);
+});
+process.on('unhandledRejection', (e) => {
+  process.stderr.write(`[silly-launcher] unhandled: ${e && e.stack || e}\n`);
+  process.exit(2);
+});
+const DEBUG = process.env.SILLY_DEBUG === '1' || process.env.SILLY_DEBUG === 'true';
+const dbg = (...a) => { if (DEBUG) process.stderr.write(`[silly-debug] ${a.join(' ')}\n`); };
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const command = process.env.SILLY_TARGET_COMMAND;
 const isWindows = process.platform === 'win32';
+dbg('boot', `cmd=${command} cwd=${process.cwd()} dir=${__dirname} platform=${process.platform} node=${process.version}`);
 
 // Single source of truth for all install paths. Two layouts exist:
 //   dist (tarball): <root>/versions/<ver>, <root>/bin/.lib/{login.mjs,uninstall.ps1,silly-launcher.js}
@@ -53,6 +70,7 @@ const INSTALL = (() => {
   return { root, mode, patched, login, uninstallPs1, patchScript, nodePath };
 })();
 const rootDir = INSTALL.root;
+dbg('install', `root=${INSTALL.root} mode=${INSTALL.mode} patched=${INSTALL.patched} exists=${fs.existsSync(INSTALL.patched)} nodePath=${INSTALL.nodePath || '(none)'}`);
 
 if (!command) {
   console.error('Missing SILLY_TARGET_COMMAND');
@@ -117,11 +135,15 @@ function providerLoggedIn(authKey, dataDir) {
 
 function launchProvider(name, info, dataDir, patched, userArgs) {
   if (info.env) process.env[info.env] = '1';
-  if (!providerLoggedIn(info.authKey, dataDir)) {
+  const loggedIn = providerLoggedIn(info.authKey, dataDir);
+  dbg('provider', `name=${name} env=${info.env || '(none)'} loggedIn=${loggedIn}`);
+  if (!loggedIn) {
     if (name === 'sillyx') {
       console.log(`\n  ${name} — ${info.label}\n`);
       console.log('[silly] Not logged in. Starting login now...\n');
+      dbg('login', `spawn ${process.execPath} ${INSTALL.login} codex`);
       const r = spawnSync(process.execPath, [INSTALL.login, 'codex'], { stdio: 'inherit' });
+      dbg('login', `exit=${r.status}`);
       if (r.status !== 0 || !providerLoggedIn(info.authKey, dataDir)) {
         console.log('\n[silly] Login was cancelled. Run the command again when ready.');
         process.exit(1);
@@ -132,9 +154,10 @@ function launchProvider(name, info, dataDir, patched, userArgs) {
     }
   }
   ensurePatched(patched);
+  dbg('spawn', `${process.execPath} ${patched} ${userArgs.join(' ')}`);
   const child = spawn(process.execPath, [patched, ...userArgs], { stdio: 'inherit', env: spawnEnv() });
-  child.on('exit', code => process.exit(code ?? 0));
-  child.on('error', err => { console.error(err.message); process.exit(1); });
+  child.on('exit', code => { dbg('child', `exit code=${code}`); process.exit(code ?? 0); });
+  child.on('error', err => { console.error(`[silly-launcher] spawn error: ${err.message}`); process.exit(1); });
 }
 
 function spawnEnv() {

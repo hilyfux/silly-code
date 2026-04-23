@@ -94,6 +94,34 @@ const path = require('path');
     `bash CLAUDE_CRED=${bashCred} (rel=${bashCredRel}) vs Node CLAUDE_MACOS_KEYCHAIN rel=${nodeCredRel}`
   );
 
+  // Keychain symmetric login contract — dormant cross-platform regression.
+  // bin/sillye (bash) probes the macOS Keychain via `security find-generic-password`
+  // when no file-based token is present. bin/silly-launcher.js currently runs only
+  // on Windows (see the `if (!isWindows)` guard at silly-launcher.js:80), so
+  // bin/silly-auth.js::authState never needs Keychain knowledge in production today.
+  // If that platform guard is ever removed (so Node launcher serves macOS), the
+  // Node path must grow an equivalent Keychain probe or macOS users with only a
+  // Keychain entry would appear logged-out forever. This test locks the
+  // invariant: if bash checks Keychain AND Node launcher loses its Windows-only
+  // guard, silly-auth.js must reference Keychain detection.
+  {
+    const bashSillye = fs.readFileSync(path.join(root, 'bin', 'sillye'), 'utf8');
+    const bashHasKeychain = /security find-generic-password/.test(bashSillye);
+    const nodeHasKeychain = /find-generic-password|Keychain|keychain/.test(authSrc);
+
+    if (bashHasKeychain && !nodeHasKeychain) {
+      const nodeLauncher = fs.readFileSync(path.join(root, 'bin', 'silly-launcher.js'), 'utf8');
+      const isWindowsGuarded = /if\s*\(\s*!\s*isWindows\s*\)|process\.platform\s*===\s*['"]win32['"]/.test(nodeLauncher);
+      assert.ok(
+        isWindowsGuarded,
+        'Node launcher (bin/silly-launcher.js) claims cross-platform but bin/silly-auth.js lacks Keychain detection that bin/sillye uses. ' +
+        'Either add a Keychain probe to silly-auth.js::authState, or keep the `if (!isWindows)` / win32 platform guard in silly-launcher.js ' +
+        'so non-Windows macOS users continue going through bash sillye (the Keychain-aware path).'
+      );
+    }
+    console.log('  keychain symmetric login contract: PASS');
+  }
+
   console.log('  launcher-parity: PASS');
 })().catch(err => {
   console.error('  launcher-parity: FAIL', err.message);

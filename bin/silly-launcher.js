@@ -224,10 +224,90 @@ function launchProvider(name, info, dataDir, patched, userArgs) {
   ensurePatched(patched);
   dbg('spawn', `${process.execPath} ${patched} ${userArgs.join(' ')}`);
   trace(`launchProvider: spawn cli-patched.js (${patched})`);
-  const child = spawn(process.execPath, [patched, ...userArgs], { stdio: 'inherit', env: spawnEnv() });
-  clearBootWatchdog('cli-patched-spawn');
-  child.on('exit', code => { dbg('child', `exit code=${code}`); trace(`launchProvider: child exit code=${code}`); process.exit(code ?? 0); });
-  child.on('error', err => { console.error(`[silly-launcher] spawn error: ${err.message}`); process.exit(1); });
+
+  // ── Downstream TUI silent-hang safety net (Iter 103) ──
+  //
+  // Problem: on some Windows terminals (ConEmu, nested shells, unusual raw-mode
+  // implementations), the upstream Ink/React TUI can block forever on its first
+  // terminal-size query / raw-mode setup. With `stdio: 'inherit'` the launcher
+  // has zero visibility — child produces no output and never exits, user sees
+  // an unblinking prompt and cannot self-diagnose.
+  //
+  // Fix: pipe child stdout/stderr through the launcher so (a) we forward every
+  // byte to the user's terminal (preserving Ink's output fidelity), and (b) we
+  // can observe the FIRST byte to confirm TUI woke up. That first-output event
+  // both clears the boot watchdog and disarms a separate downstream watchdog
+  // that fires if no output arrives within N seconds. stdin stays 'inherit'
+  // because the TUI must read keyboard directly.
+  //
+  // Env flags (all independent of the boot watchdog):
+  //   SILLY_DOWNSTREAM_WATCHDOG_MS=30000   override timeout (default 10000ms)
+  //   SILLY_NO_DOWNSTREAM_WATCHDOG=1       disable entirely (old/slow machines)
+  //
+  // Exit codes:
+  //   45 = downstream TUI silent-hang fired (stable contract, mirrors 42)
+  //   46 = spawn() itself failed (binary missing / ENOENT / etc.)
+  const sp = spawn(process.execPath, [patched, ...userArgs], {
+    stdio: ['inherit', 'pipe', 'pipe'],
+    env: spawnEnv(),
+  });
+
+  let _firstOutputSeen = false;
+  const _markOutput = (src) => {
+    if (!_firstOutputSeen) {
+      _firstOutputSeen = true;
+      clearBootWatchdog('first-output-' + src);
+      trace(`launchProvider: first downstream output on ${src}`);
+    }
+  };
+  sp.stdout.on('data', (chunk) => { _markOutput('stdout'); process.stdout.write(chunk); });
+  sp.stderr.on('data', (chunk) => { _markOutput('stderr'); process.stderr.write(chunk); });
+
+  const DOWNSTREAM_WATCHDOG_MS = Number(process.env.SILLY_DOWNSTREAM_WATCHDOG_MS) || 10_000;
+  const DOWNSTREAM_WATCHDOG_ENABLED = process.env.SILLY_NO_DOWNSTREAM_WATCHDOG !== '1';
+  let _downstreamDeadline = null;
+  // Flag so the sp.on('exit') handler knows we're tearing down intentionally
+  // and MUST exit 45 rather than whatever exit code the killed child produces.
+  // Without this, SIGTERM wins the race against the kill-then-exit timer and
+  // the process leaks out as exit 0, hiding the silent-hang diagnosis.
+  let _watchdogFired = false;
+  if (DOWNSTREAM_WATCHDOG_ENABLED) {
+    _downstreamDeadline = setTimeout(() => {
+      if (_firstOutputSeen) return;
+      _watchdogFired = true;
+      process.stderr.write(
+        `\n[silly][FATAL] Claude Code TUI did not emit any output within ${DOWNSTREAM_WATCHDOG_MS}ms.\n` +
+        `[silly][FATAL] Likely cause: terminal raw-mode/query incompatibility (ConEmu, nested shells, etc.).\n` +
+        `[silly][FATAL] Workaround: use non-TTY mode — sillye -p "your prompt"\n` +
+        `[silly][FATAL] Or try a different terminal (Windows Terminal, pure PowerShell, cmd.exe).\n` +
+        `[silly][FATAL] Override timeout: SILLY_DOWNSTREAM_WATCHDOG_MS=30000\n` +
+        `[silly][FATAL] Disable entirely: SILLY_NO_DOWNSTREAM_WATCHDOG=1\n`
+      );
+      try { sp.kill('SIGTERM'); } catch {}
+      // SIGKILL escalation + force-exit 45 as a last resort. NOT .unref()'d —
+      // if the child dies instantly from SIGTERM, sp.on('exit') fires first
+      // and calls process.exit(45) via the _watchdogFired branch below. If
+      // the child resists SIGTERM, this 2s timer ensures we don't hang forever.
+      setTimeout(() => {
+        try { sp.kill('SIGKILL'); } catch {}
+        process.exit(45);  // stable "downstream silent hang" contract
+      }, 2000);
+    }, DOWNSTREAM_WATCHDOG_MS);
+    _downstreamDeadline.unref();  // never block clean exit
+  }
+
+  sp.on('exit', code => {
+    if (_downstreamDeadline) clearTimeout(_downstreamDeadline);
+    dbg('child', `exit code=${code}`);
+    trace(`launchProvider: child exit code=${code}`);
+    if (_watchdogFired) process.exit(45);  // watchdog-induced kill, preserve 45
+    process.exit(code ?? 0);
+  });
+  sp.on('error', err => {
+    if (_downstreamDeadline) clearTimeout(_downstreamDeadline);
+    process.stderr.write(`[silly][FATAL] Failed to spawn cli-patched.js: ${err.message}\n`);
+    process.exit(46);  // stable "spawn failure" contract
+  });
 }
 
 function spawnEnv() {

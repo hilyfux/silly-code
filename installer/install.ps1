@@ -1,23 +1,18 @@
 $ErrorActionPreference = 'Stop'
 
-# Force TLS 1.2 (and 1.3 if available). PowerShell 5.x on Windows defaults to
-# TLS 1.0/1.1 which GitHub rejects with "基础连接已经关闭: 发送时发生错误"
-# (the underlying connection was closed: an error occurred on a send). Must
-# run BEFORE any Invoke-WebRequest. Bitwise-OR so we don't downgrade callers
-# that already enabled stronger protocols.
-try {
-  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor `
-    [Net.SecurityProtocolType]::Tls12
-  if ([Enum]::IsDefined([Net.SecurityProtocolType], 'Tls13')) {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor `
-      [Net.SecurityProtocolType]::Tls13
-  }
-} catch {}
+# silly-code installer (open-source, Windows)
+# Usage: irm https://raw.githubusercontent.com/hilyfux/silly-code/main/install.ps1 | iex
+#
+# Source-install model: clones the repo with git, runs the patch pipeline
+# locally, drops .cmd wrappers into ~/.local/bin. No tarball download (avoids
+# the PS5.x TLS class of bugs entirely), no bin/.lib relocation (the launcher
+# reads cli-patched.js in place), no double-spawn (one Node process per cmd).
 
 $installDir = if ($env:SILLY_CODE_HOME) { $env:SILLY_CODE_HOME } else { Join-Path $HOME '.local\share\silly-code' }
 $binDir     = Join-Path $HOME '.local\bin'
 $dataDir    = if ($env:SILLY_CODE_DATA) { $env:SILLY_CODE_DATA } else { Join-Path $HOME '.silly-code' }
-$downloadUrl = 'https://github.com/hilyfux/silly-code/releases/latest/download/silly-code.tar.gz'
+$repoUrl    = if ($env:SILLY_CODE_REPO) { $env:SILLY_CODE_REPO } else { 'https://github.com/hilyfux/silly-code.git' }
+$branch     = if ($env:SILLY_CODE_BRANCH) { $env:SILLY_CODE_BRANCH } else { 'main' }
 
 function Info($msg) { Write-Host "[silly] $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "[silly] $msg" -ForegroundColor Green }
@@ -25,20 +20,24 @@ function Warn($msg) { Write-Host "[silly] $msg" -ForegroundColor Yellow }
 function Fail($msg) { throw "[silly] $msg" }
 
 Write-Host ''
-Write-Host '  silly-code installer' -ForegroundColor Cyan
+Write-Host '  silly-code installer (open-source)' -ForegroundColor Cyan
 Write-Host ''
 
-# ── Prerequisites ───────────────────────────────────────────────────────────
+# ── Prerequisites ──────────────────────────────────────────────
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+  Fail "git is required. Install Git for Windows: https://git-scm.com/download/win"
+}
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-  Fail 'Node.js >= 20 is required. Install it first: https://nodejs.org'
+  Fail "Node.js >= 20 is required. Install: https://nodejs.org"
 }
 $nodeMajor = [int](node -p "process.versions.node.split('.')[0]")
 if ($nodeMajor -lt 20) {
   Fail "Node.js >= 20 required (found $(node --version))."
 }
-Ok "Node: $(node --version)"
+Ok "git:  $((git --version) -replace '^git version ','')"
+Ok "node: $(node --version)"
 
-# ── ripgrep ─────────────────────────────────────────────────────────────────
+# ── ripgrep (optional but recommended) ─────────────────────────
 $rgBin = $null
 if (Get-Command rg -ErrorAction SilentlyContinue) {
   $rgBin = (Get-Command rg).Source
@@ -51,12 +50,20 @@ if (Get-Command rg -ErrorAction SilentlyContinue) {
   $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }
   $rgAsset = "ripgrep-$rgVersion-$arch-pc-windows-msvc"
   $rgUrl = "https://github.com/BurntSushi/ripgrep/releases/download/$rgVersion/$rgAsset.zip"
-  Info "Installing ripgrep $rgVersion..."
+  Info "Installing ripgrep $rgVersion to $binDir..."
   $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid())
   New-Item -ItemType Directory -Force -Path $tmp | Out-Null
   try {
     $zipPath = Join-Path $tmp 'rg.zip'
-    Invoke-WebRequest -Uri $rgUrl -OutFile $zipPath -UseBasicParsing
+    # git is already required above, so we can use git's bundled curl as a
+    # cross-host download path (avoids PS5 TLS bugs). Falls back to .NET if
+    # curl is not on PATH (Windows 10 1803+ ships it; some minimal setups don't).
+    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+      & curl.exe -fsSL -o $zipPath $rgUrl
+    } else {
+      [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+      Invoke-WebRequest -Uri $rgUrl -OutFile $zipPath -UseBasicParsing
+    }
     Expand-Archive -Path $zipPath -DestinationPath $tmp -Force
     $rgExe = Get-ChildItem -Path $tmp -Recurse -Filter 'rg.exe' | Select-Object -First 1
     if ($rgExe) {
@@ -74,101 +81,85 @@ if (Get-Command rg -ErrorAction SilentlyContinue) {
   }
 }
 
-# ── Download tarball ─────────────────────────────────────────────────────────
-# Two-strategy download: Invoke-WebRequest first (works on most setups);
-# curl.exe fallback (ships in Windows 10 1803+, handles TLS / proxy / redirect
-# cases that .NET WebRequest still mangles in 2026). If both fail, we surface
-# the original PowerShell error AND tell the user how to download manually.
-Info 'Downloading silly-code...'
-$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid())
-New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+# ── Clone or update repo ───────────────────────────────────────
+if (Test-Path (Join-Path $installDir '.git')) {
+  Info "Updating existing checkout in $installDir..."
+  & git -C $installDir fetch --quiet origin $branch
+  & git -C $installDir reset --hard --quiet "origin/$branch"
+} elseif (Test-Path $installDir) {
+  $isSillyInstall = (Test-Path (Join-Path $installDir 'versions')) -or
+                    (Test-Path (Join-Path $installDir 'pipeline\build\cli-patched.js')) -or
+                    (Test-Path (Join-Path $installDir 'bin\silly')) -or
+                    ((Get-ChildItem $installDir -Force -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0)
+  if ($isSillyInstall) {
+    Warn "Replacing previous install at $installDir (was: dist tarball or empty)"
+    Remove-Item -Recurse -Force $installDir
+    New-Item -ItemType Directory -Force -Path (Split-Path $installDir -Parent) | Out-Null
+    & git clone --quiet --branch $branch --depth 1 $repoUrl $installDir
+  } else {
+    Fail "$installDir exists and is not a silly-code install. Remove it manually or set SILLY_CODE_HOME."
+  }
+} else {
+  Info "Cloning $repoUrl -> $installDir..."
+  New-Item -ItemType Directory -Force -Path (Split-Path $installDir -Parent) | Out-Null
+  & git clone --quiet --branch $branch --depth 1 $repoUrl $installDir
+}
+$headSha = (& git -C $installDir rev-parse --short HEAD).Trim()
+Ok "Repo: $installDir ($headSha)"
+
+# ── Build patched binary ───────────────────────────────────────
+# patch.cjs is pure text transformation — needs no runtime deps.
+Info 'Applying patches (node pipeline\patch.cjs)...'
+Push-Location $installDir
 try {
-  $tgz = Join-Path $tmp 'silly-code.tar.gz'
-  $iwrErr = $null
-  try {
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $tgz -UseBasicParsing
-  } catch {
-    $iwrErr = $_.Exception.Message
-    Warn "Invoke-WebRequest failed ($iwrErr). Trying curl.exe fallback..."
-    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-      $curlOut = & curl.exe -fsSL --retry 3 --retry-delay 2 -o $tgz $downloadUrl 2>&1
-      if ($LASTEXITCODE -ne 0) {
-        Fail "Download failed via both Invoke-WebRequest and curl.exe.`n  IWR error : $iwrErr`n  curl error: $curlOut`n  Manual: download $downloadUrl in a browser, then re-run with `$env:SILLY_CODE_TARBALL=<path>`."
-      }
-      Ok 'Downloaded via curl.exe fallback'
-    } else {
-      Fail "Download failed: $iwrErr.`n  curl.exe not present (Windows 10 1803+ ships it). Manual: download $downloadUrl in a browser."
-    }
-  }
-
-  # ── Extract ───────────────────────────────────────────────────────────────
-  # Extract into $tmp first (no path issues), then Copy-Item to final location.
-  Info 'Extracting...'
-  tar -xzf $tgz -C $tmp
-  $extracted = Join-Path $tmp 'silly-code'
-  if (-not (Test-Path $extracted)) {
-    Fail 'Extraction failed — silly-code folder not found in archive.'
-  }
-
-  # Remove old install if it looks safe to replace
-  if (Test-Path $installDir) {
-    $isSillyInstall = (Test-Path (Join-Path $installDir 'versions')) -or
-                      (Test-Path (Join-Path $installDir 'deps.json')) -or
-                      (Test-Path (Join-Path $installDir 'bin\silly')) -or
-                      ((Get-ChildItem $installDir -Force | Measure-Object).Count -eq 0)
-    if ($isSillyInstall) {
-      Remove-Item -Recurse -Force $installDir
-    } else {
-      Fail "$installDir exists and is not a silly-code install. Remove it manually or set SILLY_CODE_HOME."
-    }
-  }
-
-  [System.IO.Directory]::CreateDirectory($installDir) | Out-Null
-  Copy-Item -Path "$extracted\*" -Destination $installDir -Recurse -Force
-  Ok "Installed: $installDir"
+  & node pipeline/patch.cjs | Out-Null
+  if ($LASTEXITCODE -ne 0) { Fail "Patch pipeline failed with exit $LASTEXITCODE" }
 } finally {
-  Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+  Pop-Location
+}
+Ok "Patched binary: $installDir\pipeline\build\cli-patched.js"
+
+# ── Runtime dep (ws) ──────────────────────────────────────────
+# Install ws into pipeline\build\node_modules\ — the only dir Node will resolve
+# from when running cli-patched.js, isolated from the repo's dev package.json.
+$wsPkg = Join-Path $installDir 'pipeline\build\node_modules\ws\package.json'
+if (-not (Test-Path $wsPkg)) {
+  Info 'Installing runtime dep (ws)...'
+  $runtimeDeps = Join-Path $installDir 'pipeline\build'
+  New-Item -ItemType Directory -Force -Path $runtimeDeps | Out-Null
+  Set-Content -Path (Join-Path $runtimeDeps 'package.json') -Value '{"name":"silly-code-runtime","private":true}' -Encoding ASCII
+  Push-Location $runtimeDeps
+  try {
+    & npm install ws@^8 --no-save --no-audit --no-fund --ignore-scripts --silent
+    if ($LASTEXITCODE -ne 0) { Warn "ws install failed (exit $LASTEXITCODE) — sillyx/sillye may crash on adapter paths." }
+  } finally {
+    Pop-Location
+  }
+  Remove-Item -Force (Join-Path $runtimeDeps 'package.json') -ErrorAction SilentlyContinue
+  Remove-Item -Force (Join-Path $runtimeDeps 'package-lock.json') -ErrorAction SilentlyContinue
 }
 
-# ── Vendor ripgrep into install ──────────────────────────────────────────────
+# ── Vendor ripgrep so adapter can find it ────────────────────
 if ($rgBin -and (Test-Path $rgBin)) {
   $nodeArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
   $rgVendorDir = [System.IO.Path]::Combine($installDir, 'pipeline', 'build', 'vendor', 'ripgrep', "$nodeArch-win32")
-  [System.IO.Directory]::CreateDirectory($rgVendorDir) | Out-Null
+  New-Item -ItemType Directory -Force -Path $rgVendorDir | Out-Null
   Copy-Item $rgBin (Join-Path $rgVendorDir 'rg.exe') -Force
 }
 
-# ── Create Windows launchers ─────────────────────────────────────────────────
+# ── Create Windows .cmd launchers ─────────────────────────────
+# Each wrapper just spawns `node <install>\bin\<cmd>.js` directly. No env-var
+# threading, no NODE_PATH, no double-spawn — Node's standard module resolution
+# finds ws via pipeline\build\node_modules\ws.
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-
-# silly (management CLI) — delegates to bin/.lib/silly.js
-$sillyCmdContent = "@echo off`r`nset `"SILLY_INSTALL_DIR=$installDir`"`r`nset `"NODE_PATH=%SILLY_INSTALL_DIR%\.deps\node_modules`"`r`nset `"CALLER_DIR=%CD%`"`r`nnode `"%SILLY_INSTALL_DIR%\bin\.lib\silly.js`" %*`r`n"
-Set-Content -Path (Join-Path $binDir 'silly.cmd') -Value $sillyCmdContent -Encoding ASCII
-
-# Provider launchers
-$providers = @{
-  'sillyx'  = 'CLAUDE_CODE_USE_OPENAI=1'
-  'sillye'  = ''
-  'sillyxs' = 'CLAUDE_CODE_USE_OPENAI=1'
-  'sillyes' = ''
-}
-$skipPerms = @('sillyxs', 'sillyes')
-
-foreach ($cmd in $providers.Keys) {
-  $jsFile = "$cmd.js"
-  # sillyxs/sillyes delegate to sillyx/sillye with --dangerously-skip-permissions
-  if ($skipPerms -contains $cmd) {
-    $provider = $cmd.Substring(0, $cmd.Length - 1)
-    $jsFile = "$provider.js"
-  }
-  $extraArg = if ($skipPerms -contains $cmd) { ' --dangerously-skip-permissions' } else { '' }
-  $cmdContent = "@echo off`r`nset `"SILLY_INSTALL_DIR=$installDir`"`r`nset `"NODE_PATH=%SILLY_INSTALL_DIR%\.deps\node_modules`"`r`nset `"CALLER_DIR=%CD%`"`r`nnode `"%SILLY_INSTALL_DIR%\bin\.lib\$jsFile`"$extraArg %*`r`n"
+foreach ($cmd in @('silly', 'sillyx', 'sillye', 'sillyxs', 'sillyes')) {
+  $jsPath = Join-Path $installDir "bin\$cmd.js"
+  $cmdContent = "@echo off`r`nnode `"$jsPath`" %*`r`n"
   Set-Content -Path (Join-Path $binDir "$cmd.cmd") -Value $cmdContent -Encoding ASCII
 }
+Ok "Commands: $binDir\{silly,sillyx,sillye,sillyxs,sillyes}.cmd"
 
-Ok "Commands: $binDir\silly.cmd, sillyx.cmd, sillye.cmd, sillyxs.cmd, sillyes.cmd"
-
-# ── PATH ─────────────────────────────────────────────────────────────────────
+# ── PATH ──────────────────────────────────────────────────────
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $normalizedBinDir = ($binDir -replace '/', '\').TrimEnd('\')
 $pathEntries = if ($userPath) { ($userPath -split ';') | ForEach-Object { ($_ -replace '/', '\').TrimEnd('\') } } else { @() }
@@ -180,7 +171,7 @@ if ($pathEntries -notcontains $normalizedBinDir) {
   Warn 'Open a NEW PowerShell or cmd window for the PATH change to take effect.'
 }
 
-# ── State ────────────────────────────────────────────────────────────────────
+# ── State ─────────────────────────────────────────────────────
 [System.IO.Directory]::CreateDirectory($dataDir) | Out-Null
 $state = "{`"lastChecked`": `"$([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))`"}"
 Set-Content -Path (Join-Path $dataDir 'deps-state.json') -Value $state -Encoding UTF8
@@ -196,7 +187,7 @@ Write-Host '  Login:'
 Write-Host '    silly login codex'
 Write-Host '    silly login claude'
 Write-Host ''
-Write-Host '  Update:    silly update'
+Write-Host '  Update:    silly update      # git pull + rebuild patches'
 Write-Host '  Uninstall: silly uninstall'
 Write-Host ''
 Write-Host "Installed: $installDir"

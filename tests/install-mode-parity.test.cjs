@@ -70,23 +70,52 @@ const path = require('path');
       /Layout ambiguous/.test(launcherJs) &&
       /hasVersions.*hasPipeline/s.test(launcherJs)],
 
-    // Dist runtime deps (ws) live at $root/.deps/node_modules — not on
-    // Node's default resolver path. All three launcher surfaces (bash
-    // launchers, Windows .cmd wrappers, silly-launcher.js spawn) must
-    // wire NODE_PATH to that directory in dist mode. See memory:
-    // project-dist-layout-gotchas.md for the regression history.
-    ['silly-common.sh exports NODE_PATH to .deps/node_modules in dist mode', () =>
-      /NODE_PATH="\$root\/\.deps\/node_modules/.test(commonSh)],
+    // Runtime deps (ws) — open-source install model places ws at
+    // pipeline/build/node_modules/ws so Node's default module resolution
+    // walks straight from cli-patched.js's directory and finds it. No
+    // NODE_PATH gymnastics. Legacy dist installs still honor NODE_PATH
+    // via silly-common.sh + silly-launcher.js (back-compat for users who
+    // still have a tarball install on disk); install.{sh,ps1} no longer
+    // create that layout but the runtime can still consume it.
 
-    ['install.ps1 sets NODE_PATH=%SILLY_INSTALL_DIR%\\.deps\\node_modules in every .cmd wrapper', () => {
-      const ps1 = fs.readFileSync(path.join(root, 'installer', 'install.ps1'), 'utf8');
-      return /NODE_PATH=%SILLY_INSTALL_DIR%\\\.deps\\node_modules/.test(ps1);
+    // install.{sh,ps1} both install ws into pipeline/build/node_modules
+    // so the standard Node resolver walks straight to it.
+    ['install.sh installs ws under pipeline/build/node_modules', () => {
+      const sh = fs.readFileSync(path.join(root, 'installer', 'install.sh'), 'utf8');
+      return /pipeline\/build\/node_modules\/ws/.test(sh) &&
+        /npm install ws/.test(sh);
     }],
 
-    ['silly-launcher.js threads NODE_PATH through spawn() env in dist mode', () =>
+    ['install.ps1 installs ws under pipeline\\build\\node_modules', () => {
+      const ps1 = fs.readFileSync(path.join(root, 'installer', 'install.ps1'), 'utf8');
+      return /pipeline\\build\\node_modules\\ws/.test(ps1) &&
+        /npm install ws/.test(ps1);
+    }],
+
+    // Legacy dist-mode back-compat: silly-common.sh and silly-launcher.js
+    // both still handle .deps/node_modules in case a user retains a prior
+    // tarball install. New installs from install.{sh,ps1} do not create it.
+    ['silly-common.sh still exports NODE_PATH to .deps/node_modules for legacy dist installs', () =>
+      /NODE_PATH="\$root\/\.deps\/node_modules/.test(commonSh)],
+
+    ['silly-launcher.js still threads NODE_PATH through spawn() for legacy dist installs', () =>
       /INSTALL\.nodePath/.test(launcherJs) &&
       /\.deps['"].*['"]node_modules['"]/.test(launcherJs) &&
       /env:\s*spawnEnv\(\)/.test(launcherJs)],
+
+    // Open-source install: install.{sh,ps1} clone the public repo via git,
+    // not curl-tarball. Lock that contract so a regression to the dist
+    // architecture (which caused the Iter 100 Windows crash cascade)
+    // fails the build.
+    ['install.sh uses `git clone` instead of curl-fetching a tarball', () => {
+      const sh = fs.readFileSync(path.join(root, 'installer', 'install.sh'), 'utf8');
+      return /git clone/.test(sh) && !/silly-code\.tar\.gz/.test(sh);
+    }],
+
+    ['install.ps1 uses `git clone` instead of curl-fetching a tarball', () => {
+      const ps1 = fs.readFileSync(path.join(root, 'installer', 'install.ps1'), 'utf8');
+      return /git clone/.test(ps1) && !/silly-code\.tar\.gz/.test(ps1);
+    }],
   ];
 
   for (const [desc, fn] of checks) {

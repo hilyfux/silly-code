@@ -2,17 +2,21 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-// Guard the provider-env-flag dispatch chain across FOUR surfaces:
+// Guard the provider-env-flag dispatch chain across THREE surfaces:
 //
 //   bin/sillyx (bash)             export CLAUDE_CODE_USE_OPENAI=1
 //   bin/silly-launcher.js (Node)  providers.sillyx.env
-//   installer/install.ps1 (Win)   $providers hashtable
 //   pipeline/patches/providers/openai.cjs (adapter)  envKey
 //
 // If any one of these drifts, the launcher exports a no-op env var and the
 // user falls through to Claude silently. This is exactly the kind of silent
 // degradation we ban — no hidden fallbacks. The adapter config is the single
-// source of truth; the three dispatch surfaces must match it.
+// source of truth; the dispatch surfaces must match it.
+//
+// Note: in the open-source install model, installer/install.ps1 no longer
+// dispatches env vars — the .cmd wrappers just `node bin\<cmd>.js` and the
+// JS launcher (silly-launcher.js) sets the env via its providers table.
+// Source-install removes the install-time dispatch hashtable surface entirely.
 
 const root = path.join(__dirname, '..');
 
@@ -74,26 +78,6 @@ function launcherEnv(cmd) {
 }
 assert.strictEqual(launcherEnv('sillyx'), expected.sillyx, 'silly-launcher sillyx.env drifted');
 assert.strictEqual(launcherEnv('sillye'), expected.sillye, 'silly-launcher sillye.env drifted');
-
-// ── Surface 3: installer/install.ps1 (Windows installer) ──
-const installPs1 = fs.readFileSync(path.join(root, 'installer', 'install.ps1'), 'utf8');
-const psBlock = installPs1.match(/\$providers\s*=\s*@\{([\s\S]*?)\n\}/);
-assert.ok(psBlock, 'install.ps1: $providers hashtable missing');
-function psEnv(cmd) {
-  const re = new RegExp(`'${cmd}'\\s*=\\s*'([^']*)'`);
-  const m = psBlock[1].match(re);
-  assert.ok(m, `install.ps1 $providers.${cmd} not found`);
-  if (m[1] === '') return null;
-  const km = m[1].match(/^(CLAUDE_CODE_USE_[A-Z_]+)=1$/);
-  assert.ok(km, `install.ps1 $providers.${cmd} = '${m[1]}' is not shaped like 'CLAUDE_CODE_USE_X=1' or ''`);
-  return km[1];
-}
-for (const cmd of Object.keys(expected)) {
-  assert.strictEqual(
-    psEnv(cmd), expected[cmd],
-    `install.ps1 $providers.${cmd} drifted from expected ${expected[cmd]}`
-  );
-}
 
 // ── Adapter ↔ dispatch cross-check: every non-null dispatch value must be
 // a declared adapter envKey. This catches the reverse direction — someone

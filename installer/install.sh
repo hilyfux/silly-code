@@ -1,6 +1,10 @@
 #!/bin/bash
-# silly-code installer
+# silly-code installer (open-source)
 # Usage: curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash
+#
+# Source-install model: clones the repo, runs the patch pipeline locally,
+# wires symlinks into ~/.local/bin. No dist tarball, no relocated .lib, no
+# double-spawn — the launcher reads the patched binary in place.
 set -euo pipefail
 
 G='\033[0;32m' Y='\033[0;33m' C='\033[0;36m' R='\033[0;31m' B='\033[1m' N='\033[0m'
@@ -11,30 +15,29 @@ err()   { echo -e "${R}[silly]${N} $*" >&2; exit 1; }
 
 INSTALL_DIR="${SILLY_CODE_HOME:-$HOME/.local/share/silly-code}"
 BIN_DIR="$HOME/.local/bin"
-DIST_REPO="hilyfux/silly-code"
-DOWNLOAD_URL="https://github.com/${DIST_REPO}/releases/latest/download/silly-code.tar.gz"
+REPO_URL="${SILLY_CODE_REPO:-https://github.com/hilyfux/silly-code.git}"
+BRANCH="${SILLY_CODE_BRANCH:-main}"
 
 echo ""
 echo -e "  ${C}     ╭──────╮${N}"
 echo -e "  ${C}     │${G} ◕  ◕ ${C}│${N}"
 echo -e "  ${C}     │${G}  ▽   ${C}│${N}"
 echo -e "  ${C}     ╰─┬──┬─╯${N}"
-echo -e "  ${C}       │  │${N}    ${B}silly-code${N} installer"
+echo -e "  ${C}       │  │${N}    ${B}silly-code${N} installer (open-source)"
 echo -e "  ${C}      ╱    ╲${N}"
 echo ""
 
 # ── Prerequisites ────────────────────────────────────────────
-command -v node >/dev/null 2>&1 || err "Node.js >= 20 is required. Install it first."
+command -v git  >/dev/null 2>&1 || err "git is required. Install via your package manager."
+command -v node >/dev/null 2>&1 || err "Node.js >= 20 is required. Install via https://nodejs.org or your package manager."
 NODE_MAJOR=$(node -e "process.stdout.write(process.versions.node.split('.')[0])")
 [ "$NODE_MAJOR" -ge 20 ] || err "Node.js >= 20 required (found $(node --version))."
-ok "Node: $(node --version)"
+ok "git:  $(git --version | awk '{print $3}')"
+ok "node: $(node --version)"
 
-# ── ripgrep ───────────────────────────────────────────────────
-_rg_version_from_deps() {
-  [ -f "$INSTALL_DIR/deps.json" ] && node -p "require('$INSTALL_DIR/deps.json').deps.ripgrep.version" 2>/dev/null || true
-}
+# ── ripgrep (optional but recommended) ─────────────────────────
 if ! command -v rg >/dev/null 2>&1; then
-  RG_VERSION=$(_rg_version_from_deps); RG_VERSION="${RG_VERSION:-14.1.1}"
+  RG_VERSION="14.1.1"
   info "Installing ripgrep ${RG_VERSION} to $BIN_DIR..."
   case "$(uname -s)-$(uname -m)" in
     Darwin-arm64)  RG_ARCH="aarch64-apple-darwin" ;;
@@ -51,7 +54,7 @@ if ! command -v rg >/dev/null 2>&1; then
       rm -rf "/tmp/ripgrep-${RG_VERSION}-${RG_ARCH}"
       ok "ripgrep ${RG_VERSION} installed"
     else
-      warn "Failed to download ripgrep. Install manually: https://github.com/BurntSushi/ripgrep#installation"
+      warn "Failed to download ripgrep. File search will be slow until installed manually."
     fi
   else
     warn "Unknown platform $(uname -s)-$(uname -m). Install ripgrep manually."
@@ -60,38 +63,56 @@ else
   ok "ripgrep: $(rg --version | head -1)"
 fi
 
-# ── Download dist tarball ─────────────────────────────────────
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-
-info "Downloading silly-code..."
-curl -fsSL "$DOWNLOAD_URL" -o "$TMP/silly-code.tar.gz" \
-  || err "Download failed. Visit https://github.com/${DIST_REPO}/releases"
-
-# ── Extract ───────────────────────────────────────────────────
-if [ -d "$INSTALL_DIR" ]; then
+# ── Clone or update repo ─────────────────────────────────────
+if [ -d "$INSTALL_DIR/.git" ]; then
+  info "Updating existing checkout in $INSTALL_DIR..."
+  git -C "$INSTALL_DIR" fetch --quiet origin "$BRANCH"
+  git -C "$INSTALL_DIR" reset --hard --quiet "origin/$BRANCH"
+elif [ -d "$INSTALL_DIR" ]; then
+  # Pre-existing non-git directory (e.g. old dist install) — only nuke if it
+  # smells like a silly-code install. Otherwise refuse so we don't trash a
+  # user-owned folder that happened to share the path.
   if [ -d "$INSTALL_DIR/versions" ] || \
      [ -f "$INSTALL_DIR/pipeline/build/cli-patched.js" ] || \
      [ -f "$INSTALL_DIR/bin/silly" ] || \
-     [ -d "$INSTALL_DIR/.git" ] || \
      [ -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+    warn "Replacing previous install at $INSTALL_DIR (was: dist tarball or empty)"
     rm -rf "$INSTALL_DIR"
+    mkdir -p "$(dirname "$INSTALL_DIR")"
+    git clone --quiet --branch "$BRANCH" --depth 1 "$REPO_URL" "$INSTALL_DIR"
   else
     err "$INSTALL_DIR exists and is not a silly-code install. Remove it manually or set SILLY_CODE_HOME."
   fi
+else
+  info "Cloning $REPO_URL → $INSTALL_DIR..."
+  mkdir -p "$(dirname "$INSTALL_DIR")"
+  git clone --quiet --branch "$BRANCH" --depth 1 "$REPO_URL" "$INSTALL_DIR"
 fi
-mkdir -p "$INSTALL_DIR"
-tar -xzf "$TMP/silly-code.tar.gz" -C "$INSTALL_DIR" --strip-components=1
-ok "Installed: $INSTALL_DIR"
+ok "Repo: $INSTALL_DIR ($(git -C "$INSTALL_DIR" rev-parse --short HEAD))"
 
-# ── Runtime deps ──────────────────────────────────────────────────────────────
-# Dist and dev installs share the same helper; it installs runtime deps only when needed.
-if [ -f "$INSTALL_DIR/bin/.lib/lib-deps.sh" ]; then
-  source "$INSTALL_DIR/bin/.lib/lib-deps.sh"
-  ensure_runtime_deps "$INSTALL_DIR" || warn "npm install failed — sillyx/sillye may not work"
+# ── Build patched binary ─────────────────────────────────────
+# patch.cjs needs no runtime deps — pure text transformation. Run it first
+# so a failure stops install before we touch node_modules.
+info "Applying patches (node pipeline/patch.cjs)..."
+( cd "$INSTALL_DIR" && node pipeline/patch.cjs >/dev/null )
+ok "Patched binary: $INSTALL_DIR/pipeline/build/cli-patched.js"
+
+# ── Runtime deps (just `ws` — bun-bundled cli.js requires it externally) ─
+# Install ws into pipeline/build/node_modules/ — the only dir Node will resolve
+# from when running cli-patched.js, and isolated from the repo's dev package.json
+# (which has 80+ deps we don't want for a user install). Mirrors the dist
+# vendorWs() pattern: temp package.json → npm install ws → strip metadata.
+if [ ! -f "$INSTALL_DIR/pipeline/build/node_modules/ws/package.json" ]; then
+  info "Installing runtime dep (ws)..."
+  RUNTIME_DEPS="$INSTALL_DIR/pipeline/build"
+  mkdir -p "$RUNTIME_DEPS"
+  echo '{"name":"silly-code-runtime","private":true}' > "$RUNTIME_DEPS/package.json"
+  ( cd "$RUNTIME_DEPS" && npm install ws@^8 --no-save --no-audit --no-fund --ignore-scripts --silent ) \
+    || warn "ws install failed — sillyx/sillye may crash on adapter paths."
+  rm -f "$RUNTIME_DEPS/package.json" "$RUNTIME_DEPS/package-lock.json"
 fi
 
-# ── Vendor ripgrep symlink ─────────────────────────────────────
+# ── Vendor ripgrep so adapter can find it ────────────────────
 RG_BIN=$(command -v rg 2>/dev/null || echo "$BIN_DIR/rg")
 if [ -x "$RG_BIN" ]; then
   _arch=$(uname -m | sed 's/x86_64/x64/; s/aarch64/arm64/')
@@ -101,10 +122,10 @@ if [ -x "$RG_BIN" ]; then
   ln -sf "$RG_BIN" "$RG_VENDOR_DIR/rg"
 fi
 
-# ── Install commands ───────────────────────────────────────────
+# ── Install commands ─────────────────────────────────────────
 mkdir -p "$BIN_DIR"
 for cmd in silly sillyx sillye sillyxs sillyes; do
-  cat > "$BIN_DIR/$cmd" << WRAPPER
+  cat > "$BIN_DIR/$cmd" <<WRAPPER
 #!/bin/bash
 exec "$INSTALL_DIR/bin/$cmd" "\$@"
 WRAPPER
@@ -201,7 +222,7 @@ echo -e "    ${G}sillyx${N}                # OpenAI Codex (GPT)"
 echo -e "    ${G}sillye${N}                # Claude (Anthropic)"
 echo -e "    ${G}sillyxs/es${N}            # same providers, --dangerously-skip-permissions"
 echo ""
-echo -e "  ${B}Update:${N}    silly update"
+echo -e "  ${B}Update:${N}    silly update      # git pull + rebuild patches"
 echo -e "  ${B}Reinstall:${N} curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
 echo -e "  ${B}Uninstall:${N} silly uninstall"
 echo ""

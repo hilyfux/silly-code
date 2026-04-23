@@ -623,6 +623,7 @@ console.log('Build integrity tests\n');
     'tests/agent-core.test.cjs',
     'tests/build-invariants.test.cjs',
     'tests/boot-watchdog.test.cjs',
+    'tests/downstream-watchdog.test.cjs',
   ];
 
   // Any test in PURE_NODE_TESTS that's deliberately NOT run on Windows must
@@ -646,6 +647,7 @@ console.log('Build integrity tests\n');
     ['tests/agent-core.test.cjs',         'pre-expansion CI baseline — pure Node, wire when CI grows'],
     ['tests/build-invariants.test.cjs',   'pre-expansion CI baseline — pure Node, wire when CI grows'],
     ['tests/boot-watchdog.test.cjs',      'pre-expansion CI baseline — pure Node, wire when CI grows (P0 Windows silent-hang guard)'],
+    ['tests/downstream-watchdog.test.cjs','pre-expansion CI baseline — pure Node, wire when CI grows (P0 Windows TUI silent-hang guard)'],
   ]);
 
   // Split ci.yml into lines + walk to find every `node tests/<file>.test.cjs`

@@ -37,3 +37,30 @@ Two env-flag controls in `silly-launcher.js` + every entry shim in `bin/*.js`:
 Both controls have **zero runtime cost** when their env flag is unset (`if (FLAG)` guards).
 `tests/boot-watchdog.test.cjs` locks the contract (watchdog default-on, unref'd, exit 42,
 every entry shim traces pre-import, live smoke tests).
+
+### Downstream TUI silent-hang safety net (Iter 103)
+The boot watchdog only protects the launcher-side startup path — once we hand off to
+`spawn(cli-patched.js)`, control transfers to the upstream Ink/React TUI, which on some
+Windows terminals (ConEmu, nested shells, unusual raw-mode paths) can block forever on
+its first terminal-size query. `launchProvider` in `silly-launcher.js` now extends the
+safety net across that handoff:
+
+- Child is spawned with `stdio: ['inherit', 'pipe', 'pipe']` — stdin stays `inherit`
+  (TUI reads keyboard directly), stdout/stderr are piped so the launcher can observe
+  the first-output event and forward every byte to the user's terminal.
+- First output on stdout OR stderr clears the boot watchdog (reason `first-output-<src>`)
+  AND disarms the downstream watchdog. Until then, the child is on borrowed time.
+- **`SILLY_DOWNSTREAM_WATCHDOG_MS=30000`** — override the default (10000ms). 10s is
+  enough for any healthy cold-start TUI (1-3s observed) but short enough that a real
+  hang is caught fast.
+- **`SILLY_NO_DOWNSTREAM_WATCHDOG=1`** — disable entirely (old/slow machines, CI probes).
+- **Exit code 45** — downstream TUI silent hang (stable contract, mirrors 42 for shell
+  wrappers / Task Scheduler retry logic). Message names the likely cause (terminal
+  raw-mode incompat) and three workarounds (non-TTY `-p` mode, different terminal,
+  env override).
+- **Exit code 46** — spawn() itself failed (ENOENT etc.). Distinct from 45 so shell
+  wrappers can route "binary missing" separately from "TUI stuck".
+
+`tests/downstream-watchdog.test.cjs` locks the contract (env-flag names, exit codes
+45/46, stdio shape, first-output clear+forward, unref'd timer, live smoke tests
+verifying silent-child → exit 45 / eager-child → exit 0 / non-zero exit propagation).

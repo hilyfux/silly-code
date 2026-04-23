@@ -199,10 +199,33 @@ Set-Content -Path (Join-Path $dataDir 'deps-state.json') -Value $state -Encoding
 # install followed by a silent `sillye` hang is the exact failure mode this
 # pass exists to eliminate.
 Info 'Self-smoke test...'
-$smoke = & "$binDir\sillye.cmd" --version 2>&1
-if ($LASTEXITCODE -ne 0) {
-  Warn "Self-smoke failed (exit=$LASTEXITCODE): $smoke"
-  Warn 'Try: $env:SILLY_TRACE_BOOT=1; sillye --version'
+# Defensive wrapper: if the user has SILLY_TRACE_BOOT=1 set in this session,
+# the .cmd shim writes heartbeat lines to stderr. PowerShell's `& cmd 2>&1`
+# surfaces those as RemoteException/NativeCommandError, and if the caller
+# set $ErrorActionPreference = 'Stop' (common in CI pipelines) the whole
+# installer aborts at this line. We therefore:
+#   1. Temporarily clear SILLY_TRACE_BOOT so the shim stays silent
+#   2. Save + restore so we don't mutate the user's env for later sillye runs
+#   3. Redirect stderr to $null (stdout-only parse — --version writes stdout)
+#   4. try/catch/finally with ErrorActionPreference='Continue' to defang
+#      any residual NativeCommandError
+$savedTrace = $env:SILLY_TRACE_BOOT
+$env:SILLY_TRACE_BOOT = ''
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  $smoke = & "$binDir\sillye.cmd" --version 2>$null
+  $smokeCode = $LASTEXITCODE
+} catch {
+  $smoke = "Exception: $($_.Exception.Message)"
+  $smokeCode = 1
+} finally {
+  $ErrorActionPreference = $prevEAP
+  if ($savedTrace) { $env:SILLY_TRACE_BOOT = $savedTrace } else { Remove-Item Env:\SILLY_TRACE_BOOT -ErrorAction SilentlyContinue }
+}
+if ($smokeCode -ne 0 -or [string]::IsNullOrWhiteSpace($smoke)) {
+  Warn "Self-smoke failed (exit=$smokeCode output='$smoke')"
+  Warn 'Try: $env:SILLY_TRACE_BOOT=1; sillye --version  (in a fresh shell)'
 } else {
   Ok "Self-smoke: $smoke"
 }

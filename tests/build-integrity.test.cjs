@@ -97,6 +97,28 @@ console.log('Build integrity tests\n');
   console.log('  No unreplaced sentinels in build: PASS');
 })();
 
+// ── Cross-platform: no baked Linux build-runner URLs survive into output ──
+// Upstream bun-bundles import.meta.url as literal `file:///home/runner/...`
+// strings that, on Windows, crash node:url's getPathFromURLWin32 at module
+// load (ERR_INVALID_FILE_URL_PATH — see memory project-dist-layout-gotchas).
+// pipeline/patches/cross-platform.cjs rewrites every such call to __filename
+// (or `require` for createRequire). This test catches:
+//   (a) upstream introducing a NEW baked URL we haven't patched yet, AND
+//   (b) cross-platform patch silently skipping due to upstream regex drift.
+(function testNoBakedLinuxRunnerUrls() {
+  if (!build) {
+    console.log('  Baked runner URL sweep (build not found, skipping): SKIP');
+    return;
+  }
+  const baked = build.match(/file:\/\/\/home\/runner\/[^"]+/g) || [];
+  assert.strictEqual(
+    baked.length, 0,
+    `Baked Linux runner URLs survived patching (Windows will crash):\n  ${baked.join('\n  ')}\n` +
+    `Add the URL substring to BAKED_URLS in pipeline/patches/cross-platform.cjs`
+  );
+  console.log('  No baked file:///home/runner/ URLs in build: PASS');
+})();
+
 // ── 3. Sentinel injection: verify injected data matches config ──
 
 (function testInjectedDataMatchesConfig() {

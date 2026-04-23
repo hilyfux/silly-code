@@ -112,6 +112,7 @@ const modules = [
   require('./patches/equality.cjs'),
   require('./patches/privacy.cjs'),
   require('./patches/auth-bypass.cjs'),
+  require('./patches/cross-platform.cjs'),
 ]
 
 for (const mod of modules) {

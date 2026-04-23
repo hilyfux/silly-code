@@ -233,7 +233,12 @@ async function loginCodex() {
     savedAt: new Date().toISOString(),
     method: apiToken ? 'api-key-exchange' : 'oauth-access-token',
   }
-  fs.writeFileSync(tokenFile, JSON.stringify(saved, null, 2), { mode: 0o600 })
+  // Atomic write — tmp + rename on the same volume is atomic on POSIX and
+  // Windows (after Node >=14). Prevents a Ctrl+C mid-write from leaving a
+  // truncated/empty token file that forces the user to re-login.
+  const _tmpFile = tokenFile + '.tmp'
+  fs.writeFileSync(_tmpFile, JSON.stringify(saved, null, 2), { mode: 0o600 })
+  fs.renameSync(_tmpFile, tokenFile)
 
   log(C.green, `  ✓ Token 已保存到 ${tokenFile}`)
   log(C.green, `  ✓ 方式: ${saved.method}`)

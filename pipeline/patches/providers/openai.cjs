@@ -81,7 +81,7 @@ const ALL_MODELS = [...CODEX_MODELS, ...OAI_LEGACY_MODELS];
 // Returns { headers, kind } where kind is 'oauth' or 'apikey'
 // _openaiData is declared by the serialization engine as: let _openaiData = null;
 async function _openaiAuth() {
-  const { readFileSync, writeFileSync } = await import('node:fs');
+  const { readFileSync, writeFileSync, renameSync } = await import('node:fs');
   const { join } = await import('node:path');
   const { homedir } = await import('node:os');
   const _dir = process.env.SILLY_CODE_DATA || join(homedir(), '.silly-code');
@@ -133,7 +133,15 @@ async function _openaiAuth() {
               _openaiData.access_token = _d.access_token || _openaiData.access_token;
               if (_d.refresh_token) _openaiData.refresh_token = _d.refresh_token;
               _openaiData.savedAt = new Date().toISOString();
-              try { writeFileSync(join(_dir, 'codex-auth.json'), JSON.stringify(_openaiData, null, 2)); } catch {}
+              // Atomic token persist — tmp + rename on the same volume so a
+              // Ctrl+C mid-write cannot truncate codex-auth.json. Without this
+              // an interrupted refresh would force re-login next launch.
+              try {
+                const _authFile = join(_dir, 'codex-auth.json');
+                const _tmpAuth = _authFile + '.tmp';
+                writeFileSync(_tmpAuth, JSON.stringify(_openaiData, null, 2));
+                renameSync(_tmpAuth, _authFile);
+              } catch {}
             }
           } catch (e) { console.error('[silly] OpenAI token refresh failed:', e.message || e); }
           finally { _openaiData._refreshP = null; }

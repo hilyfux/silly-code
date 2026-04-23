@@ -107,21 +107,6 @@ if (Test-Path (Join-Path $installDir '.git')) {
 $headSha = (& git -C $installDir rev-parse --short HEAD).Trim()
 Ok "Repo: $installDir ($headSha)"
 
-# ── Vendor ripgrep so patch.cjs + adapter can find it ────────
-# patch.cjs now fails fast when vendor/ripgrep is missing, so we must stage
-# ripgrep into pipeline\build\vendor\ripgrep\<arch>-win32\ BEFORE invoking
-# the patch pipeline. This also makes `silly update` (which re-runs
-# patch.cjs) idempotent: the pre-existing vendor dir is preserved.
-if ($rgBin -and (Test-Path $rgBin)) {
-  $nodeArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
-  $rgVendorDir = [System.IO.Path]::Combine($installDir, 'pipeline', 'build', 'vendor', 'ripgrep', "$nodeArch-win32")
-  New-Item -ItemType Directory -Force -Path $rgVendorDir | Out-Null
-  Copy-Item $rgBin (Join-Path $rgVendorDir 'rg.exe') -Force
-  Ok "ripgrep vendored: $rgVendorDir\rg.exe"
-} else {
-  Warn 'ripgrep not available — patch.cjs will fail fast. Set $env:SILLY_VENDOR_OPTIONAL=1 to skip (Glob/Grep will ENOENT at runtime).'
-}
-
 # ── Build patched binary ───────────────────────────────────────
 # patch.cjs is pure text transformation + deploys vendored ws into
 # pipeline\build\node_modules\ws. Zero downloads at this step. The clone is
@@ -139,6 +124,14 @@ Ok "Patched binary: $installDir\pipeline\build\cli-patched.js"
 $wsPkg = Join-Path $installDir 'pipeline\build\node_modules\ws\package.json'
 if (-not (Test-Path $wsPkg)) {
   Fail "Vendored ws missing after patch.cjs — repo corrupt. Reinstall via the install URL."
+}
+
+# ── Vendor ripgrep so adapter can find it ────────────────────
+if ($rgBin -and (Test-Path $rgBin)) {
+  $nodeArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
+  $rgVendorDir = [System.IO.Path]::Combine($installDir, 'pipeline', 'build', 'vendor', 'ripgrep', "$nodeArch-win32")
+  New-Item -ItemType Directory -Force -Path $rgVendorDir | Out-Null
+  Copy-Item $rgBin (Join-Path $rgVendorDir 'rg.exe') -Force
 }
 
 # ── Create Windows .cmd launchers ─────────────────────────────
@@ -181,14 +174,7 @@ exit /b %_exit%
   $cmdContent = ($cmdContent -replace "`r?`n", "`r`n")
   Set-Content -Path (Join-Path $binDir "$cmd.cmd") -Value $cmdContent -Encoding ASCII -NoNewline
 }
-# silly-diag is a standalone install diagnostic — if sillye hangs for a user
-# we tell them to run `silly-diag`, which walks the dep chain layer-by-layer
-# without importing silly-launcher.js (the prime suspect for silent hangs).
-# Ship its .cmd wrapper alongside the main 5 so it's always on PATH.
-$diagJs = Join-Path $installDir 'bin\silly-diag.js'
-$diagCmd = "@echo off`r`nnode `"$diagJs`" %*`r`n"
-Set-Content -Path (Join-Path $binDir 'silly-diag.cmd') -Value $diagCmd -Encoding ASCII
-Ok "Commands: $binDir\{silly,sillyx,sillye,sillyxs,sillyes,silly-diag}.cmd"
+Ok "Commands: $binDir\{silly,sillyx,sillye,sillyxs,sillyes}.cmd"
 
 # ── PATH ──────────────────────────────────────────────────────
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -227,11 +213,6 @@ Write-Host ''
 Write-Host '  Launch:'
 Write-Host '    sillyx    # OpenAI Codex (GPT)'
 Write-Host '    sillye    # Claude (Anthropic)'
-Write-Host ''
-Write-Host '  Tip: if `silly login codex` prints garbled Chinese characters,'
-Write-Host '       run `chcp 65001` in your console once, or set SILLY_ASCII=1'
-Write-Host '       to use ASCII-only output (Windows Terminal / VS Code terminal'
-Write-Host '       render UTF-8 correctly and do not need either).'
 Write-Host ''
 Write-Host '  Login:'
 Write-Host '    silly login codex'

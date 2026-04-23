@@ -301,6 +301,21 @@ function launchProvider(name, info, dataDir, patched, userArgs) {
     dbg('child', `exit code=${code}`);
     trace(`launchProvider: child exit code=${code}`);
     if (_watchdogFired) process.exit(45);  // watchdog-induced kill, preserve 45
+    // Zero-output-exit guard: child exited fast (<10s watchdog) but emitted
+    // nothing to stdout/stderr. Most likely causes: auth token expired, API
+    // call rejected silently, upstream cli.js init-time fast-exit. Don't let
+    // this class of silent-success-exit go unnoticed.
+    if (!_firstOutputSeen && process.env.SILLY_NO_ZERO_OUTPUT_GUARD !== '1') {
+      process.stderr.write(
+        '[silly][FATAL] Child exited (code=' + code + ') without emitting any output.\n' +
+        '[silly][FATAL] Likely causes: (1) auth token expired — run: silly login claude  (or silly login codex)\n' +
+        '[silly][FATAL]                (2) upstream init-time fast-exit (Windows + cli.js bug)\n' +
+        '[silly][FATAL]                (3) SSL/network unreachable without emitting error\n' +
+        '[silly][FATAL] Diagnose: SILLY_TRACE_BOOT=1 + silly-diag  OR  set SILLY_DEBUG_DUMP=1; sillye -p "hi"\n' +
+        '[silly][FATAL] Disable guard: SILLY_NO_ZERO_OUTPUT_GUARD=1\n'
+      );
+      process.exit(47);  // stable contract: zero-output fast exit
+    }
     process.exit(code ?? 0);
   });
   sp.on('error', err => {

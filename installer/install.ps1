@@ -186,7 +186,11 @@ exit /b %_exit%
   $cmdContent = ($cmdContent -replace "`r?`n", "`r`n")
   Set-Content -Path (Join-Path $binDir "$cmd.cmd") -Value $cmdContent -Encoding ASCII -NoNewline
 }
-Ok "Commands: $binDir\{silly,sillyx,sillye,sillyxs,sillyes}.cmd"
+# silly-diag shim — standalone Windows install diagnostic (no launcher, no watchdog)
+$diagJs = Join-Path $installDir 'bin\silly-diag.js'
+$diagContent = "@echo off`r`nnode `"$diagJs`" %*`r`n"
+Set-Content -Path (Join-Path $binDir 'silly-diag.cmd') -Value $diagContent -Encoding ASCII -NoNewline
+Ok "Commands: $binDir\{silly,sillyx,sillye,sillyxs,sillyes,silly-diag}.cmd"
 
 # ── PATH ──────────────────────────────────────────────────────
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')

@@ -105,6 +105,45 @@ function detectPlatform() {
   return `${p}-${c}`;
 }
 
+function findNativeBinary(packageDir) {
+  for (const name of ['claude', 'claude.exe']) {
+    const candidate = path.join(packageDir, name);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function writeExtractedBundle(binaryPath, outDir, { version, platform = detectPlatform(), source = 'bun-extract' } = {}) {
+  if (!fs.existsSync(binaryPath)) {
+    throw new Error(`bun-extract: local native binary not found at ${binaryPath}`);
+  }
+  const { js, size } = extractCliJs(binaryPath);
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(path.join(outDir, 'cli.js'), wrapForNode(js));
+  // Synthesize a minimal package.json matching the legacy wrapper schema.
+  const pkg = {
+    name: '@anthropic-ai/claude-code',
+    version,
+    bin: { claude: 'cli.js' },
+    type: 'module',
+    engines: { node: '>=18.0.0' },
+    files: ['cli.js'],
+    'silly-code:source': source,
+    'silly-code:platform': platform,
+    'silly-code:extractedBytes': size,
+  };
+  fs.writeFileSync(path.join(outDir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
+  return { cliJsBytes: size, platform, outDir, binaryPath };
+}
+
+function stageFromLocalBunBinary(binaryPath, outDir, { version, platform = detectPlatform() } = {}) {
+  return writeExtractedBundle(binaryPath, outDir, {
+    version,
+    platform,
+    source: 'local-bun-extract',
+  });
+}
+
 function fetchAndStageFromBunBinary(version, outDir, { platform = detectPlatform(), keepTmp = false } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'silly-bun-extract-'));
   const platPkg = `@anthropic-ai/claude-code-${platform}`;
@@ -114,25 +153,9 @@ function fetchAndStageFromBunBinary(version, outDir, { platform = detectPlatform
     });
     const tgz = `anthropic-ai-claude-code-${platform}-${version}.tgz`;
     execSync(`tar -xzf "${tgz}"`, { cwd: tmp, stdio: 'pipe' });
-    const binPath = path.join(tmp, 'package', 'claude');
-    if (!fs.existsSync(binPath)) throw new Error(`bun-extract: native binary not found at ${binPath}`);
-    const { js, size } = extractCliJs(binPath);
-    fs.mkdirSync(outDir, { recursive: true });
-    fs.writeFileSync(path.join(outDir, 'cli.js'), wrapForNode(js));
-    // Synthesize a minimal package.json matching the legacy wrapper schema.
-    const pkg = {
-      name: '@anthropic-ai/claude-code',
-      version,
-      bin: { claude: 'cli.js' },
-      type: 'module',
-      engines: { node: '>=18.0.0' },
-      files: ['cli.js'],
-      'silly-code:source': 'bun-extract',
-      'silly-code:platform': platform,
-      'silly-code:extractedBytes': size,
-    };
-    fs.writeFileSync(path.join(outDir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
-    return { cliJsBytes: size, platform, outDir };
+    const binPath = findNativeBinary(path.join(tmp, 'package'));
+    if (!binPath) throw new Error(`bun-extract: native binary not found under ${path.join(tmp, 'package')}`);
+    return writeExtractedBundle(binPath, outDir, { version, platform, source: 'bun-extract' });
   } finally {
     if (!keepTmp) {
       try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* ignore */ }
@@ -140,7 +163,15 @@ function fetchAndStageFromBunBinary(version, outDir, { platform = detectPlatform
   }
 }
 
-module.exports = { extractCliJs, wrapForNode, locateBunBundle, detectPlatform, fetchAndStageFromBunBinary };
+module.exports = {
+  extractCliJs,
+  wrapForNode,
+  locateBunBundle,
+  detectPlatform,
+  findNativeBinary,
+  stageFromLocalBunBinary,
+  fetchAndStageFromBunBinary,
+};
 
 if (require.main === module) {
   const [, , version, outDir] = process.argv;
@@ -149,7 +180,10 @@ if (require.main === module) {
     process.exit(2);
   }
   try {
-    const r = fetchAndStageFromBunBinary(version, outDir);
+    const localBinary = process.env.SILLY_BUN_EXTRACT_BINARY;
+    const r = localBinary
+      ? stageFromLocalBunBinary(localBinary, outDir, { version })
+      : fetchAndStageFromBunBinary(version, outDir);
     process.stdout.write(JSON.stringify(r) + '\n');
   } catch (e) {
     process.stderr.write(`bun-extract failed: ${e.message}\n`);

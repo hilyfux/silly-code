@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync, spawnSync } = require('child_process');
 const { scan } = require('./upgrade.cjs');
-const { fetchAndStageFromBunBinary, extractCliJs, wrapForNode } = require('./bun-extract.cjs');
+const { fetchAndStageFromBunBinary, stageFromLocalBunBinary } = require('./bun-extract.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE = __dirname;
@@ -30,6 +30,7 @@ const TEST_MODE = process.env.SILLY_CI_UPGRADE_TEST_MODE === '1';
 // can thread per-stage dry-run through applyVarRenames / applyRenamesAcrossPatches
 // (see memory/project-ci-upgrade-dry-run-gap.md leverage #2 plan).
 const DRY_RUN = process.env.SILLY_CI_UPGRADE_DRY_RUN === '1';
+const LOCAL_NATIVE_BINARY = process.env.SILLY_CI_UPGRADE_LOCAL_BINARY || '';
 
 function envJson(name, fallback = null) {
   const raw = process.env[name];
@@ -392,6 +393,13 @@ function stageUpstream(packageDir, version) {
   log(`  bun-extract staged cli.js (${r.cliJsBytes.toLocaleString()} bytes) for ${r.platform}`);
 }
 
+function stageUpstreamFromLocalBinary(version) {
+  if (shouldSkipRealUpgradeWork()) return;
+  const stagedDir = path.join(UPSTREAM_DIR, 'package');
+  const r = stageFromLocalBunBinary(LOCAL_NATIVE_BINARY, stagedDir, { version });
+  log(`  local bun-extract staged cli.js (${r.cliJsBytes.toLocaleString()} bytes) for ${r.platform}`);
+}
+
 // ── 4. Version string bumps ─────────────────────────────────
 function bumpVersionRefs(oldVer, newVer) {
   if (shouldSkipRealUpgradeWork()) return;
@@ -627,7 +635,9 @@ function writeOutput(kv) {
   if (DRY_RUN) {
     log(`DRY-RUN: would upgrade ${current} → ${latest}`);
     log('DRY-RUN: planned stages (all skipped):');
-    log('  1. fetchTarball + stageUpstream (npm pack + write upstream/package/)');
+    log(LOCAL_NATIVE_BINARY
+      ? '  1. stageUpstreamFromLocalBinary (local native binary + write upstream/package/)'
+      : '  1. fetchTarball + stageUpstream (npm pack + write upstream/package/)');
     log('  2. bumpVersionRefs (rewrite deps.json, match-registry.cjs, branding.cjs)');
     log('  3. regenerateVarmap (run upgrade-probe derive step)');
     log('  4. applyVarRenames (cross-patch word-boundary rewrite)');
@@ -641,9 +651,14 @@ function writeOutput(kv) {
   // Before staging: load OLD varmap for rename diff
   const oldMap = loadVarmap(current);
 
-  log('fetching tarball...');
-  const pkgDir = fetchTarball(latest);
-  stageUpstream(pkgDir, latest);
+  if (LOCAL_NATIVE_BINARY) {
+    log(`staging from local native binary: ${LOCAL_NATIVE_BINARY}`);
+    stageUpstreamFromLocalBinary(latest);
+  } else {
+    log('fetching tarball...');
+    const pkgDir = fetchTarball(latest);
+    stageUpstream(pkgDir, latest);
+  }
 
   log('bumping version refs...');
   bumpVersionRefs(current, latest);

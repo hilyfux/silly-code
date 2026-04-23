@@ -15,6 +15,7 @@ const path = require('path');
 const { checkSerialization } = require('../pipeline/patches/provider-core.cjs');
 const { MATCH, BARE_INJECT_TOKENS, verifyAnchors, latestVarmap } = require('../pipeline/match-registry.cjs');
 const { base, providers, sorted, fallback } = require('../pipeline/patches/_providers.cjs');
+const { findNativeBinary, stageFromLocalBunBinary } = require('../pipeline/bun-extract.cjs');
 
 const BUILD_PATH = path.join(__dirname, '..', 'pipeline', 'build', 'cli-patched.js');
 const UPSTREAM_PATH = path.join(__dirname, '..', 'pipeline', 'upstream', 'package', 'cli.js');
@@ -397,6 +398,12 @@ console.log('Build integrity tests\n');
     'ci-upgrade.cjs: DRY_RUN branch missing or does not exit(0) — dry-run must short-circuit before any mutation stage.'
   );
   console.log('  ci-upgrade dry-run flag present: PASS');
+
+  assert.ok(
+    /SILLY_CI_UPGRADE_LOCAL_BINARY/.test(src) && /stageUpstreamFromLocalBinary/.test(src),
+    'ci-upgrade.cjs: local native binary staging hook missing — offline upgrade probes would require npm/network access.'
+  );
+  console.log('  ci-upgrade local-native staging hook present: PASS');
 })();
 
 // ── 10c. Pipeline entry-point classification — auto-discovery (Iter 83 → Iter 98) ──
@@ -534,6 +541,45 @@ console.log('Build integrity tests\n');
     'Patch 55b: /model picker Current-model filter missing — cross-provider model would appear as current'
   );
   console.log('  Patch 55b picker current-model filter present: PASS');
+})();
+
+// ── 10d. bun-extract native-binary staging helpers ──
+//
+// Upstream 2.1.113+ ships per-platform native binaries. The upgrade harness
+// must work on all three supported OS families and must also be able to
+// analyze a locally-installed native binary when npm/network access is not
+// available in the automation runner.
+
+(function testBunExtractNativeBinaryHelpers() {
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'bun-extract-helper-test-'));
+  try {
+    const pkgDir = path.join(tmp, 'package');
+    fs.mkdirSync(pkgDir, { recursive: true });
+    fs.writeFileSync(path.join(pkgDir, 'claude.exe'), 'fake');
+    assert.strictEqual(
+      findNativeBinary(pkgDir),
+      path.join(pkgDir, 'claude.exe'),
+      'bun-extract must discover win32 package/claude.exe, not only package/claude'
+    );
+
+    fs.writeFileSync(path.join(pkgDir, 'claude'), 'fake');
+    assert.strictEqual(
+      findNativeBinary(pkgDir),
+      path.join(pkgDir, 'claude'),
+      'bun-extract should prefer extensionless package/claude when present'
+    );
+
+    assert.strictEqual(typeof stageFromLocalBunBinary, 'function',
+      'bun-extract must export stageFromLocalBunBinary for offline local-native upgrade probes');
+    assert.throws(
+      () => stageFromLocalBunBinary(path.join(tmp, 'missing-claude'), path.join(tmp, 'out'), { version: '2.1.999' }),
+      /local native binary not found/,
+      'stageFromLocalBunBinary must fail fast on a missing explicit binary path'
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  console.log('  bun-extract native-binary helpers present: PASS');
 })();
 
 console.log('\nAll build integrity tests passed.');

@@ -5,6 +5,31 @@
  */
 
 module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix }) {
+  // ── firstParty guard helpers ─────────────────────────────────
+  // Identity strings (patches 06b/08/08a/08b/09*/11a-d) must stay byte-identical
+  // to upstream for firstParty (sillye → Claude) to avoid identity bleed, while
+  // still showing silly-code branding for non-firstParty providers. Three emit
+  // shapes depending on the surrounding JS context:
+  //
+  //   fp(orig, silly)     — template-literal fragment, no inner interpolations.
+  //                         Emits `${cond?"orig":"silly"}` (DQ ternary inside ${…}).
+  //   fpTmpl(orig, silly) — template-literal fragment WITH inner ${…} interpolations.
+  //                         Emits `${cond?\`orig\`:\`silly\`}` (nested backticks so
+  //                         ${H}, ${hf8.opus} etc. evaluate in the outer scope).
+  //   fpExpr(orig, silly) — standalone string literal ("…" or '…') in expression
+  //                         position (array element / fn argument). FIND must
+  //                         include the enclosing quotes; emits (cond?"orig":"silly").
+  //
+  // All three use the same probe: `typeof uq==="function"&&uq()==="firstParty"`.
+  // Same shape as patches 61/63a/65 in provider-identity.cjs.
+  const _probe = '(typeof uq==="function"&&uq()==="firstParty")';
+  const fp = (orig, silly) =>
+    '${' + _probe + '?' + JSON.stringify(orig) + ':' + JSON.stringify(silly) + '}';
+  const fpTmpl = (orig, silly) =>
+    '${' + _probe + '?`' + orig + '`:`' + silly + '`}';
+  const fpExpr = (orig, silly) =>
+    '(' + _probe + '?' + JSON.stringify(orig) + ':' + JSON.stringify(silly) + ')';
+
   // Build-time git SHA embedded: `sillyx --version` → "2.1.114-silly.<sha>"
   // This makes dev and installed binaries immediately distinguishable.
   const _ver = `2.1.114-${sillyVersionSuffix || 'silly'}`
@@ -39,10 +64,11 @@ module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix })
     ''
   )
 
-  // Patch 06b: TUI header title — "Claude Code v..." → "Silly Code v..."
+  // Patch 06b: TUI header title — "Claude Code v..." → "Silly Code v...",
+  // but firstParty (sillye) keeps "Claude Code" byte-identical.
   patch('06b-header-title',
     'title:`Claude Code v$',
-    'title:`Silly Code v$'
+    'title:`' + fp('Claude Code', 'Silly Code') + ' v$'
   )
 
   // Patch 07: Mascot color — warm red → vibrant teal/green (silly & cute)
@@ -59,129 +85,218 @@ module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix })
   )
 
   // Patch 08: Environment section — Claude model family info
-  // This leaks Claude model IDs into the system prompt for all providers
+  // This leaks Claude model IDs into the system prompt for non-firstParty
+  // providers. firstParty (sillye) keeps the upstream text with inner
+  // ${hf8.*} interpolations; non-firstParty sees the trimmed variant.
   patch('08-model-family',
     'The most recent Claude model family is Claude 4.X. Model IDs — Opus 4.7: \'${hf8.opus}\', Sonnet 4.6: \'${hf8.sonnet}\', Haiku 4.5: \'${hf8.haiku}\'. When building AI applications, default to the latest and most capable Claude models.',
-    'The most recent model family is Claude 4.6 and 4.5. When building AI applications, default to the latest and most capable models.'
+    fpTmpl(
+      'The most recent Claude model family is Claude 4.X. Model IDs — Opus 4.7: \'${hf8.opus}\', Sonnet 4.6: \'${hf8.sonnet}\', Haiku 4.5: \'${hf8.haiku}\'. When building AI applications, default to the latest and most capable Claude models.',
+      'The most recent model family is Claude 4.6 and 4.5. When building AI applications, default to the latest and most capable models.'
+    )
   )
 
-  // Patch 08a: Environment section — "Claude Code is available as a CLI"
+  // Patch 08a: Environment section — "Claude Code is available as a CLI".
+  // Full DQ literal swap → expression: firstParty keeps original, silly gets trimmed.
   patch('08a-cli-description',
-    'Claude Code is available as a CLI in the terminal, desktop app (Mac/Windows), web app (claude.ai/code), and IDE extensions (VS Code, JetBrains).',
-    'Silly Code is available as a CLI in the terminal.'
+    '"Claude Code is available as a CLI in the terminal, desktop app (Mac/Windows), web app (claude.ai/code), and IDE extensions (VS Code, JetBrains)."',
+    fpExpr(
+      'Claude Code is available as a CLI in the terminal, desktop app (Mac/Windows), web app (claude.ai/code), and IDE extensions (VS Code, JetBrains).',
+      'Silly Code is available as a CLI in the terminal.'
+    )
   )
 
-  // Patch 08b: Environment section — "Fast mode for Claude Code"
+  // Patch 08b: Environment section — "Fast mode for Claude Code".
+  // Full DQ literal swap → expression: firstParty keeps original, silly sees rebrand.
   patch('08b-fast-mode',
-    'Fast mode for Claude Code uses Claude Opus 4.6 with faster output (it does not downgrade to a smaller model). It can be toggled with /fast',
-    'Fast mode for Silly Code uses Claude Opus 4.6 with faster output (it does not downgrade to a smaller model). It can be toggled with /fast'
+    '"Fast mode for Claude Code uses Claude Opus 4.6 with faster output (it does not downgrade to a smaller model). It can be toggled with /fast and is only available on Opus 4.6."',
+    fpExpr(
+      'Fast mode for Claude Code uses Claude Opus 4.6 with faster output (it does not downgrade to a smaller model). It can be toggled with /fast and is only available on Opus 4.6.',
+      'Fast mode for Silly Code uses Claude Opus 4.6 with faster output (it does not downgrade to a smaller model). It can be toggled with /fast and is only available on Opus 4.6.'
+    )
   )
+
+  // ── Patches 09*: subagent / tool-result identity, firstParty-guarded ──
+  // Every identity string below is substring-replaced inside an upstream
+  // backtick template literal. The replacement keeps the surrounding text
+  // intact and inserts a `${cond?"orig":"silly"}` interpolation so sillye
+  // (firstParty) sees the upstream text byte-identical while non-firstParty
+  // providers see silly-code branding. See fp/fpTmpl helpers at top.
 
   // Patch 09: Sub-agent identity — file search specialist
   patch('09-search-agent-identity',
     'You are a file search specialist for Claude Code, Anthropic\'s official CLI for Claude.',
-    'You are a file search specialist for Silly Code, a multi-provider AI coding assistant.'
+    fp(
+      'You are a file search specialist for Claude Code, Anthropic\'s official CLI for Claude.',
+      'You are a file search specialist for Silly Code, a multi-provider AI coding assistant.'
+    )
   )
 
-  // Patch 09a: Sub-agent identity — general agent (2 occurrences)
-  patchAll('09a-general-agent-identity',
-    'You are an agent for Claude Code, Anthropic\'s official CLI for Claude.',
-    'You are an agent for Silly Code, a multi-provider AI coding assistant.'
+  // Patch 09a: Sub-agent identity — general agent.
+  // Two occurrences, each a FULL DQ string literal (NOT backtick template):
+  //   1. `return\`${"…"}\`` — DQ inside template interpolation
+  //   2. `DY7="…"` — DQ variable assignment
+  // Both need fpExpr (expression swap), not fp (template interpolation),
+  // because inside a DQ string literal \${…} is literal text, not interpolation.
+  // The two strings differ in length, so we patch them separately.
+  const _09aShort = 'You are an agent for Claude Code, Anthropic\'s official CLI for Claude. Given the user\'s message, you should use the tools available to complete the task. Complete the task fully—don\'t gold-plate, but don\'t leave it half-done.'
+  const _09aLong  = _09aShort + ' When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.'
+  const _09aShortSilly = 'You are an agent for Silly Code, a multi-provider AI coding assistant. Given the user\'s message, you should use the tools available to complete the task. Complete the task fully—don\'t gold-plate, but don\'t leave it half-done.'
+  const _09aLongSilly = _09aShortSilly + ' When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.'
+  patch('09a-general-agent-identity-short',
+    '"' + _09aShort + '"',
+    fpExpr(_09aShort, _09aShortSilly)
+  )
+  patch('09a-general-agent-identity-long',
+    '"' + _09aLong + '"',
+    fpExpr(_09aLong, _09aLongSilly)
   )
 
   // Patch 09b: Plan agent identity
   patch('09b-plan-agent-identity',
     'You are a software architect and planning specialist for Claude Code. Your role is to explore the codebase and design implementation plans.',
-    'You are a software architect and planning specialist for Silly Code. Your role is to explore the codebase and design implementation plans.'
+    fp(
+      'You are a software architect and planning specialist for Claude Code. Your role is to explore the codebase and design implementation plans.',
+      'You are a software architect and planning specialist for Silly Code. Your role is to explore the codebase and design implementation plans.'
+    )
   )
 
   // Patch 09i: Auto-mode classifier reviewer
   patch('09i-classifier-reviewer-identity',
     'You are an expert reviewer of auto mode classifier rules for Claude Code.',
-    'You are an expert reviewer of auto mode classifier rules for Silly Code.'
+    fp(
+      'You are an expert reviewer of auto mode classifier rules for Claude Code.',
+      'You are an expert reviewer of auto mode classifier rules for Silly Code.'
+    )
   )
 
   // Patch 09j: Hook condition evaluator
   patch('09j-hook-condition-identity',
     'You are evaluating a hook condition in Claude Code.',
-    'You are evaluating a hook condition in Silly Code.'
+    fp(
+      'You are evaluating a hook condition in Claude Code.',
+      'You are evaluating a hook condition in Silly Code.'
+    )
   )
 
   // Patch 09k: Stop-condition hook evaluator
   patch('09k-stop-hook-identity',
     'You are evaluating a stop-condition hook in Claude Code.',
-    'You are evaluating a stop-condition hook in Silly Code.'
+    fp(
+      'You are evaluating a stop-condition hook in Claude Code.',
+      'You are evaluating a stop-condition hook in Silly Code.'
+    )
   )
 
   // Patch 09l: Stop condition verifier
   patch('09l-stop-verifier-identity',
     'You are verifying a stop condition in Claude Code.',
-    'You are verifying a stop condition in Silly Code.'
+    fp(
+      'You are verifying a stop condition in Claude Code.',
+      'You are verifying a stop condition in Silly Code.'
+    )
   )
 
   // Patch 09m: Onboarding guide generator
   patch('09m-onboarding-identity',
     'You are helping a power user generate an onboarding guide for teammates who are new to Claude Code.',
-    'You are helping a power user generate an onboarding guide for teammates who are new to Silly Code.'
+    fp(
+      'You are helping a power user generate an onboarding guide for teammates who are new to Claude Code.',
+      'You are helping a power user generate an onboarding guide for teammates who are new to Silly Code.'
+    )
   )
 
   // Patch 09n: Remote agent scheduler
   patch('09n-remote-agent-identity',
     'You are helping the user schedule, update, list, or run **remote** Claude Code agents.',
-    'You are helping the user schedule, update, list, or run **remote** Silly Code agents.'
+    fp(
+      'You are helping the user schedule, update, list, or run **remote** Claude Code agents.',
+      'You are helping the user schedule, update, list, or run **remote** Silly Code agents.'
+    )
   )
 
   // Patch 09o: Session search agent
   patch('09o-session-search-identity',
     'You are searching for past Claude Code conversation sessions on behalf of the user.',
-    'You are searching for past Silly Code conversation sessions on behalf of the user.'
+    fp(
+      'You are searching for past Claude Code conversation sessions on behalf of the user.',
+      'You are searching for past Silly Code conversation sessions on behalf of the user.'
+    )
   )
 
   // Patch 09p: Memory selector agent
   patch('09p-memory-selector-identity',
     'You are selecting memories that will be useful to Claude Code as it processes',
-    'You are selecting memories that will be useful to Silly Code as it processes'
+    fp(
+      'You are selecting memories that will be useful to Claude Code as it processes',
+      'You are selecting memories that will be useful to Silly Code as it processes'
+    )
   )
 
   // 09b skipped: CWD context is part of SIMPLE_ID match, handled by patch 63a in provider-engine.cjs
 
-  // Patch 09c: Verification agent — "You are Claude, and you are bad"
+  // Patch 09c: Verification agent — "You are Claude, and you are bad".
+  // Inside a backtick template, so use fp() — firstParty keeps "You are Claude",
+  // non-firstParty sees "You are the AI model".
   patch('09c-verification-identity',
     'You are Claude, and you are bad at verification.',
-    'You are the AI model, and you are bad at verification.'
+    fp(
+      'You are Claude, and you are bad at verification.',
+      'You are the AI model, and you are bad at verification.'
+    )
   )
 
   // Patch 09d: Status line setup agent system prompt
   patch('09d-statusline-agent-identity',
     'You are a status line setup agent for Claude Code. Your job is to create or update the statusLine command in the user\'s Claude Code settings.',
-    'You are a status line setup agent for Silly Code. Your job is to create or update the statusLine command in the user\'s Silly Code settings.'
+    fp(
+      'You are a status line setup agent for Claude Code. Your job is to create or update the statusLine command in the user\'s Claude Code settings.',
+      'You are a status line setup agent for Silly Code. Your job is to create or update the statusLine command in the user\'s Silly Code settings.'
+    )
   )
 
   // Patch 09e: Claude guide agent — explains Claude Code/SDK/API to users.
   // For non-firstParty providers, this agent is less useful but keep it
   // functional; just replace identity phrasing so the agent doesn't claim
-  // to be running as Claude Code when it isn't.
+  // to be running as Claude Code when it isn't. firstParty stays byte-identical.
   patch('09e-guide-agent-identity',
     'You are the Claude guide agent. Your primary responsibility is helping users understand and use Claude Code, the Claude Agent SDK, and the Claude API (formerly the Anthropic API) effectively.',
-    'You are the Silly Code guide agent. Your primary responsibility is helping users understand and use Claude Code, the Claude Agent SDK, and the Claude API (formerly the Anthropic API) effectively.'
+    fp(
+      'You are the Claude guide agent. Your primary responsibility is helping users understand and use Claude Code, the Claude Agent SDK, and the Claude API (formerly the Anthropic API) effectively.',
+      'You are the Silly Code guide agent. Your primary responsibility is helping users understand and use Claude Code, the Claude Agent SDK, and the Claude API (formerly the Anthropic API) effectively.'
+    )
   )
 
-  // Patch 09f: WebFetch tool error — leaks "Claude Code" into tool result
+  // Patch 09f: WebFetch tool error — leaks "Claude Code" into tool result.
+  // Inside a backtick template WITH ${H} interpolation → use fpTmpl so the
+  // nested backticks preserve ${H} evaluation on both branches.
   patch('09f-webfetch-error',
     'Claude Code is unable to fetch from ${H}',
-    'Silly Code is unable to fetch from ${H}'
+    fpTmpl(
+      'Claude Code is unable to fetch from ${H}',
+      'Silly Code is unable to fetch from ${H}'
+    )
   )
 
-  // Patch 09g: BashTool security warning — leaks "Claude Code" into tool result
+  // Patch 09g: BashTool security warning — leaks "Claude Code" into tool result.
+  // Inside a backtick template WITH ${H} interpolation → fpTmpl.
   patch('09g-bash-validate-warning',
     'security, Claude Code cannot automatically validate ${H} commands',
-    'security, Silly Code cannot automatically validate ${H} commands'
+    fpTmpl(
+      'security, Claude Code cannot automatically validate ${H} commands',
+      'security, Silly Code cannot automatically validate ${H} commands'
+    )
   )
 
-  // Patch 09h: BashTool cd warning — leaks "Claude Code" into tool result
+  // Patch 09h: BashTool cd warning — leaks "Claude Code" into tool result.
+  // This lives inside a DQ string literal (not a template), so we swap the
+  // ENTIRE quoted string for an (cond?"orig":"silly") expression via fpExpr.
   patch('09h-bash-cd-warning',
-    'security, Claude Code cannot automatically determine the final working directory',
-    'security, Silly Code cannot automatically determine the final working directory'
+    '"Commands that change directories and perform write operations require explicit approval to ensure paths are evaluated correctly. For security, Claude Code cannot automatically determine the final working directory when \'cd\' is used in compound commands."',
+    fpExpr(
+      'Commands that change directories and perform write operations require explicit approval to ensure paths are evaluated correctly. For security, Claude Code cannot automatically determine the final working directory when \'cd\' is used in compound commands.',
+      'Commands that change directories and perform write operations require explicit approval to ensure paths are evaluated correctly. For security, Silly Code cannot automatically determine the final working directory when \'cd\' is used in compound commands.'
+    )
   )
 
   // Patch 10a: TUI header brand name variable
@@ -232,28 +347,44 @@ module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix })
     'null,"Silly Code","\'","ll be able to read'
   )
 
-  // Patch 11a: Image tool description — leaks brand into system prompt
+  // Patch 11a: Image tool description — leaks brand into system prompt.
+  // Inside a backtick template (see tool description assembly) → fp().
   patch('11a-multimodal-desc',
     'are presented visually as Claude Code is a multimodal LLM',
-    'are presented visually as the assistant is a multimodal LLM'
+    fp(
+      'are presented visually as Claude Code is a multimodal LLM',
+      'are presented visually as the assistant is a multimodal LLM'
+    )
   )
 
-  // Patch 11b: think-back session extractor prompt — leaks brand to LLM
+  // Patch 11b: think-back session extractor prompt — leaks brand to LLM.
+  // Inside a backtick template → fp().
   patch('11b-think-back-session',
     'Analyze this Claude Code session and extract structured',
-    'Analyze this session and extract structured'
+    fp(
+      'Analyze this Claude Code session and extract structured',
+      'Analyze this session and extract structured'
+    )
   )
 
-  // Patch 11c: think-back usage-data analyzer prompts (7 occurrences)
+  // Patch 11c: think-back usage-data analyzer prompts (7 occurrences).
+  // All inside backtick templates → fp(). patchAll emits the same ${…} at each site.
   patchAll('11c-think-back-usage',
     'Analyze this Claude Code usage data',
-    'Analyze this usage data'
+    fp(
+      'Analyze this Claude Code usage data',
+      'Analyze this usage data'
+    )
   )
 
-  // Patch 11d: Bug report template — leaks brand into LLM context
+  // Patch 11d: Bug report template — leaks brand into LLM context.
+  // Full DQ literal (array element) → fpExpr swaps the whole string.
   patch('11d-bug-report-template',
-    'Claude Code is an agentic coding CLI based on the Anthropic API',
-    'Silly Code is an agentic coding CLI based on a multi-provider backend'
+    '"Claude Code is an agentic coding CLI based on the Anthropic API."',
+    fpExpr(
+      'Claude Code is an agentic coding CLI based on the Anthropic API.',
+      'Silly Code is an agentic coding CLI based on a multi-provider backend.'
+    )
   )
 
   // Patch 11e: Bug report header text (user-facing)

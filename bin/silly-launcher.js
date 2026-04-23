@@ -316,14 +316,20 @@ function cmdDoctor(dataDir, patched) {
   const patchedOk = fs.existsSync(patched);
   const hasVersions = fs.existsSync(path.join(rootDir, 'versions'));
   const hasPipeline = fs.existsSync(path.join(rootDir, 'pipeline'));
+  // Track whether any check printed a warning (⚠) or failure (✗) so we can
+  // tail the output with a silly-diag recommendation. Set by the inline checks
+  // below — each one flips this when it prints something non-green.
+  let anyAnomaly = false;
   console.log('');
   console.log('  silly-code doctor');
   console.log('');
   console.log(`  ✓ Node: ${process.version}`);
   console.log(`  ✓ Platform: ${process.platform} ${process.arch}`);
   console.log(`  ${patchedOk ? '✓' : '✗'} Patched binary: ${patchedOk ? 'found' : 'missing (run: silly login claude OR sillyx)'}`);
+  if (!patchedOk) anyAnomaly = true;
   if (hasVersions && hasPipeline) {
     console.log(`  ⚠ Layout ambiguous: both ${rootDir}/versions/ and ${rootDir}/pipeline/ exist — dist + dev copies overlap. Remove one to pick a single source of truth.`);
+    anyAnomaly = true;
   }
   console.log('');
   renderAuthLines(dataDir);
@@ -345,9 +351,11 @@ function cmdDoctor(dataDir, patched) {
       console.log(`  ✓ ripgrep: ${first || fallback} (installer copy)`);
     } else {
       console.log('  ⚠ ripgrep: not found (file search will be slow — run: silly update)');
+      anyAnomaly = true;
     }
   } else {
     console.log('  ⚠ ripgrep: not found (file search will be slow — run: silly update)');
+    anyAnomaly = true;
   }
   // Git detection — parity with bash doctor's `command -v git` check (bin/silly:123).
   // Optional dependency: needed for dev `silly update` (git pull) + version/commit
@@ -360,6 +368,7 @@ function cmdDoctor(dataDir, patched) {
     console.log(`  ✓ Git: ${first || 'found on PATH'}`);
   } else {
     console.log('  ⚠ Git: not found (optional — needed for `silly update` in dev installs)');
+    anyAnomaly = true;
   }
   // Adapter compat probe — dev installs only (tests/ not in dist)
   const compatTest = path.join(rootDir, 'tests', 'compat.test.cjs');
@@ -370,9 +379,24 @@ function cmdDoctor(dataDir, patched) {
       console.log(`  ✓ Adapter compat: ${m ? m[1] : 'all'} assertions green`);
     } else {
       console.log('  ✗ Adapter compat: FAILED — run: node tests/compat.test.cjs');
+      anyAnomaly = true;
     }
   }
   console.log('');
+  // When any check above flagged an anomaly, or if the user specifically
+  // reports silent-hang symptoms (captured as SILLY_DOCTOR_HINT_DIAG=1), point
+  // them at the standalone silly-diag tool. silly-diag walks the startup dep
+  // chain layer-by-layer WITHOUT importing silly-launcher.js, so it survives
+  // the specific failure class where `await import('./silly-launcher.js')`
+  // hangs before the watchdog is armed. Opt-in recommendation only — don't
+  // shout this at happy users on every doctor run.
+  if (anyAnomaly || process.env.SILLY_DOCTOR_HINT_DIAG === '1') {
+    console.log('  For detailed layer-by-layer diagnostics, run:');
+    console.log('    silly-diag              (or: node ' + path.join(__dirname, 'silly-diag.js') + ')');
+    console.log('  This probes fs, cli-patched.js, ws, child-spawn, settings, network,');
+    console.log('  and a bounded silly-launcher import — useful when sillye/sillyx hang silently.');
+    console.log('');
+  }
 }
 
 function cmdLogin(provider, patched) {

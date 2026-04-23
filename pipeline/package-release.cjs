@@ -56,6 +56,7 @@ function stage() {
     'lib-deps.sh',
     'silly-auth.js',
     'silly-common.sh',
+    'silly-diag.js',
     'silly-launcher.js',
     'silly.js',
     'sillye.js',

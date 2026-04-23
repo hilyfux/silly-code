@@ -151,7 +151,14 @@ foreach ($cmd in @('silly', 'sillyx', 'sillye', 'sillyxs', 'sillyes')) {
   $cmdContent = "@echo off`r`nnode `"$jsPath`" %*`r`n"
   Set-Content -Path (Join-Path $binDir "$cmd.cmd") -Value $cmdContent -Encoding ASCII
 }
-Ok "Commands: $binDir\{silly,sillyx,sillye,sillyxs,sillyes}.cmd"
+# silly-diag is a standalone install diagnostic — if sillye hangs for a user
+# we tell them to run `silly-diag`, which walks the dep chain layer-by-layer
+# without importing silly-launcher.js (the prime suspect for silent hangs).
+# Ship its .cmd wrapper alongside the main 5 so it's always on PATH.
+$diagJs = Join-Path $installDir 'bin\silly-diag.js'
+$diagCmd = "@echo off`r`nnode `"$diagJs`" %*`r`n"
+Set-Content -Path (Join-Path $binDir 'silly-diag.cmd') -Value $diagCmd -Encoding ASCII
+Ok "Commands: $binDir\{silly,sillyx,sillye,sillyxs,sillyes,silly-diag}.cmd"
 
 # ── PATH ──────────────────────────────────────────────────────
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')

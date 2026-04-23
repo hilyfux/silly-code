@@ -643,14 +643,26 @@ function tameSkillPrompts(text) {
       : '';
     return '[HOOK CONTEXT] ' + hookName + ': ' + raw + skillHint;
   });
-  // Strip the EXTREMELY-IMPORTANT blocks that force skill invocation
+  // ── Defensive: third-party skill-generator artifacts ───────────────────
+  // The patterns below do NOT appear anywhere in upstream @anthropic-ai/claude-
+  // code (verified against 2.1.114 cli.js: 0 matches for every tag/phrase).
+  // They originate from third-party skill *generators* — tools that write
+  // project-level CLAUDE.md or skill markdown files and wrap their outputs in
+  // these dominance tags to coerce invocation. When a user drops such a skill
+  // into ~/.claude/skills/ or project CLAUDE.md, the text reaches the system
+  // prompt and leaks through to GPT, which takes "ABSOLUTELY MUST" / "1%
+  // chance" too literally and skill-fires on every turn.
+  //
+  // Do not delete even though upstream match count is 0: these are defensive
+  // against user-authored content, not upstream behaviour. Zero upstream match
+  // = zero upstream cost; the regex is cheap.
   text = text.replace(/<EXTREMELY-IMPORTANT>[\s\S]*?<\/EXTREMELY-IMPORTANT>/g, '');
   text = text.replace(/<EXTREMELY_IMPORTANT>[\s\S]*?<\/EXTREMELY_IMPORTANT>/g, '');
-  // Remove HARD-GATE blocks that block autonomous execution
+  // HARD-GATE blocks — generator tag that blocks autonomous execution.
   text = text.replace(/<HARD-GATE>[\s\S]*?<\/HARD-GATE>/g, '');
-  // Remove SUBAGENT-STOP blocks
+  // SUBAGENT-STOP blocks — generator tag forcing subagent teardown.
   text = text.replace(/<SUBAGENT-STOP>[\s\S]*?<\/SUBAGENT-STOP>/g, '');
-  // Tone down remaining aggressive directives
+  // Tone down remaining aggressive directives emitted by the same generators.
   text = text.replace(/you ABSOLUTELY MUST invoke the skill/gi, 'consider invoking the skill if relevant');
   text = text.replace(/IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE\. YOU MUST USE IT\./gi, '');
   text = text.replace(/This is not negotiable\. This is not optional\. You cannot rationalize your way out of this\./gi, '');

@@ -107,6 +107,21 @@ if (Test-Path (Join-Path $installDir '.git')) {
 $headSha = (& git -C $installDir rev-parse --short HEAD).Trim()
 Ok "Repo: $installDir ($headSha)"
 
+# ── Vendor ripgrep so patch.cjs + adapter can find it ────────
+# patch.cjs now fails fast when vendor/ripgrep is missing, so we must stage
+# ripgrep into pipeline\build\vendor\ripgrep\<arch>-win32\ BEFORE invoking
+# the patch pipeline. This also makes `silly update` (which re-runs
+# patch.cjs) idempotent: the pre-existing vendor dir is preserved.
+if ($rgBin -and (Test-Path $rgBin)) {
+  $nodeArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
+  $rgVendorDir = [System.IO.Path]::Combine($installDir, 'pipeline', 'build', 'vendor', 'ripgrep', "$nodeArch-win32")
+  New-Item -ItemType Directory -Force -Path $rgVendorDir | Out-Null
+  Copy-Item $rgBin (Join-Path $rgVendorDir 'rg.exe') -Force
+  Ok "ripgrep vendored: $rgVendorDir\rg.exe"
+} else {
+  Warn 'ripgrep not available — patch.cjs will fail fast. Set $env:SILLY_VENDOR_OPTIONAL=1 to skip (Glob/Grep will ENOENT at runtime).'
+}
+
 # ── Build patched binary ───────────────────────────────────────
 # patch.cjs is pure text transformation + deploys vendored ws into
 # pipeline\build\node_modules\ws. Zero downloads at this step. The clone is
@@ -124,14 +139,6 @@ Ok "Patched binary: $installDir\pipeline\build\cli-patched.js"
 $wsPkg = Join-Path $installDir 'pipeline\build\node_modules\ws\package.json'
 if (-not (Test-Path $wsPkg)) {
   Fail "Vendored ws missing after patch.cjs — repo corrupt. Reinstall via the install URL."
-}
-
-# ── Vendor ripgrep so adapter can find it ────────────────────
-if ($rgBin -and (Test-Path $rgBin)) {
-  $nodeArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
-  $rgVendorDir = [System.IO.Path]::Combine($installDir, 'pipeline', 'build', 'vendor', 'ripgrep', "$nodeArch-win32")
-  New-Item -ItemType Directory -Force -Path $rgVendorDir | Out-Null
-  Copy-Item $rgBin (Join-Path $rgVendorDir 'rg.exe') -Force
 }
 
 # ── Create Windows .cmd launchers ─────────────────────────────

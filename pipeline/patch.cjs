@@ -169,52 +169,103 @@ console.log(`  Output: ${OUTPUT}\n`)
 // Vendor symlink: cli-patched.js locates vendor/ripgrep/ relative to itself,
 // but lives in pipeline/build/ (not the npm package dir). Without this link
 // Glob/Grep silently fail with ENOENT.
+//
+// Resolution order (first hit wins):
+//   1. Existing pipeline/build/vendor/ripgrep/<arch>-<platform>/ — installer
+//      (install.ps1 / install.sh) may have pre-populated this before patch.cjs
+//      runs. A real directory here is authoritative and left untouched.
+//   2. npm/npx cache at ~/.npm/_npx/<hash>/node_modules/@anthropic-ai/claude-code/vendor
+//   3. Local node_modules via require.resolve (non-npx installs)
+//
+// On Windows clean boxes path 2+3 are typically empty — install.ps1 MUST
+// download ripgrep from BurntSushi/ripgrep releases into
+// pipeline\build\vendor\ripgrep\<arch>-win32\rg.exe BEFORE invoking patch.cjs,
+// otherwise Glob/Grep ENOENT at runtime. We emit an actionable error (exit 1)
+// rather than a silent warning so a broken install is loud at build time.
+// Opt-out: SILLY_VENDOR_OPTIONAL=1 for developer workflows without vendor.
 {
   const buildDir = path.dirname(OUTPUT)
   const vendorLink = path.join(buildDir, 'vendor')
-  // Find the vendor in the npm/npx cache.
-  // Sort entries by mtime descending — newest cache entry (most likely to match
-  // the current claude-code version) is checked first, avoiding a full linear scan.
-  let vendorSrc = null
-  const npxDir = path.join(os.homedir(), '.npm', '_npx')  // os.homedir() is cross-platform (Windows: USERPROFILE)
+
+  // Path 1: real directory left by installer. Preserve and skip linking.
+  let preservedRealDir = false
   try {
-    const entries = fs.readdirSync(npxDir)
-      .map(e => { try { return { e, mtime: fs.statSync(path.join(npxDir, e)).mtimeMs } } catch { return { e, mtime: 0 } } })
-      .sort((a, b) => b.mtime - a.mtime)
-    for (const { e } of entries) {
-      const p = path.join(npxDir, e, 'node_modules', '@anthropic-ai', 'claude-code', 'vendor')
-      if (fs.existsSync(p)) { vendorSrc = p; break }
+    const st = fs.lstatSync(vendorLink)
+    if (st.isDirectory() && !st.isSymbolicLink()) {
+      const rgDir = path.join(vendorLink, 'ripgrep')
+      if (fs.existsSync(rgDir)) {
+        console.log(`  → vendor: ${vendorLink} (preserved, installer-populated)`)
+        preservedRealDir = true
+      }
     }
   } catch {}
-  if (!vendorSrc) {
-    // Fallback: check local node_modules (if package is installed, not npx)
+
+  if (!preservedRealDir) {
+    // Find the vendor in the npm/npx cache.
+    // Sort entries by mtime descending — newest cache entry (most likely to match
+    // the current claude-code version) is checked first, avoiding a full linear scan.
+    let vendorSrc = null
+    const npxDir = path.join(os.homedir(), '.npm', '_npx')  // os.homedir() is cross-platform (Windows: USERPROFILE)
     try {
-      const p = require.resolve('@anthropic-ai/claude-code/package.json')
-      const candidate = path.join(path.dirname(p), 'vendor')
-      if (fs.existsSync(candidate)) vendorSrc = candidate
+      const entries = fs.readdirSync(npxDir)
+        .map(e => { try { return { e, mtime: fs.statSync(path.join(npxDir, e)).mtimeMs } } catch { return { e, mtime: 0 } } })
+        .sort((a, b) => b.mtime - a.mtime)
+      for (const { e } of entries) {
+        const p = path.join(npxDir, e, 'node_modules', '@anthropic-ai', 'claude-code', 'vendor')
+        if (fs.existsSync(p)) { vendorSrc = p; break }
+      }
     } catch {}
-  }
-  if (vendorSrc) {
-    // Update symlink if missing or pointing elsewhere.
-    // Windows: use 'junction' for directories — works without admin/Developer Mode.
-    // macOS/Linux: third arg is ignored.
-    const _symlinkType = process.platform === 'win32' ? 'junction' : undefined
-    let needsLink = true
-    try {
-      const existing = fs.readlinkSync(vendorLink)
-      if (existing === vendorSrc) needsLink = false
-      else fs.unlinkSync(vendorLink)
-    } catch (e) {
-      // EINVAL/EISDIR: a real directory exists here (old install flow). Wipe it.
-      // ENOENT: nothing at that path yet — leave needsLink=true so we create it.
-      if (e.code === 'EINVAL' || e.code === 'EISDIR') fs.rmSync(vendorLink, { recursive: true, force: true })
-      else if (e.code !== 'ENOENT') throw e
+    if (!vendorSrc) {
+      // Fallback: check local node_modules (if package is installed, not npx)
+      try {
+        const p = require.resolve('@anthropic-ai/claude-code/package.json')
+        const candidate = path.join(path.dirname(p), 'vendor')
+        if (fs.existsSync(candidate)) vendorSrc = candidate
+      } catch {}
     }
-    if (needsLink) {
-      fs.symlinkSync(vendorSrc, vendorLink, _symlinkType)
-      console.log(`  → vendor: ${vendorLink}`)
+    if (vendorSrc) {
+      // Update symlink if missing or pointing elsewhere.
+      // Windows: use 'junction' for directories — works without admin/Developer Mode.
+      // macOS/Linux: third arg is ignored.
+      const _symlinkType = process.platform === 'win32' ? 'junction' : undefined
+      let needsLink = true
+      try {
+        const existing = fs.readlinkSync(vendorLink)
+        if (existing === vendorSrc) needsLink = false
+        else fs.unlinkSync(vendorLink)
+      } catch (e) {
+        // EINVAL/EISDIR: a real directory exists here (old install flow). Wipe it.
+        // ENOENT: nothing at that path yet — leave needsLink=true so we create it.
+        if (e.code === 'EINVAL' || e.code === 'EISDIR') fs.rmSync(vendorLink, { recursive: true, force: true })
+        else if (e.code !== 'ENOENT') throw e
+      }
+      if (needsLink) {
+        fs.symlinkSync(vendorSrc, vendorLink, _symlinkType)
+        console.log(`  → vendor: ${vendorLink}`)
+      }
+    } else if (process.env.SILLY_VENDOR_OPTIONAL === '1') {
+      console.warn('  ⚠ vendor/ripgrep not found (SILLY_VENDOR_OPTIONAL=1) — Glob/Grep will ENOENT at runtime')
+    } else {
+      console.error('')
+      console.error('  ✗ vendor/ripgrep not found. cli-patched.js cannot run Glob/Grep without it.')
+      console.error('')
+      if (process.platform === 'win32') {
+        console.error('    Windows: the installer (install.ps1) downloads ripgrep from')
+        console.error('    https://github.com/BurntSushi/ripgrep/releases and places it at')
+        console.error('    pipeline\\build\\vendor\\ripgrep\\<arch>-win32\\rg.exe BEFORE invoking')
+        console.error('    patch.cjs. If you are running patch.cjs manually, either:')
+        console.error('      • re-run install.ps1, OR')
+        console.error('      • download rg.exe manually into pipeline\\build\\vendor\\ripgrep\\x64-win32\\')
+        console.error('        (or arm64-win32\\ on ARM64), OR')
+        console.error('      • set SILLY_VENDOR_OPTIONAL=1 to skip (Glob/Grep will ENOENT at runtime).')
+      } else {
+        console.error('    Linux/macOS: activate the npm/npx cache by running once:')
+        console.error('      npx @anthropic-ai/claude-code --version')
+        console.error('    Then re-run node pipeline/patch.cjs.')
+        console.error('    Alternatively, set SILLY_VENDOR_OPTIONAL=1 to skip (Glob/Grep will ENOENT).')
+      }
+      console.error('')
+      process.exit(1)
     }
-  } else {
-    console.warn('  ⚠ vendor/ripgrep not found in npm/npx cache — Glob/Grep will ENOENT')
   }
 }

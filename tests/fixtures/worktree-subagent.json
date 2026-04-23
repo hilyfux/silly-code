@@ -1,0 +1,63 @@
+{
+  "model": "claude-opus-4-6",
+  "system": [
+    {
+      "type": "text",
+      "text": "You are Claude Code, Anthropic's official CLI for Claude.\nYou are an interactive agent that helps users with software engineering tasks.\n- /using-git-worktrees skill. Description: Use when starting feature work that needs isolation from current workspace. Triggers on: \"worktree\", \"isolation\".\n- /subagent-driven-development skill. Description: Use when executing implementation plans with independent tasks in the current session. Triggers on: \"subagent\", \"parallel tasks\".\n<system-reminder>\nUserPromptSubmit hook additional context: [kg auto-trigger] Invoke Skill tool (skill: knowledge-graph) before starting.\n</system-reminder>\n<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail:\nEnterWorktree\nExitWorktree\nTaskStop\n</system-reminder>"
+    }
+  ],
+  "messages": [
+    { "role": "user", "content": "Use the Agent tool to spawn a subagent that uses EnterWorktree for isolated work on branch feature/subagent-demo, then ExitWorktree when done." }
+  ],
+  "stream": false,
+  "max_tokens": 512,
+  "tools": [
+    {
+      "name": "Agent",
+      "description": "Delegate a self-contained task to a fresh subagent. The subagent runs in its own context window, receives only the prompt you provide, and returns a single final message when finished.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string", "description": "Short (3-5 word) label for the delegated task." },
+          "prompt": { "type": "string", "description": "The full task instructions for the subagent." },
+          "subagent_type": { "type": "string", "description": "Which subagent profile to use (e.g. 'general-purpose')." }
+        },
+        "required": ["description", "prompt", "subagent_type"]
+      }
+    },
+    {
+      "name": "EnterWorktree",
+      "description": "Create an isolated git worktree for subagent execution so file edits do not collide with the main workspace.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "branch": { "type": "string", "description": "Branch name to check out inside the new worktree." },
+          "purpose": { "type": "string", "description": "Short human-readable reason for the worktree." }
+        },
+        "required": ["branch"]
+      }
+    },
+    {
+      "name": "ExitWorktree",
+      "description": "Tear down the isolated worktree previously created by EnterWorktree and return control to the parent workspace.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "commit": { "type": "boolean", "description": "Whether to keep the branch after exit (true) or discard uncommitted work (false)." }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "ToolSearch",
+      "description": "Load tool schemas by name.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" }
+        },
+        "required": ["query"]
+      }
+    }
+  ]
+}

@@ -604,32 +604,44 @@ function tameSkillPrompts(text) {
         'Use ToolSearch({query:"select:ToolName"}), then call the tool.';
     }
   );
-  // Hook channels are mixed: legacy PUA/frustration hooks are harmful noise for
-  // GPT, but modern hook ecosystems reuse these channels for skill, verifier,
-  // MCP-tool, and project-specific routing context. Default-preserve non-toxic
-  // context so sillyx doesn't silently break hook-based workflows.
+  // Hook-channel taming — UserPromptSubmit was the first, but upstream 2.1.115+
+  // exposes 29 hook channels and projects wire custom additionalContext into
+  // many of them (skill, verifier, MCP-tool, kg auto-trigger, subagent wrap-up,
+  // compaction prelude, etc.). Default-preserve non-toxic context on the
+  // whitelist below so sillyx doesn't silently break hook-based workflows.
   //
-  // Whitelist is conservative: only channels likely to carry Skill/tool
-  // context are rewritten with the ToolSearch driving-hint. Other channels
-  // (Stop/SubagentStop/PostToolUse/etc.) are left to later passes that already
-  // handle the generic <system-reminder> cleanup.
+  // NOT on the list (deliberately): Stop / StopFailure / Notification — Stop-
+  // family is a flow-control signal, Notification is noise. We leave their
+  // <system-reminder> blocks untouched (falls through to the generic system-
+  // reminder identity/taming pipeline; identity cleaner still runs on body).
   const SKILL_TAMING_HOOKS = new Set([
-    'UserPromptSubmit',
-    'SubagentStart',
-    'PreToolUse',
-    'SessionStart',
+    'UserPromptSubmit',      // legacy primary channel (PUA filter kept)
+    'SubagentStart',         // spawned subagent context injection
+    'PreToolUse',             // per-tool advisories
+    'SessionStart',           // session-resume + compaction continuity
+    'PostToolUse',            // skill often reacts to tool result
+    'PostToolBatch',          // 2.1.115+ — batch completion signal
+    'UserPromptExpansion',    // 2.1.115+ — slash commands / @-file refs
+    'SubagentStop',           // skill may fire on subagent termination
+    'PreCompact',             // compaction context could carry skill state
+    'SessionEnd',             // skill wrap-up context
   ]);
   const hookNamePattern = Array.from(SKILL_TAMING_HOOKS).join('|');
   const hookRe = new RegExp(
-    '<system-reminder>\\s*(' + hookNamePattern + ') hook([\\s\\S]*?)</system-reminder>',
+    '<system-reminder>\\s*(' + hookNamePattern + ')(?::[A-Za-z0-9_.\\-]+)?\\s+hook([\\s\\S]*?)</system-reminder>',
     'g'
   );
   text = text.replace(hookRe, (_all, hookName, body) => {
     const raw = String(body || '').replace(/^\s*(additional context|hook additional context)\s*:\s*/i, '').trim();
     if (!raw) return '';
-    if (/\b(PUA|frustration|rage bait|emotional coercion)\b/i.test(raw)) return '';
-    return '[HOOK CONTEXT] ' + hookName + ': ' + raw +
-      (/\bSkill\b/.test(raw) ? ' If the Skill schema is not loaded, call ToolSearch({query:"select:Skill"}) first.' : '');
+    // UserPromptSubmit retains the legacy PUA drop — this is the channel the
+    // 3rd-party PUA skill generators historically targeted; dropping the whole
+    // reminder is still the right move. Other hooks don't carry that baggage.
+    if (hookName === 'UserPromptSubmit' && /\b(PUA|frustration|rage bait|emotional coercion)\b/i.test(raw)) return '';
+    const skillHint = /\bSkill\b/.test(raw)
+      ? ' If the Skill schema is not loaded, call ToolSearch({query:"select:Skill"}) first.'
+      : '';
+    return '[HOOK CONTEXT] ' + hookName + ': ' + raw + skillHint;
   });
   // Strip the EXTREMELY-IMPORTANT blocks that force skill invocation
   text = text.replace(/<EXTREMELY-IMPORTANT>[\s\S]*?<\/EXTREMELY-IMPORTANT>/g, '');

@@ -241,5 +241,38 @@ function loadFixture(name) {
     }
   }
 
+  // Scenario 6 — skill/subagent prompt flow must stay usable after adapter cleaning
+  {
+    const fx = loadFixture('skill-subagent-system');
+    const plan = [{
+      urlPart: '/codex/responses',
+      body: {
+        id: 'resp_skill_1',
+        output: [],
+        usage: { input_tokens: 12, output_tokens: 3 },
+      },
+    }];
+    try {
+      const fetch = makeMockFetch(plan);
+      const adapter = buildAdapter(openai, { headers: { 'Authorization': 'Bearer eyJfake' }, kind: 'oauth' })(fetch);
+      await adapter('https://api.anthropic.com/v1/messages', { body: JSON.stringify(fx) });
+      const [call] = fetch._calls();
+      assert.ok(call.url.includes('/codex/responses'), 'skill/subagent flow should hit Codex OAuth path');
+      assert.ok(typeof call.body.instructions === 'string', 'Responses API instructions missing');
+      assert.ok(/using-superpowers skill/.test(call.body.instructions), 'using-superpowers entry lost');
+      assert.ok(/boost skill/.test(call.body.instructions), 'boost entry lost');
+      assert.ok(!/Triggers on:/.test(call.body.instructions), 'skill trigger tails not stripped');
+      assert.ok(/ToolSearch/.test(call.body.instructions), 'ToolSearch guidance lost');
+      assert.ok(/ScheduleWakeup/.test(call.body.instructions), 'deferred-tool names lost');
+      assert.ok(/interactive agent that helps users/.test(call.body.instructions), 'subagent role description damaged');
+      assert.ok(!/Claude Code/.test(call.body.instructions), 'Claude identity leaked');
+      assert.ok(/<continuation-discipline>/.test(call.body.instructions), 'continuation discipline missing');
+      assert.ok(Array.isArray(call.body.tools) && call.body.tools.some(t => t.name === 'ToolSearch'), 'ToolSearch tool missing from forwarded tool catalog');
+      assert.ok(Array.isArray(call.body.tools) && call.body.tools.some(t => t.name === 'ScheduleWakeup'), 'ScheduleWakeup tool missing from forwarded tool catalog');
+      assert.strictEqual(call.body.parallel_tool_calls, false, 'parallel tool calls must stay disabled for GPT provider path');
+      pass('openai oauth — skill/subagent prompt flow preserved');
+    } catch (e) { fail('openai oauth — skill/subagent prompt flow preserved', e); }
+  }
+
   console.log(`\n${passed} provider tests passed.`);
 })().catch(e => { console.error(e); process.exit(1); });

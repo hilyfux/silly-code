@@ -14,7 +14,7 @@
  */
 
 // ── Single source of truth for Codex models ──
-// Verified against upstream codex-cli 0.121.0 native binary (strings | grep slug).
+// Verified against upstream @openai/codex 0.123.0 stable release metadata + prior 0.122.0 native extraction baseline; runtime behavior still needs explicit parity validation.
 // Adding a row here propagates to modelDisplayNames, contextWindow.perModel,
 // and the tierNames metadata. The adapter's inline _codexModelTable mirrors
 // the slug list; see the "KEEP IN SYNC" marker inside _openaiAdapter.
@@ -48,8 +48,8 @@ const CODEX_ALIASES = {
   'claude-sonnet': 'gpt-5.3-codex',       // agentic coding mainstream
   'claude-haiku':  'gpt-5.3-codex',       // reverted from gpt-5.1-codex-mini (see note)
 };
-// ChatGPT-account migration map (mirrored from codex-cli 0.121.0's model_catalog
-// upgrade pointers — strings-extracted from the native binary on 2026-04-17).
+// ChatGPT-account migration map (mirrored from the 0.122.0 native catalog baseline,
+// pending explicit 0.123.0 parity confirmation; see memory/project-upstream-version-tracking.md).
 // chatgpt.com/backend-api/codex/responses returns HTTP 400 "The '<slug>' model
 // is not supported when using Codex with a ChatGPT account" for the LHS slugs,
 // and Codex CLI itself silently migrates them to the RHS before dispatch
@@ -69,7 +69,8 @@ const OAUTH_MODEL_MIGRATIONS = {
   // 2026-04-17 batch smoke: gpt-5.3-codex-spark accepted by chatgpt.com
   // (no 400) but stream never completes — upstream retry-loop hits 10+
   // requests for a single `reply OK` prompt. The slug appears in the newer
-  // Codex web UI (user screenshot) but is absent from the 0.121.0 native
+  // Codex web UI (user screenshot) but is absent from the 0.122.0 native
+  // baseline we previously extracted; 0.123.0 stable release notes alone are
   // binary catalog. Until we confirm spark's SSE contract, migrate to
   // gpt-5.3-codex which is the closest stable sibling.
   'gpt-5.3-codex-spark': 'gpt-5.3-codex',
@@ -234,8 +235,10 @@ async function _openaiAdapter(url, init) {
     const _stream = !!_b.stream;
     const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: true };
     // Do NOT forward temperature / top_p — chatgpt.com's ResponsesApiRequest
-    // struct has no such fields (verified against codex-cli 0.121.0 native
-    // binary) and returns HTTP 400 "Unsupported parameter: temperature" when
+    // struct has no such fields in our validated 0.122.0 baseline; 0.123.0
+    // release notes do not announce a contract change, but parity still needs
+    // explicit behavioral verification. chatgpt.com returns HTTP 400
+    // "Unsupported parameter: temperature" when
     // passed. Upstream Claude Code sets temperature=1 by default, so every
     // request from the main TUI was being rejected before this fix landed.
     // service_tier: only opt-in via SILLY_CODEX_FAST=1 on /codex/responses.
@@ -259,11 +262,20 @@ async function _openaiAdapter(url, init) {
     // messages on every 429, burning pua:loop iterations without doing work.
     // Fetch timeout (120s): chatgpt.com occasionally hangs with no response,
     // causing subagents to freeze at "Initializing..." indefinitely.
+    // Failure taxonomy / debug contract for sillyx provider incidents:
+    //   - discoverability/tool-chain issues → capture *-codex-request.json
+    //     (instructions, tool_names, input_preview)
+    //   - transport/runtime faults       → capture *-codex-fetch-error.json
+    //   - endpoint/schema rejections     → capture *-codex-rejection.json
+    // These dumps separate prompt-flow bugs from actual Codex runtime behavior,
+    // which is critical because preserved prompts do not imply execution parity.
     // Unconditional request-shape dump (no env flag required). Captures
     // every /codex/responses invocation so interactive TUI failures become
     // post-mortem-able without user intervention. Small files; self-rotates
     // at ~200 entries via mtime sort (kept simple).
     const _bodyStr = JSON.stringify(_req);
+    let _obsPath = null;
+    let _obs = null;
     try {
       const { mkdirSync, writeFileSync } = await import('node:fs');
       const { tmpdir: _tmp } = await import('node:os');
@@ -271,7 +283,8 @@ async function _openaiAdapter(url, init) {
       const _rDir = _jr(_tmp(), 'silly-debug');
       mkdirSync(_rDir, { recursive: true });
       const _stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      writeFileSync(_jr(_rDir, _stamp + '-codex-request.json'), JSON.stringify({
+      _obsPath = _jr(_rDir, _stamp + '-codex-request.json');
+      _obs = {
         ts: Date.now(),
         url: 'https://chatgpt.com/backend-api/codex/responses',
         model: _req.model, stream: _req.stream,
@@ -281,8 +294,19 @@ async function _openaiAdapter(url, init) {
         input_preview: (_req.input || []).slice(0, 3).map(i => ({ type: i.type, role: i.role, content_parts: Array.isArray(i.content) ? i.content.map(c => ({ type: c.type, len: (c.text || '').length })) : null })),
         tools_count: (_req.tools || []).length,
         tool_names: (_req.tools || []).map(t => t.name),
+        observed_skill_call: false,
+        observed_toolsearch_call: false,
+        observed_followup_action: false,
+        observed_agent_spawn: false,
+        hint_skill_available: (_req.tools || []).some(t => t.name === 'Skill'),
+        hint_toolsearch_available: (_req.tools || []).some(t => t.name === 'ToolSearch'),
+        hint_schedulewakeup_available: (_req.tools || []).some(t => t.name === 'ScheduleWakeup'),
+        hint_agent_available: (_req.tools || []).some(t => t.name === 'Agent'),
+        hint_continuation_present: typeof _req.instructions === 'string' && _req.instructions.includes('<continuation-discipline>'),
+        observation_status: 'request-captured',
         extra_fields: Object.keys(_req).filter(k => !['model','instructions','input','store','stream','temperature','top_p','tools','parallel_tool_calls','service_tier'].includes(k)),
-      }, null, 2));
+      };
+      writeFileSync(_obsPath, JSON.stringify(_obs, null, 2));
     } catch {}
     let _r, _rAttempt = 0;
     // Composite signal: per-attempt 120s timeout + upstream abort (Ctrl+C /
@@ -336,6 +360,19 @@ async function _openaiAdapter(url, init) {
       // parseInt NaN-safe: malformed Retry-After falls back to 60s default.
       const _ra = Math.max(1, parseInt(_r.headers.get('Retry-After') || '', 10) || 60);
       await new Promise(_res => setTimeout(_res, Math.min(_ra, 30) * 1000));
+    }
+    if (_obs && _obsPath && _r.body) {
+      try {
+        const { writeFileSync } = await import('node:fs');
+        const _clone = _r.clone();
+        const _peek = await _clone.text();
+        _obs.observed_skill_call = /"name"\s*:\s*"Skill"|"type"\s*:\s*"function_call"[\s\S]*?"name"\s*:\s*"Skill"/.test(_peek);
+        _obs.observed_toolsearch_call = /"name"\s*:\s*"ToolSearch"|"type"\s*:\s*"function_call"[\s\S]*?"name"\s*:\s*"ToolSearch"/.test(_peek);
+        _obs.observed_agent_spawn = /"name"\s*:\s*"Agent"|"type"\s*:\s*"function_call"[\s\S]*?"name"\s*:\s*"Agent"/.test(_peek);
+        _obs.observed_followup_action = /"name"\s*:\s*"(Skill|ToolSearch|Agent|ScheduleWakeup)"|"type"\s*:\s*"function_call"/.test(_peek);
+        _obs.observation_status = 'response-observed';
+        writeFileSync(_obsPath, JSON.stringify(_obs, null, 2));
+      } catch {}
     }
     if (!_r.ok) {
       let _e = await _r.text();

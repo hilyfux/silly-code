@@ -488,6 +488,56 @@ test('skills: tameSkillPrompts preserves skill catalog entry (name + 1-line desc
   assert(!/Triggers on/.test(o), 'triggers tail not stripped');
 });
 
+test('skills: tameSkillPrompts preserves /using-superpowers and /boost catalog discoverability', () => {
+  const s = [
+    '- /using-superpowers skill. Description: Use when starting any conversation. Triggers on: "start", "conversation".',
+    '- /boost skill. Description: Use when optimizing, improving, or evolving a target over time. Triggers on: "optimize", "improve", "升级".',
+  ].join('\n');
+  const o = tameSkillPrompts(s);
+  assert(/using-superpowers skill/.test(o), 'using-superpowers entry lost');
+  assert(/boost skill/.test(o), 'boost entry lost');
+  assert(/starting any conversation/.test(o), 'using-superpowers description lost');
+  assert(/optimizing, improving, or evolving a target over time/.test(o), 'boost description lost');
+  assert(!/Triggers on/.test(o), 'triggers tail not stripped from catalog');
+});
+
+// This is intentionally a gap-lock test, not a green-claim test.
+// The current provider path preserves discoverability of the skill catalog text,
+// but does not prove that GPT will actually choose and execute these skills
+// effectively in end-to-end sillyx sessions.
+
+test('skills: preserved catalog + continuation + ToolSearch guidance still does not imply execution parity', () => {
+  const s = [
+    'You are Claude Code, Anthropic\'s official CLI for Claude.',
+    '- /using-superpowers skill. Description: Use when starting any conversation. Triggers on: "start", "conversation".',
+    '- /boost skill. Description: Use when optimizing, improving, or evolving a target over time. Triggers on: "optimize", "improve", "升级".',
+    '<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail:\nMonitor\nScheduleWakeup\n</system-reminder>',
+  ].join('\n');
+  const t1 = tameSkillPrompts(s);
+  const t2 = cleanIdentityForProvider(t1, 'OpenAI Codex');
+  const t3 = enforceContinuation(t2, [], [{ name: 'ToolSearch' }, { name: 'ScheduleWakeup' }]);
+  assert(/using-superpowers skill/.test(t3), 'skill discoverability lost');
+  assert(/boost skill/.test(t3), 'boost discoverability lost');
+  assert(/ToolSearch/.test(t3), 'ToolSearch guidance lost');
+  assert(/<continuation-discipline>/.test(t3), 'continuation discipline missing');
+  assert(!/Claude Code/.test(t3), 'Claude identity leaked');
+  assert(!/Triggers on:/.test(t3), 'trigger tails not stripped');
+  // Deliberately assert the boundary: this transformed prompt contains no proof
+  // that a downstream GPT model will actually invoke Skill / ToolSearch /
+  // ScheduleWakeup correctly. That requires behavior-level evidence elsewhere.
+  assert(!/execution parity achieved/i.test(t3), 'prompt transformation should not claim execution parity');
+});
+
+// This gap remains open by design until we have behavior-level evidence.
+// Passing prompt-flow tests means the adapter preserved the signals; it does not
+// mean sillyx matches first-party skill/subagent execution reliability.
+
+// This is intentionally a gap-lock test, not a green-claim test.
+// The current provider path preserves discoverability of the skill catalog text,
+// but does not prove that GPT will actually choose and execute these skills
+// effectively in end-to-end sillyx sessions.
+// Keeping this limitation explicit helps us avoid over-claiming compatibility.
+
 // ── Responses API thinking-block round-trip ──────────────────
 test('thinking: msgsToResponsesInput drops thinking blocks (no signature leak)', () => {
   // On session resume, prior-assistant messages may contain Claude-internal
@@ -641,6 +691,220 @@ test('build: calculateNonstreamingTimeout throw removed (sillyx high max_tokens 
     'Anthropic SDK "Streaming is required…" error string still present — pre-flight throw not fully neutered'
   );
 });
+
+test('debug contract: openai adapter documents failure taxonomy dump files', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'pipeline', 'patches', 'providers', 'openai.cjs'), 'utf8');
+  assert(/Failure taxonomy \/ debug contract for sillyx provider incidents/.test(src), 'failure taxonomy contract missing');
+  assert(/-codex-request\.json/.test(src), 'request dump contract missing');
+  assert(/-codex-fetch-error\.json/.test(src), 'fetch-error dump contract missing');
+  assert(/-codex-rejection\.json/.test(src), 'rejection dump contract missing');
+  assert(/preserved prompts do not imply execution parity/.test(src), 'behavior-gap rationale missing');
+  assert(/observed_skill_call/.test(src), 'observed_skill_call field missing');
+  assert(/observed_toolsearch_call/.test(src), 'observed_toolsearch_call field missing');
+  assert(/observed_followup_action/.test(src), 'observed_followup_action field missing');
+  assert(/observed_agent_spawn/.test(src), 'observed_agent_spawn field missing');
+  assert(/hint_skill_available/.test(src), 'hint_skill_available field missing');
+  assert(/hint_toolsearch_available/.test(src), 'hint_toolsearch_available field missing');
+  assert(/hint_schedulewakeup_available/.test(src), 'hint_schedulewakeup_available field missing');
+  assert(/hint_agent_available/.test(src), 'hint_agent_available field missing');
+  assert(/hint_continuation_present/.test(src), 'hint_continuation_present field missing');
+  assert(/observation_status/.test(src), 'observation_status field missing');
+  assert(/response-observed/.test(src), 'response observation status missing');
+  assert(/const _clone = _r\.clone\(\)/.test(src), 'response clone missing');
+  assert(/const _peek = await _clone\.text\(\)/.test(src), 'response-side observation peek missing');
+});
+
+test('behavior evaluator v2: treats observed Agent spawn as followup action signal', () => {
+  assert.deepStrictEqual(
+    evaluateBehaviorRuntimeEvidence({
+      instructions_len: 1500,
+      tool_names: ['Skill', 'ToolSearch', 'Agent'],
+      observed_skill_call: true,
+      observed_toolsearch_call: true,
+      observed_followup_action: true,
+      observed_agent_spawn: true,
+    }).verdict,
+    'behavior-observed'
+  );
+});
+
+test('debug contract: response observation regexes cover Skill ToolSearch Agent and generic function_call', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'pipeline', 'patches', 'providers', 'openai.cjs'), 'utf8');
+  assert(/"name"\\s\*:\\s\*"Skill"/.test(src), 'Skill observation regex missing');
+  assert(/"name"\\s\*:\\s\*"ToolSearch"/.test(src), 'ToolSearch observation regex missing');
+  assert(/"name"\\s\*:\\s\*"Agent"/.test(src), 'Agent observation regex missing');
+  assert(/"type"\\s\*:\\s\*"function_call"/.test(src), 'generic function_call observation regex missing');
+});
+
+
+// The request dump now carries observed-behavior placeholders so runtime
+// evaluators can consume a stable schema before full post-processing lands.
+
+// This contract is intentionally light-weight: it does not prove runtime capture
+// happened in a given session. It locks the evidence categories we require when
+// diagnosing sillyx skill/subagent failures, so future debugging stays comparable.
+
+function evaluateBehaviorReadiness(evidence) {
+  const promptFlow = !!evidence.promptFlowPreserved;
+  const requestFlow = !!evidence.requestFlowPreserved;
+  const runtimeDump = !!evidence.runtimeDumpAvailable;
+  const behaviorObserved = !!evidence.behaviorObserved;
+  if (behaviorObserved) return { verdict: 'behavior-observed', ready: true };
+  if (promptFlow && requestFlow && runtimeDump) return { verdict: 'ready-for-runtime-eval', ready: false };
+  if (promptFlow && requestFlow) return { verdict: 'missing-runtime-evidence', ready: false };
+  if (promptFlow) return { verdict: 'missing-request-evidence', ready: false };
+  return { verdict: 'insufficient-evidence', ready: false };
+}
+
+function evaluateBehaviorRuntimeEvidence(runtime) {
+  const tools = Array.isArray(runtime.tool_names) ? runtime.tool_names : [];
+  const hasSkill = tools.includes('Skill') || !!runtime.hint_skill_available;
+  const hasToolSearch = tools.includes('ToolSearch') || !!runtime.hint_toolsearch_available;
+  const hasScheduleWakeup = tools.includes('ScheduleWakeup') || !!runtime.hint_schedulewakeup_available;
+  const hasAgent = tools.includes('Agent') || !!runtime.hint_agent_available;
+  const requestShapePresent = !!runtime.instructions_len && (tools.length > 0 || hasSkill || hasToolSearch || hasScheduleWakeup || hasAgent);
+  const observedChain = !!runtime.observed_skill_call && !!runtime.observed_toolsearch_call && !!runtime.observed_followup_action;
+  const hintedReady = hasSkill && hasToolSearch && !!runtime.hint_continuation_present;
+  return {
+    requestShapePresent,
+    hasSkill,
+    hasToolSearch,
+    hasScheduleWakeup,
+    hasAgent,
+    hintedReady,
+    observedChain,
+    verdict: observedChain
+      ? 'behavior-observed'
+      : hintedReady
+        ? 'request-ready-behavior-unobserved'
+        : requestShapePresent
+          ? 'runtime-evidence-insufficient'
+          : 'runtime-evidence-insufficient',
+  };
+}
+
+function mergeBehaviorEvidence(evidence, runtime) {
+  const runtimeEval = evaluateBehaviorRuntimeEvidence(runtime || {});
+  return evaluateBehaviorReadiness({
+    ...evidence,
+    runtimeDumpAvailable: !!evidence.runtimeDumpAvailable || runtimeEval.requestShapePresent,
+    behaviorObserved: !!evidence.behaviorObserved || runtimeEval.observedChain,
+  });
+}
+
+test('evaluator scaffold: behavior parity still needs runtime evidence beyond prompt and request preservation', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const compatSrc = fs.readFileSync(path.join(__dirname, 'compat.test.cjs'), 'utf8');
+  const providerSrc = fs.readFileSync(path.join(__dirname, 'providers.test.cjs'), 'utf8');
+  const openaiSrc = fs.readFileSync(path.join(__dirname, '..', 'pipeline', 'patches', 'providers', 'openai.cjs'), 'utf8');
+  assert(/does not imply execution parity/.test(compatSrc), 'behavior gap warning missing from compat tests');
+  assert(/skill\/subagent prompt flow preserved/.test(providerSrc), 'provider prompt-flow baseline missing');
+  assert(/silly-debug/.test(openaiSrc), 'runtime debug capture path missing');
+});
+
+test('behavior evaluator v1: classifies readiness without over-claiming parity', () => {
+  assert.deepStrictEqual(
+    evaluateBehaviorReadiness({
+      promptFlowPreserved: true,
+      requestFlowPreserved: true,
+      runtimeDumpAvailable: true,
+      behaviorObserved: false,
+    }),
+    { verdict: 'ready-for-runtime-eval', ready: false }
+  );
+  assert.deepStrictEqual(
+    evaluateBehaviorReadiness({
+      promptFlowPreserved: true,
+      requestFlowPreserved: true,
+      runtimeDumpAvailable: true,
+      behaviorObserved: true,
+    }),
+    { verdict: 'behavior-observed', ready: true }
+  );
+  assert.deepStrictEqual(
+    evaluateBehaviorReadiness({
+      promptFlowPreserved: true,
+      requestFlowPreserved: false,
+      runtimeDumpAvailable: false,
+      behaviorObserved: false,
+    }),
+    { verdict: 'missing-request-evidence', ready: false }
+  );
+});
+
+test('behavior evaluator v2: classifies runtime dump evidence without faking parity', () => {
+  assert.deepStrictEqual(
+    evaluateBehaviorRuntimeEvidence({
+      instructions_len: 28386,
+      tool_names: ['Skill', 'ToolSearch', 'ScheduleWakeup', 'Agent'],
+      hint_continuation_present: true,
+      observed_skill_call: false,
+      observed_toolsearch_call: false,
+      observed_followup_action: false,
+    }),
+    {
+      requestShapePresent: true,
+      hasSkill: true,
+      hasToolSearch: true,
+      hasScheduleWakeup: true,
+      hasAgent: true,
+      hintedReady: true,
+      observedChain: false,
+      verdict: 'request-ready-behavior-unobserved',
+    }
+  );
+  assert.deepStrictEqual(
+    evaluateBehaviorRuntimeEvidence({
+      instructions_len: 1500,
+      tool_names: ['Skill', 'ToolSearch', 'ScheduleWakeup', 'Agent'],
+      observed_skill_call: true,
+      observed_toolsearch_call: true,
+      observed_followup_action: true,
+    }).verdict,
+    'behavior-observed'
+  );
+});
+
+test('behavior evaluator v2: merges runtime evidence into readiness verdict', () => {
+  assert.deepStrictEqual(
+    mergeBehaviorEvidence(
+      { promptFlowPreserved: true, requestFlowPreserved: true, runtimeDumpAvailable: false, behaviorObserved: false },
+      { instructions_len: 28386, tool_names: ['Skill', 'ToolSearch', 'ScheduleWakeup', 'Agent'] }
+    ),
+    { verdict: 'ready-for-runtime-eval', ready: false }
+  );
+  assert.deepStrictEqual(
+    mergeBehaviorEvidence(
+      { promptFlowPreserved: true, requestFlowPreserved: true, runtimeDumpAvailable: false, behaviorObserved: false },
+      {
+        instructions_len: 1500,
+        tool_names: ['Skill', 'ToolSearch', 'ScheduleWakeup', 'Agent'],
+        observed_skill_call: true,
+        observed_toolsearch_call: true,
+        observed_followup_action: true,
+      }
+    ),
+    { verdict: 'behavior-observed', ready: true }
+  );
+});
+
+// This evaluator is intentionally minimal. It does not infer that GPT behavior
+// is correct from prompt/request preservation alone; it only classifies whether
+// we have enough evidence to begin a true runtime behavior evaluation.
+// v2 extends this by consuming runtime dump facts, but still refuses to claim
+// parity unless actual tool-chain behavior was observed.
+
+// This scaffold is intentionally modest: it does not evaluate GPT behavior by
+// itself. It locks the three evidence surfaces the future behavior-level
+// evaluator must consume: compat gap warnings, provider request preservation,
+// and runtime debug dumps.
+
+// ── End-to-end: tame → clean → continuation order ────────────
 
 // ── End-to-end: tame → clean → continuation order ────────────
 test('pipeline order: tame strips hard-gate, clean renames Claude, continuation appends', () => {

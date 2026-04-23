@@ -1,0 +1,38 @@
+{
+  "model": "claude-opus-4-6",
+  "system": [
+    {
+      "type": "text",
+      "text": "You are Claude Code, Anthropic's official CLI for Claude.\nYou are an interactive agent that helps users with software engineering tasks.\n- /using-superpowers skill. Description: Use when starting any conversation. Triggers on: \"start\", \"conversation\".\n- /boost skill. Description: Use when optimizing, improving, or evolving a target over time. Triggers on: \"optimize\", \"improve\", \"升级\".\n<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail:\nMonitor\nScheduleWakeup\nWebFetch\n</system-reminder>"
+    }
+  ],
+  "messages": [
+    { "role": "user", "content": "Please use /using-superpowers and /boost to improve this system." }
+  ],
+  "stream": false,
+  "max_tokens": 512,
+  "tools": [
+    {
+      "name": "ToolSearch",
+      "description": "Load tool schemas by name.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "ScheduleWakeup",
+      "description": "Schedule when to resume work in /loop dynamic mode.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "delaySeconds": { "type": "number" }
+        },
+        "required": ["delaySeconds"]
+      }
+    }
+  ]
+}

@@ -594,11 +594,9 @@ function tameSkillPrompts(text) {
       // Extract tool names from the body (one per line after the header)
       const names = (body.match(/^\s*(\w+)\s*$/gm) || []).map(s => s.trim()).filter(Boolean);
       if (!names.length) return '';
-      return '[TOOL LOADING REQUIRED] These tools need their schemas loaded before use: ' +
+      return '[TOOL LOADING REQUIRED] Load these via ToolSearch before use: ' +
         names.join(', ') + '. ' +
-        'To use any of them: (1) Call ToolSearch with query "select:ToolName" to load its schema, ' +
-        '(2) then call the tool with the parameters returned. ' +
-        'Example: ToolSearch({query:"select:Monitor,ScheduleWakeup"}) then call Monitor/ScheduleWakeup normally.';
+        'Use ToolSearch({query:"select:ToolName"}), then call the tool.';
     }
   );
   // Strip UserPromptSubmit hook results (PUA activation, frustration hooks) —
@@ -633,6 +631,20 @@ function tameSkillPrompts(text) {
   // surrounding skill prose; just drop the graph body.
   text = text.replace(/```dot[\s\S]*?```/g, '');
   text = text.replace(/^digraph\s+\w+\s*\{[\s\S]*?^\}\s*$/gm, '');
+  // Compress a few generic upstream system-guide sentences that add token
+  // weight for third-party providers without changing tool semantics.
+  text = text.replace(
+    /All text you output outside of tool use is displayed to the user\. Output text to communicate with the user\. You can use Github-flavored markdown for formatting, and will be rendered in a monospace font using the CommonMark specification\./g,
+    'Write user-facing text normally; markdown is supported.'
+  );
+  text = text.replace(
+    /Tools are executed in a user-selected permission mode\. When you attempt to call a tool that is not automatically allowed by the user's permission mode or permission settings, the user will be prompted so that they can approve or deny the execution\. If the user denies a tool you call, do not re-attempt the exact same tool call\. Instead, think about why the user has denied the tool call and adjust your approach\./g,
+    'Tool calls may require user approval; if denied, adjust your approach instead of retrying the same call.'
+  );
+  text = text.replace(
+    /Tool results and user messages may include <system-reminder> or other tags\. Tags contain information from the system\. They bear no direct relation to the specific tool results or user messages in which they appear\./g,
+    'Treat <system-reminder> tags as system context, not user intent.'
+  );
   return text;
 }
 

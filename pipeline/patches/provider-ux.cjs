@@ -135,4 +135,18 @@ module.exports = function applyProviderUx({ patch }) {
     'function db(){let H,_=dC();if(_!==void 0)H=_;else{let q=C8()||{};H=process.env.ANTHROPIC_MODEL||q.model||void 0}if(H&&!MqH(H))return;return H}',
     'function db(){let H,_=dC();if(_!==void 0)H=_;else{let q=C8()||{};H=process.env.ANTHROPIC_MODEL||q.model||void 0}if(H&&!MqH(H))return;if(H&&typeof uq==="function"){var _p=uq(),_isGpt=typeof H==="string"&&H.toLowerCase().startsWith("gpt-");if((_p==="firstParty"&&_isGpt)||(_p==="openai"&&!_isGpt))return}return H}'
   );
+
+  // Patch 57: non-firstParty model-write guard on updateSettingsForSource (W8).
+  // Why: vanilla Claude Code shares ~/.claude/settings.json. When sillyx runs
+  // /model or passes --model, upstream invokes W8("userSettings", {model: X})
+  // which writes "gpt-5.4" (or another non-Claude slug) into the shared file.
+  // Opening vanilla `claude` afterward shows "Using gpt-5.4 (from .claude/settings.json)".
+  // Patch 56 stops the READ leak on our side; this patch stops the WRITE leak
+  // at its source. Strips the `model` key from any W8 update when the active
+  // provider is not firstParty. Other fields (permissions, fastMode, plugins,
+  // etc.) continue to persist normally. Claude firstParty path is byte-identical.
+  patch('57-settings-model-write-guard',
+    'function W8(H,_){if(H==="policySettings"||H==="flagSettings")return{error:null};',
+    'function W8(H,_){if(H==="policySettings"||H==="flagSettings")return{error:null};if(_&&typeof _==="object"&&"model"in _&&typeof uq==="function"&&uq()!=="firstParty"){var _u={};for(var _k in _){if(_k!=="model")_u[_k]=_[_k]}_=_u;if(Object.keys(_).length===0)return{error:null}}'
+  );
 };

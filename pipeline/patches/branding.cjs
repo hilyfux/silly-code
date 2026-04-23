@@ -315,7 +315,7 @@ module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix })
   // identity leak under our purity contract.
   patch('14a-welcome-hide-org-non-firstParty',
     '!process.env.IS_DEMO&&D.oauthAccount?.organizationName&&h8.createElement',
-    '!process.env.IS_DEMO&&M.oauthAccount?.organizationName&&(typeof uq!=="function"||uq()==="firstParty")&&V7.createElement'
+    '!process.env.IS_DEMO&&M.oauthAccount?.organizationName&&(typeof gq!=="function"||gq()==="firstParty")&&V7.createElement'
   )
 
   // Patch 14b: Don't inject user's email into agent system prompt for non-firstParty.
@@ -323,7 +323,7 @@ module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix })
   // For non-Claude providers, this leaks account email into the conversation.
   patch('14b-agent-prompt-hide-email',
     "let K=S5()?.emailAddress;return{...q&&{claudeMd:q},...K&&{userEmail:`The user's email address is",
-    "let K=(typeof uq==='function'&&uq()!=='firstParty')?null:S5()?.emailAddress;return{...q&&{claudeMd:q},...K&&{userEmail:`The user's email address is"
+    "let K=(typeof gq==='function'&&gq()!=='firstParty')?null:S5()?.emailAddress;return{...q&&{claudeMd:q},...K&&{userEmail:`The user's email address is"
   )
 
   // Patches 13a-l: Multi-color mascot — saturated rainbow plushie
@@ -339,11 +339,15 @@ module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix })
   const EMERALD = '#10b981'    // r2L (left leg), body-block #4
   const VIOLET = '#8b5cf6'     // r2R (right leg), right feet
   const INDIGO_BG = '#312e81'  // body-bar background (deep belly)
-  const B1 = '#ec4899'         // body block 1 — magenta
-  const B2 = '#f97316'         // body block 2 — orange
-  const B3 = '#eab308'         // body block 3 — gold
-  const B4 = '#10b981'         // body block 4 — emerald (= EMERALD)
-  const B5 = '#0ea5e9'         // body block 5 — sky
+  // Names are 5+ chars (not ≤3) to avoid collision with any
+  // mangled minified varmap value — see Iter 57/58 memory +
+  // docs/superpowers/plans/2026-04-23-darwin-varmap-gap-audit.md
+  // (previous `B2` collided with linux varmap `isCronEnabled_func`).
+  const BLOCK_1 = '#ec4899'    // body block 1 — magenta
+  const BLOCK_2 = '#f97316'    // body block 2 — orange
+  const BLOCK_3 = '#eab308'    // body block 3 — gold
+  const BLOCK_4 = '#10b981'    // body block 4 — emerald (= EMERALD)
+  const BLOCK_5 = '#0ea5e9'    // body block 5 — sky
   const FOOT_L = '#ec4899'     // left feet (matches block 1)
 
   // NuY (standard render, 7 spans)
@@ -367,11 +371,11 @@ module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix })
   patch('13e-mascot-body-bar',
     'createElement(L,{color:"clawd_body",backgroundColor:"clawd_background"},"█████")',
     `createElement(L,{backgroundColor:"${INDIGO_BG}"},` +
-      `t3.createElement(L,{color:"${B1}"},"█"),` +
-      `t3.createElement(L,{color:"${B2}"},"█"),` +
-      `t3.createElement(L,{color:"${B3}"},"█"),` +
-      `t3.createElement(L,{color:"${B4}"},"█"),` +
-      `t3.createElement(L,{color:"${B5}"},"█")` +
+      `t3.createElement(L,{color:"${BLOCK_1}"},"█"),` +
+      `t3.createElement(L,{color:"${BLOCK_2}"},"█"),` +
+      `t3.createElement(L,{color:"${BLOCK_3}"},"█"),` +
+      `t3.createElement(L,{color:"${BLOCK_4}"},"█"),` +
+      `t3.createElement(L,{color:"${BLOCK_5}"},"█")` +
     `)`
   )
   patch('13f-mascot-r2R',
@@ -410,12 +414,12 @@ module.exports = function applyBranding({ patch, patchAll, sillyVersionSuffix })
   patch('13k-mascot-apple-body',
     't3.createElement(L,{backgroundColor:"clawd_body"}," ".repeat(7))',
     `t3.createElement(L,null,` +
-      `t3.createElement(L,{color:"${B1}"},"█"),` +
-      `t3.createElement(L,{color:"${B2}"},"█"),` +
-      `t3.createElement(L,{color:"${B3}"},"█"),` +
-      `t3.createElement(L,{color:"${B3}"},"█"),` +
-      `t3.createElement(L,{color:"${B4}"},"█"),` +
-      `t3.createElement(L,{color:"${B5}"},"█"),` +
+      `t3.createElement(L,{color:"${BLOCK_1}"},"█"),` +
+      `t3.createElement(L,{color:"${BLOCK_2}"},"█"),` +
+      `t3.createElement(L,{color:"${BLOCK_3}"},"█"),` +
+      `t3.createElement(L,{color:"${BLOCK_3}"},"█"),` +
+      `t3.createElement(L,{color:"${BLOCK_4}"},"█"),` +
+      `t3.createElement(L,{color:"${BLOCK_5}"},"█"),` +
       `t3.createElement(L,{color:"${VIOLET}"},"█")` +
     `)`
   )

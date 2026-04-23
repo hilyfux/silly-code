@@ -103,7 +103,12 @@ async function _openaiAuth() {
   const _isJwt = _parts.length === 3;
   if (_isJwt) {
     try {
-      const _pay = JSON.parse(atob(_parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+      // Use unicode escape for base64url's underscore character so no bare
+      // `_` token lives at a word-boundary in source — ci-upgrade's varmap
+      // rewrite on darwin would otherwise clobber this regex if AnthropicSDK
+      // minifies from `_` to something else. See
+      // memory/project-patch-source-token-collisions.md (Iter 58).
+      const _pay = JSON.parse(atob(_parts[1].replace(/-/g, '+').replace(new RegExp(String.fromCharCode(95), 'g'), '/')));
       if (_pay.exp && Date.now() < (_pay.exp * 1000 - 120000)) {
         return { headers: { 'Authorization': 'Bearer ' + _openaiData.access_token }, kind: 'oauth' };
       }

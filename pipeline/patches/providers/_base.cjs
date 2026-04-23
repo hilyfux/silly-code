@@ -590,7 +590,7 @@ function tameSkillPrompts(text) {
   // the instructions in plain language without Claude-specific jargon.
   text = text.replace(
     /<system-reminder>\s*The following deferred tools are now available via ToolSearch\.([\s\S]*?)<\/system-reminder>/g,
-    (_, body) => {
+    (_evt, body) => {
       // Extract tool names from the body (one per line after the header)
       const names = (body.match(/^\s*(\w+)\s*$/gm) || []).map(s => s.trim()).filter(Boolean);
       if (!names.length) return '';

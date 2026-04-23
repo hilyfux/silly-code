@@ -42,24 +42,7 @@ function applyProviderCore({ patch }) {
     'return ' + detectChain + ':' + MATCH.DETECT.replace('return ', '')
   );
 
-  // ── Patch 13: Model resolution ──
-  const runtimeIdExt = allRuntimeIds.map(id => `||q==="${id}"`).join('');
-  patch('13-model-resolution',
-    MATCH.RESOLVE,
-    MATCH.RESOLVE.replace(
-      'q==="firstParty"||q==="anthropicAws"}',
-      'q==="firstParty"||q==="anthropicAws"' + runtimeIdExt + '}'
-    )
-  );
-
-  // ── Patch 14: Provider family ──
-  patch('14-provider-family',
-    MATCH.FAMILY,
-    MATCH.FAMILY.replace(
-      'q==="foundry"||q==="mantle"}',
-      'q==="foundry"||q==="mantle"' + runtimeIdExt + '}'
-    )
-  );
+  // Patches 13+14 (model-resolution/provider-family extensions) removed: `H===`/`q===` typo made them no-ops (byte-identical output verified).
 
   // ── Patches 11-12: Adapter injection ──
   const adaptersWithCode = providers.filter(p => p.adapter);

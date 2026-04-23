@@ -199,10 +199,15 @@ const SHIMS = ['silly.js', 'sillyx.js', 'sillye.js', 'sillyxs.js', 'sillyes.js']
       /sillye\.cmd['"]?\s+--version/.test(src),
       `${relPath}: self-smoke must invoke sillye.cmd --version`
     );
-    // Check $LASTEXITCODE — without it a crashed shim is silently "OK"
+    // Check exit code — without it a crashed shim is silently "OK". Accept
+    // either direct `$LASTEXITCODE -ne 0` branching or the defensive form
+    // `$smokeCode = $LASTEXITCODE` + `$smokeCode -ne 0` (required when
+    // wrapping the call in try/catch to defang NativeCommandError under
+    // SILLY_TRACE_BOOT=1 sessions — see install-ps1-self-smoke.test.cjs).
     assert.ok(
-      /\$LASTEXITCODE\s+-ne\s+0/.test(src),
-      `${relPath}: self-smoke must branch on $LASTEXITCODE -ne 0`
+      /\$LASTEXITCODE\s+-ne\s+0/.test(src) ||
+        (/\$smokeCode\s*=\s*\$LASTEXITCODE/.test(src) && /\$smokeCode\s+-ne\s+0/.test(src)),
+      `${relPath}: self-smoke must branch on $LASTEXITCODE (direct or via $smokeCode)`
     );
     // Fallback instruction references SILLY_TRACE_BOOT
     assert.ok(

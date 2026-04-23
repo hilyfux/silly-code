@@ -45,6 +45,31 @@ async function drainStream(stream) {
     console.log('  mapModel: PASS');
   }
 
+  // ── sdkPrompt identity purity (C1) ──
+  {
+    const openaiCfg = require('../pipeline/patches/providers/openai.cjs');
+    const claudeCfg = require('../pipeline/patches/providers/claude.cjs');
+    assert.ok(typeof openaiCfg.identity.sdkPrompt === 'string' && openaiCfg.identity.sdkPrompt.length > 0,
+      'openai sdkPrompt must be non-null');
+    assert.ok(!/Claude Code/.test(openaiCfg.identity.sdkPrompt),
+      'openai sdkPrompt must not reference Claude Code');
+    assert.ok(typeof claudeCfg.identity.sdkPrompt === 'string',
+      'claude sdkPrompt must remain a string for firstParty default');
+    console.log('  sdkPrompt identity purity: PASS');
+  }
+
+  // ── subagent haiku→gpt-5.3-codex regression lock ──
+  {
+    const openaiCfg = require('../pipeline/patches/providers/openai.cjs');
+    const prodTable = openaiCfg._injectableData._codexModelTable;
+    assert.ok(prodTable && typeof prodTable === 'object', '_codexModelTable must export');
+    assert.strictEqual(mapModel('claude-haiku', prodTable), 'gpt-5.3-codex',
+      'subagent haiku→gpt-5.3-codex remap regressed — silent 3-minute timeout');
+    assert.strictEqual(mapModel('claude-haiku-4-5', prodTable), 'gpt-5.3-codex',
+      'claude-haiku-4-5 must also route to gpt-5.3-codex');
+    console.log('  haiku subagent regression lock: PASS');
+  }
+
   // ── _cleanToolArgs ──
   {
     // Strips empty strings and nulls
@@ -405,6 +430,30 @@ async function drainStream(stream) {
     assert.strictEqual(body.content[0].name, 'bash');
     assert.deepStrictEqual(body.content[0].input, { cmd: 'ls' });
     console.log('  collectResponsesSse tool_call: PASS');
+  }
+
+  // ── tameSkillPrompts extended hook family (C2) ──
+  {
+    const { tameSkillPrompts } = require('../pipeline/patches/providers/_base.cjs');
+    const cases = [
+      { name: 'UserPromptSubmit', shouldTame: true },
+      { name: 'SubagentStart',   shouldTame: true },
+      { name: 'PreToolUse',      shouldTame: true },
+      { name: 'SessionStart',    shouldTame: true },
+      { name: 'Stop',            shouldTame: false },
+      { name: 'PostToolUse',     shouldTame: false },
+    ];
+    for (const { name, shouldTame } of cases) {
+      const input = '<system-reminder>\n' + name + ' hook additional context: body containing Skill reference\n</system-reminder>';
+      const output = tameSkillPrompts(input);
+      if (shouldTame) {
+        assert.ok(output.includes('[HOOK CONTEXT] ' + name), name + ' hook should be labeled');
+        assert.ok(/call ToolSearch\(\{query:"select:Skill"\}\)/.test(output), name + ' hook with Skill must get ToolSearch hint');
+      } else {
+        assert.ok(!output.includes('[HOOK CONTEXT] ' + name), name + ' must NOT be in whitelist');
+      }
+    }
+    console.log('  tameSkillPrompts extended hooks: PASS');
   }
 
   console.log('\nAll _base tests passed.');

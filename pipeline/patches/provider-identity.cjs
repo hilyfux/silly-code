@@ -48,12 +48,15 @@ module.exports = function applyProviderIdentity({ patch }) {
 
   // ── Patch 62: SDK identity ──
   // Anthropic server validates z14 integrity for firstParty.
-  const sdkPrompt = providers.find(p => p.identity.sdkPrompt)?.identity.sdkPrompt
-    || 'You are Silly Code, a multi-provider AI coding assistant, running within the Agent SDK.';
+  // Per-provider sdkPrompt resolution: each non-firstParty provider emits its
+  // own identity.sdkPrompt (claude.cjs keeps the generic Silly Code string as
+  // the shared fallback). Using providers.find() here leaked Claude's sdkPrompt
+  // into OpenAI because claude.cjs loads first — mirroring agentBranches below.
+  const fallbackSdk = 'You are Silly Code, a multi-provider AI coding assistant, running within the Agent SDK.';
   const originalSdk = "You are Claude Code, Anthropic\\'s official CLI for Claude, running within the Claude Agent SDK.";
   const sdkBranches = providers
     .filter(p => p.runtimeId !== 'firstParty')
-    .map(p => `if(_p==="${p.runtimeId}")return"${sdkPrompt}";`)
+    .map(p => `if(_p==="${p.runtimeId}")return"${p.identity.sdkPrompt || fallbackSdk}";`)
     .join('');
   patch('62-sdk-identity',
     MATCH.SDK_ID,

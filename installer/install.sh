@@ -91,25 +91,16 @@ fi
 ok "Repo: $INSTALL_DIR ($(git -C "$INSTALL_DIR" rev-parse --short HEAD))"
 
 # ── Build patched binary ─────────────────────────────────────
-# patch.cjs needs no runtime deps — pure text transformation. Run it first
-# so a failure stops install before we touch node_modules.
+# patch.cjs is pure text transformation + deploys vendored ws into
+# pipeline/build/node_modules/ws. Zero downloads at this step. The clone is
+# complete: vendor/ws/ ships in the repo (~192KB, MIT-licensed).
 info "Applying patches (node pipeline/patch.cjs)..."
 ( cd "$INSTALL_DIR" && node pipeline/patch.cjs >/dev/null )
 ok "Patched binary: $INSTALL_DIR/pipeline/build/cli-patched.js"
 
-# ── Runtime deps (just `ws` — bun-bundled cli.js requires it externally) ─
-# Install ws into pipeline/build/node_modules/ — the only dir Node will resolve
-# from when running cli-patched.js, and isolated from the repo's dev package.json
-# (which has 80+ deps we don't want for a user install). Mirrors the dist
-# vendorWs() pattern: temp package.json → npm install ws → strip metadata.
 if [ ! -f "$INSTALL_DIR/pipeline/build/node_modules/ws/package.json" ]; then
-  info "Installing runtime dep (ws)..."
-  RUNTIME_DEPS="$INSTALL_DIR/pipeline/build"
-  mkdir -p "$RUNTIME_DEPS"
-  echo '{"name":"silly-code-runtime","private":true}' > "$RUNTIME_DEPS/package.json"
-  ( cd "$RUNTIME_DEPS" && npm install ws@^8 --no-save --no-audit --no-fund --ignore-scripts --silent ) \
-    || warn "ws install failed — sillyx/sillye may crash on adapter paths."
-  rm -f "$RUNTIME_DEPS/package.json" "$RUNTIME_DEPS/package-lock.json"
+  err "Vendored ws missing after patch.cjs — repo corrupt. Reinstall:"
+  err "  curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
 fi
 
 # ── Vendor ripgrep so adapter can find it ────────────────────

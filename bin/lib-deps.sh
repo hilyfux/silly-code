@@ -1,15 +1,20 @@
-# lib-deps.sh — runtime-deps helper shared by install.sh and silly-common.sh.
+# lib-deps.sh — runtime dep verifier shared by silly-common.sh + silly.
 # Self-contained: no dependency on caller-defined err/info/warn/ok.
+#
+# Open-source install model (Iter 102): vendored ws lives in repo at
+# vendor/ws/, deployed by patch.cjs to pipeline/build/node_modules/ws.
+# Zero downloads at install time, zero downloads at runtime. If the dep
+# is missing the install is broken — point at reinstall instead of
+# silently fetching, which would mask the underlying corruption.
 
-# $1: repo root. Returns 0 on success/skip, 1 on npm-install failure.
-ensure_runtime_deps() {
+# $1: repo root. Returns 0 when ws is present, 1 otherwise.
+check_runtime_deps() {
   local root="$1"
-  [ -f "$root/package.json" ] || return 0
-  if [ -d "$root/node_modules/ws" ] && [ ! "$root/package.json" -nt "$root/node_modules" ]; then
+  if [ -f "$root/pipeline/build/node_modules/ws/package.json" ]; then
     return 0
   fi
-  echo "[silly] Installing runtime dependencies (this may take a minute)..." >&2
-  (cd "$root" && npm install --no-audit --no-fund --ignore-scripts >/dev/null 2>&1) && return 0
-  echo "[silly] npm install failed — run it manually in $root" >&2
+  echo "[silly] Runtime dep missing: pipeline/build/node_modules/ws" >&2
+  echo "[silly] The install is incomplete. Reinstall:" >&2
+  echo "[silly]   curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash" >&2
   return 1
 }

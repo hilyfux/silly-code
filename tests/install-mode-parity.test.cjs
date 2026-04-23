@@ -70,26 +70,66 @@ const path = require('path');
       /Layout ambiguous/.test(launcherJs) &&
       /hasVersions.*hasPipeline/s.test(launcherJs)],
 
-    // Runtime deps (ws) — open-source install model places ws at
-    // pipeline/build/node_modules/ws so Node's default module resolution
-    // walks straight from cli-patched.js's directory and finds it. No
-    // NODE_PATH gymnastics. Legacy dist installs still honor NODE_PATH
-    // via silly-common.sh + silly-launcher.js (back-compat for users who
-    // still have a tarball install on disk); install.{sh,ps1} no longer
-    // create that layout but the runtime can still consume it.
+    // Runtime deps (ws) — Iter 102 vendored model.
+    //
+    // Iter 101 install.{sh,ps1} ran `npm install ws` at install time, then
+    // `rm -f pipeline/build/package.json` which deleted the {type:commonjs}
+    // marker patch.cjs had written → Node walked up to repo root, found
+    // {type:module} from upstream, treated cli-patched.js as ESM, crashed
+    // with `exports is not defined`. Two layered bugs in one ordering.
+    //
+    // Iter 102 fix: ws is committed to repo at vendor/ws/ (192KB, MIT).
+    // patch.cjs deploys it via fs.cpSync to pipeline/build/node_modules/ws.
+    // No npm install ever runs. Clone is complete. lib-deps.sh is check-only,
+    // hard-fail on missing dep with reinstall pointer.
 
-    // install.{sh,ps1} both install ws into pipeline/build/node_modules
-    // so the standard Node resolver walks straight to it.
-    ['install.sh installs ws under pipeline/build/node_modules', () => {
-      const sh = fs.readFileSync(path.join(root, 'installer', 'install.sh'), 'utf8');
-      return /pipeline\/build\/node_modules\/ws/.test(sh) &&
-        /npm install ws/.test(sh);
+    ['vendored ws is committed to repo at vendor/ws/', () => {
+      const wsPkg = path.join(root, 'vendor', 'ws', 'package.json');
+      if (!fs.existsSync(wsPkg)) return false;
+      const pkg = JSON.parse(fs.readFileSync(wsPkg, 'utf8'));
+      return pkg.name === 'ws' && /^8\./.test(pkg.version);
     }],
 
-    ['install.ps1 installs ws under pipeline\\build\\node_modules', () => {
+    ['patch.cjs deploys vendored ws into pipeline/build/node_modules/ws', () => {
+      const patchCjs = fs.readFileSync(path.join(root, 'pipeline', 'patch.cjs'), 'utf8');
+      return /vendor.*ws/.test(patchCjs) &&
+        /node_modules.*ws/.test(patchCjs) &&
+        /fs\.cpSync/.test(patchCjs);
+    }],
+
+    ['patch.cjs writes pipeline/build/package.json with {type:commonjs}', () => {
+      const patchCjs = fs.readFileSync(path.join(root, 'pipeline', 'patch.cjs'), 'utf8');
+      return /buildPkg.*package\.json/s.test(patchCjs) &&
+        /type.*commonjs/.test(patchCjs);
+    }],
+
+    ['install.sh runs zero npm-install commands', () => {
+      const sh = fs.readFileSync(path.join(root, 'installer', 'install.sh'), 'utf8');
+      return !/npm install/.test(sh);
+    }],
+
+    ['install.ps1 runs zero npm-install commands', () => {
       const ps1 = fs.readFileSync(path.join(root, 'installer', 'install.ps1'), 'utf8');
-      return /pipeline\\build\\node_modules\\ws/.test(ps1) &&
-        /npm install ws/.test(ps1);
+      return !/npm install/.test(ps1);
+    }],
+
+    ['install.sh hard-fails when vendored ws missing post-patch', () => {
+      const sh = fs.readFileSync(path.join(root, 'installer', 'install.sh'), 'utf8');
+      return /pipeline\/build\/node_modules\/ws\/package\.json/.test(sh) &&
+        /Vendored ws missing/.test(sh);
+    }],
+
+    ['install.ps1 hard-fails when vendored ws missing post-patch', () => {
+      const ps1 = fs.readFileSync(path.join(root, 'installer', 'install.ps1'), 'utf8');
+      return /pipeline\\build\\node_modules\\ws\\package\.json/.test(ps1) &&
+        /Vendored ws missing/.test(ps1);
+    }],
+
+    ['lib-deps.sh exports check_runtime_deps and runs no npm install', () => {
+      const lib = fs.readFileSync(path.join(root, 'bin', 'lib-deps.sh'), 'utf8');
+      return /check_runtime_deps\(\)/.test(lib) &&
+        !/npm install/.test(lib) &&
+        /pipeline\/build\/node_modules\/ws/.test(lib);
     }],
 
     // Legacy dist-mode back-compat: silly-common.sh and silly-launcher.js

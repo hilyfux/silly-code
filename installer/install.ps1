@@ -108,7 +108,9 @@ $headSha = (& git -C $installDir rev-parse --short HEAD).Trim()
 Ok "Repo: $installDir ($headSha)"
 
 # ── Build patched binary ───────────────────────────────────────
-# patch.cjs is pure text transformation — needs no runtime deps.
+# patch.cjs is pure text transformation + deploys vendored ws into
+# pipeline\build\node_modules\ws. Zero downloads at this step. The clone is
+# complete: vendor\ws\ ships in the repo (~192KB, MIT-licensed).
 Info 'Applying patches (node pipeline\patch.cjs)...'
 Push-Location $installDir
 try {
@@ -119,24 +121,9 @@ try {
 }
 Ok "Patched binary: $installDir\pipeline\build\cli-patched.js"
 
-# ── Runtime dep (ws) ──────────────────────────────────────────
-# Install ws into pipeline\build\node_modules\ — the only dir Node will resolve
-# from when running cli-patched.js, isolated from the repo's dev package.json.
 $wsPkg = Join-Path $installDir 'pipeline\build\node_modules\ws\package.json'
 if (-not (Test-Path $wsPkg)) {
-  Info 'Installing runtime dep (ws)...'
-  $runtimeDeps = Join-Path $installDir 'pipeline\build'
-  New-Item -ItemType Directory -Force -Path $runtimeDeps | Out-Null
-  Set-Content -Path (Join-Path $runtimeDeps 'package.json') -Value '{"name":"silly-code-runtime","private":true}' -Encoding ASCII
-  Push-Location $runtimeDeps
-  try {
-    & npm install ws@^8 --no-save --no-audit --no-fund --ignore-scripts --silent
-    if ($LASTEXITCODE -ne 0) { Warn "ws install failed (exit $LASTEXITCODE) — sillyx/sillye may crash on adapter paths." }
-  } finally {
-    Pop-Location
-  }
-  Remove-Item -Force (Join-Path $runtimeDeps 'package.json') -ErrorAction SilentlyContinue
-  Remove-Item -Force (Join-Path $runtimeDeps 'package-lock.json') -ErrorAction SilentlyContinue
+  Fail "Vendored ws missing after patch.cjs — repo corrupt. Reinstall via the install URL."
 }
 
 # ── Vendor ripgrep so adapter can find it ────────────────────

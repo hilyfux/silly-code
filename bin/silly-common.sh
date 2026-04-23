@@ -152,10 +152,11 @@ ensure_patched_binary() {
     return 0
   fi
 
-  # dev mode: install workspace deps + rebuild if missing. In dist mode, the
-  # tarball ships .deps/node_modules/ws — no runtime npm install.
+  # dev mode (open-source install): rebuild patched binary if missing.
+  # patch.cjs deploys vendored ws into pipeline/build/node_modules/ws — no
+  # network, no install-time/runtime npm. check_runtime_deps verifies ws
+  # is present and points at reinstall if not.
   PATCHED="$root/pipeline/build/cli-patched.js"
-  ensure_runtime_deps "$root"
   if [ ! -f "$PATCHED" ]; then
     if [ -f "$root/pipeline/patch.cjs" ]; then
       info "Building patched binary (first run)..."
@@ -166,4 +167,5 @@ ensure_patched_binary() {
       exit 1
     fi
   fi
+  check_runtime_deps "$root" || exit 1
 }

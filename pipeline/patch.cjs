@@ -148,6 +148,24 @@ console.log(`  Output: ${OUTPUT}\n`)
   fs.writeFileSync(buildPkg, JSON.stringify({ type: 'commonjs' }, null, 2) + '\n')
 }
 
+// Deploy vendored ws into pipeline/build/node_modules/ws.
+// The bun-bundled cli.js externally `require('ws')`; Node's resolver walks up
+// from cli-patched.js's directory and finds it here. Vendoring (vs runtime
+// `npm install ws`) is mandatory: user directive — clone must be complete,
+// no install-time or runtime downloads, no half-installed states.
+{
+  const buildDir = path.dirname(OUTPUT)
+  const wsSrc = path.join(__dirname, '..', 'vendor', 'ws')
+  const wsDst = path.join(buildDir, 'node_modules', 'ws')
+  if (!fs.existsSync(wsSrc)) {
+    console.error(`  FATAL: vendored ws missing at ${wsSrc} — repo corrupt, reinstall`)
+    process.exit(1)
+  }
+  fs.mkdirSync(path.dirname(wsDst), { recursive: true })
+  fs.rmSync(wsDst, { recursive: true, force: true })
+  fs.cpSync(wsSrc, wsDst, { recursive: true })
+}
+
 // Vendor symlink: cli-patched.js locates vendor/ripgrep/ relative to itself,
 // but lives in pipeline/build/ (not the npm package dir). Without this link
 // Glob/Grep silently fail with ENOENT.

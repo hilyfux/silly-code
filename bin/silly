@@ -320,7 +320,8 @@ case "${1:-}" in
         fi
         if git pull --ff-only origin main 2>/dev/null; then
           ok "Updated to $(git rev-parse --short HEAD)"
-          ensure_runtime_deps "$ROOT_DIR" || warn "rebuild may crash at launch"
+          # ws is vendored under vendor/ws/ and deployed by patch.cjs — git pull
+          # already brought any vendor/ updates, no separate dep step needed.
           info "Rebuilding patched binary..."
           if node "$ROOT_DIR/pipeline/patch.cjs"; then
             ok "Binary updated"

@@ -604,15 +604,31 @@ function tameSkillPrompts(text) {
         'Use ToolSearch({query:"select:ToolName"}), then call the tool.';
     }
   );
-  // UserPromptSubmit hooks are mixed: legacy PUA/frustration hooks are harmful
-  // noise for GPT, but modern hook ecosystems use the same channel for skill,
-  // verifier, MCP-tool, and project-specific routing context. Default-preserve
-  // non-toxic context so sillyx doesn't silently break hook-based workflows.
-  text = text.replace(/<system-reminder>\s*UserPromptSubmit hook([\s\S]*?)<\/system-reminder>/g, (_all, body) => {
+  // Hook channels are mixed: legacy PUA/frustration hooks are harmful noise for
+  // GPT, but modern hook ecosystems reuse these channels for skill, verifier,
+  // MCP-tool, and project-specific routing context. Default-preserve non-toxic
+  // context so sillyx doesn't silently break hook-based workflows.
+  //
+  // Whitelist is conservative: only channels likely to carry Skill/tool
+  // context are rewritten with the ToolSearch driving-hint. Other channels
+  // (Stop/SubagentStop/PostToolUse/etc.) are left to later passes that already
+  // handle the generic <system-reminder> cleanup.
+  const SKILL_TAMING_HOOKS = new Set([
+    'UserPromptSubmit',
+    'SubagentStart',
+    'PreToolUse',
+    'SessionStart',
+  ]);
+  const hookNamePattern = Array.from(SKILL_TAMING_HOOKS).join('|');
+  const hookRe = new RegExp(
+    '<system-reminder>\\s*(' + hookNamePattern + ') hook([\\s\\S]*?)</system-reminder>',
+    'g'
+  );
+  text = text.replace(hookRe, (_all, hookName, body) => {
     const raw = String(body || '').replace(/^\s*(additional context|hook additional context)\s*:\s*/i, '').trim();
     if (!raw) return '';
     if (/\b(PUA|frustration|rage bait|emotional coercion)\b/i.test(raw)) return '';
-    return '[HOOK CONTEXT] UserPromptSubmit: ' + raw +
+    return '[HOOK CONTEXT] ' + hookName + ': ' + raw +
       (/\bSkill\b/.test(raw) ? ' If the Skill schema is not loaded, call ToolSearch({query:"select:Skill"}) first.' : '');
   });
   // Strip the EXTREMELY-IMPORTANT blocks that force skill invocation

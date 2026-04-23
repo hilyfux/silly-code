@@ -647,6 +647,59 @@ console.log('Build integrity tests\n');
   );
 })();
 
+// ── 10e. Windows cron label parity invariant ──
+//
+// bin/install-upgrade-cron.sh (macOS branch) registers a launchd agent under
+// the fixed label `com.silly-code.upgrade-check`. bin/silly-launcher.js's
+// cmdCron is the Windows counterpart — today a helpful stub that explains
+// Task Scheduler isn't wired yet. When Task Scheduler support DOES land, the
+// Windows side must reuse the exact same label string so `silly cron status`
+// on Windows can discover a job scheduled on the same user's macOS machine
+// (shared home dir, dual-boot, NFS-mounted HOME, etc.) and so log/plist names
+// stay symmetric across platforms.
+//
+// This test locks the invariant two-sided: (1) the bash installer must keep
+// the exact label string, and (2) silly-launcher.js must either reference it
+// (Task Scheduler landed) OR carry a comment acknowledging the pending parity
+// so a future contributor can't introduce a DIFFERENT Windows label by accident.
+
+(function testWindowsCronLabelParity() {
+  const shPath = path.join(__dirname, '..', 'bin', 'install-upgrade-cron.sh');
+  const launcherPath = path.join(__dirname, '..', 'bin', 'silly-launcher.js');
+  if (!fs.existsSync(shPath) || !fs.existsSync(launcherPath)) {
+    console.log('  Windows cron label parity (launcher or installer not found, skipping): SKIP');
+    return;
+  }
+  const shSrc = fs.readFileSync(shPath, 'utf8');
+  const launcherSrc = fs.readFileSync(launcherPath, 'utf8');
+
+  const LABEL = 'com.silly-code.upgrade-check';
+  const shHits = (shSrc.match(new RegExp(LABEL.replace(/\./g, '\\.'), 'g')) || []).length;
+  assert.ok(
+    shHits >= 1,
+    `bin/install-upgrade-cron.sh: launchd label "${LABEL}" not found — ` +
+    `macOS cron registration relies on this exact string. If the label has been renamed, ` +
+    `update this test + bin/silly-launcher.js's cmdCron to match.`
+  );
+
+  const launcherHasLabel = launcherSrc.includes(LABEL);
+  const launcherHasPendingMarker =
+    /task\s*scheduler/i.test(launcherSrc) &&
+    /(not\s*yet\s*supported|pending|not\s*implemented)/i.test(launcherSrc);
+
+  assert.ok(
+    launcherHasLabel || launcherHasPendingMarker,
+    `bin/silly-launcher.js::cmdCron neither references the launchd label "${LABEL}" ` +
+    `nor acknowledges Windows Task Scheduler as a pending port. One of the two ` +
+    `must be true — otherwise the cron label parity invariant is silent and a ` +
+    `future Task Scheduler PR could use a DIFFERENT label, breaking symmetric ` +
+    `status/logs across a shared HOME / dual-boot setup.`
+  );
+
+  const mode = launcherHasLabel ? 'label-present' : 'pending-marker';
+  console.log(`  Windows cron label parity invariant (${mode}): PASS`);
+})();
+
 // ── 11. Patch 55b — picker Current-model cross-provider filter ──
 
 (function testPickerCurrentModelFilter() {

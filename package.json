@@ -16,8 +16,10 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node tests/base.test.cjs && node tests/schema.test.cjs && node tests/providers.test.cjs && node tests/build-integrity.test.cjs",
-    "build": "node pipeline/patch.cjs"
+    "test": "node tests/base.test.cjs && node tests/agent-core.test.cjs && node tests/schema.test.cjs && node tests/providers.test.cjs && node tests/compat.test.cjs && node tests/build-integrity.test.cjs && node tests/build-invariants.test.cjs && node tests/match-token-drift.test.cjs && node tests/varmap-parity.test.cjs && node tests/gen-auth-files.test.cjs && node tests/install-mode-parity.test.cjs && node tests/launcher-parity.test.cjs && node tests/provider-flag-parity.test.cjs && node tests/release-manifest.test.cjs && node tests/upgrade-check.test.cjs && node tests/ci-upgrade-kg.test.cjs",
+    "test:full": "npm test",
+    "build": "node pipeline/patch.cjs",
+    "audit:doc-refs": "node pipeline/audit-doc-refs.cjs"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",

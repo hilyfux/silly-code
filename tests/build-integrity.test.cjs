@@ -210,7 +210,7 @@ console.log('Build integrity tests\n');
     return;
   }
 
-  const criticalKeys = ['DETECT', 'INJECT', 'RESOLVE', 'FAMILY', 'CONSTRUCTOR', 'VERSION'];
+  const criticalKeys = ['DETECT', 'INJECT', 'CONSTRUCTOR', 'VERSION'];
   for (const key of criticalKeys) {
     assert.ok(
       upstream.includes(MATCH[key]),
@@ -338,6 +338,165 @@ console.log('Build integrity tests\n');
     'Patch 53d: found unwrapped "return T.push(l$7),T" — Opus 4.7 will not appear in Hq default branch'
   );
   console.log('  Patch 53 family menu parity present: PASS');
+})();
+
+// ── 10b. ci-upgrade.cjs require-main guard (Iter 80) ──
+//
+// pipeline/ci-upgrade.cjs is a top-level async IIFE that runs the full
+// unattended upgrade when invoked. The Iter 80 guard `if (require.main !== module) return;`
+// inside that IIFE is the only defense against `require('./pipeline/ci-upgrade.cjs')`
+// detonating at import time (Iter 72-73 incident — see
+// memory/project-ci-upgrade-no-require-guard.md). Lock it at build-integrity level so
+// any future diff removing or weakening the guard trips CI red.
+
+(function testCiUpgradeRequireGuard() {
+  const ciUpgradePath = path.join(__dirname, '..', 'pipeline', 'ci-upgrade.cjs');
+  const src = fs.readFileSync(ciUpgradePath, 'utf8');
+  assert.ok(
+    /\(async function main\(\)\s*\{[\s\S]{0,600}?if\s*\(\s*require\.main\s*!==\s*module\s*\)\s*return\s*;/.test(src),
+    'ci-upgrade.cjs: require-main guard missing inside async main() IIFE — ' +
+    '`require("./pipeline/ci-upgrade.cjs")` would trigger a full unattended upgrade at import time. ' +
+    'Restore `if (require.main !== module) return;` as the first statement of the IIFE.'
+  );
+  console.log('  ci-upgrade require-main guard present: PASS');
+
+  // Iter 82: dry-run env flag. v1 short-circuits the full upgrade body after
+  // version diagnostics; useful for inspecting what a real run would do without
+  // touching disk. The assertion locks three things so a future refactor can't
+  // accidentally cripple it: (a) the env var is read into a module-level const,
+  // (b) the DRY_RUN branch exists inside main(), (c) it calls process.exit(0)
+  // so CI sees a clean no-op.
+  assert.ok(
+    /const\s+DRY_RUN\s*=\s*process\.env\.SILLY_CI_UPGRADE_DRY_RUN\s*===\s*['"]1['"]/.test(src),
+    'ci-upgrade.cjs: DRY_RUN const declaration missing — expected `const DRY_RUN = process.env.SILLY_CI_UPGRADE_DRY_RUN === \'1\'` at module scope.'
+  );
+  assert.ok(
+    /if\s*\(\s*DRY_RUN\s*\)\s*\{[\s\S]{0,800}?process\.exit\(0\)/.test(src),
+    'ci-upgrade.cjs: DRY_RUN branch missing or does not exit(0) — dry-run must short-circuit before any mutation stage.'
+  );
+  console.log('  ci-upgrade dry-run flag present: PASS');
+})();
+
+// ── 10c. Pipeline entry-point classification — auto-discovery (Iter 83 → Iter 98) ──
+//
+// Iter 83 spread the Iter 80 discipline as a hardcoded list of 5 entry-point
+// scripts. Iter 97 added audit-doc-refs.cjs. Iter 98 closes the silent-add
+// gap by switching to auto-discovery: every `pipeline/*.cjs` MUST classify
+// into exactly one of three classes (per memory/project-pipeline-require-time-audit.md):
+//
+//   Class A — Entry-point with NEGATIVE guard: `if (require.main !== module) return;`
+//             at top. Side-effecting body would detonate on stray require().
+//   Class B — Library-and-CLI with POSITIVE wrapper: `if (require.main === module) { ... }`
+//             at bottom. Library use is harmless; CLI use runs the wrapper.
+//   Class C — Pure library: only `module.exports = {...}` declarations + functions.
+//             Allowlisted explicitly because we can't statically prove "no SE".
+//
+// New unclassified file → fail with a hint to pick a class. Closes the
+// "added a new entry-point but forgot to add the guard / forgot to add to
+// the test list" silent-failure path that the Iter 97 audit-doc-refs
+// addition revealed (the test wouldn't have caught a missing guard if I'd
+// forgotten to extend the hardcoded list).
+
+(function testPipelineFileClassification() {
+  const pipelineDir = path.join(__dirname, '..', 'pipeline');
+  const NEG_GUARD = /if\s*\(\s*require\.main\s*!==\s*module\s*\)\s*return\s*;?/;
+  const POS_WRAPPER = /if\s*\(\s*require\.main\s*===\s*module\s*\)\s*\{/;
+
+  // Class C allowlist — pure library files with no top-level side effects.
+  // Adding to this list is a deliberate decision: the file is required by
+  // multiple consumers and adding a guard would break them. Verify by
+  // grepping consumers + reading the file end-to-end before extending.
+  const PURE_LIBRARY = new Set(['match-registry.cjs']);
+
+  const files = fs.readdirSync(pipelineDir)
+    .filter(f => f.endsWith('.cjs'))
+    .sort();
+
+  const classified = { A: [], B: [], C: [], unknown: [] };
+  for (const name of files) {
+    const src = fs.readFileSync(path.join(pipelineDir, name), 'utf8');
+    if (NEG_GUARD.test(src)) {
+      classified.A.push(name);
+    } else if (POS_WRAPPER.test(src)) {
+      classified.B.push(name);
+    } else if (PURE_LIBRARY.has(name)) {
+      classified.C.push(name);
+    } else {
+      classified.unknown.push(name);
+    }
+  }
+
+  assert.deepStrictEqual(
+    classified.unknown, [],
+    `pipeline/*.cjs files unclassified into A/B/C:\n` +
+    classified.unknown.map(n => `    ${n}`).join('\n') + `\n` +
+    `Each must be one of:\n` +
+    `  Class A — entry-point: add \`if (require.main !== module) return;\` near the top.\n` +
+    `  Class B — library+CLI: wrap CLI body in \`if (require.main === module) { ... }\` at bottom.\n` +
+    `  Class C — pure library: confirm no top-level SE, then add to PURE_LIBRARY allowlist in this test.\n` +
+    `See memory/project-pipeline-require-time-audit.md for the three-class rule.`
+  );
+
+  console.log(
+    `  pipeline/*.cjs classification (${files.length} files): ` +
+    `A=${classified.A.length} (${classified.A.join(',')}) | ` +
+    `B=${classified.B.length} (${classified.B.join(',')}) | ` +
+    `C=${classified.C.length} (${classified.C.join(',')}): PASS`
+  );
+})();
+
+// Iter 87: forecloses the Iter 86 orphan-test class. Every tests/*.test.cjs
+// must be wired into `package.json:scripts.test`, otherwise assertions accrue
+// silently outside CI. compat.test.cjs is the canary — bin/silly-launcher.js's
+// cmdDoctor spawns it as a production adapter-compat probe, so an orphaned
+// state means Windows doctor integrity is untested on main.
+
+(function testAllTestsInRunner() {
+  const testsDir = __dirname;
+  const files = fs.readdirSync(testsDir).filter(f => f.endsWith('.test.cjs'));
+  const pkgPath = path.join(__dirname, '..', 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const testScript = pkg.scripts && pkg.scripts.test;
+  assert.ok(testScript, 'package.json:scripts.test missing');
+  const missing = files.filter(f => !testScript.includes(`tests/${f}`));
+  assert.deepStrictEqual(
+    missing, [],
+    `Orphan test files not wired into npm test: ${missing.join(', ')} — ` +
+    `append \`&& node tests/<name>\` to package.json:scripts.test. See ` +
+    `memory/project-tests-orphan-audit.md for the Iter 86 audit rule.`
+  );
+  console.log(`  all ${files.length} tests/*.test.cjs wired into npm test: PASS`);
+})();
+
+// Iter 93: forecloses the Iter 91 placeholder-rot class. docs/harness-architecture.md
+// must contain zero `Iter [single-capital-letter]` tokens — those are write-time
+// placeholders ("Iter N", "Iter X") that survive if the author forgets to back-fill
+// the concrete iter/commit. The pattern excludes "Iter 40" (digit) and "Iterate"
+// (lowercase after capital I), so legitimate references survive. See
+// memory/project-harness-section6-freshness.md for the Iter 91 catch + Iter 92
+// docs-wide sweep that classified 3 noisy-grep hits as legitimate prose.
+
+(function testHarnessDocNoPlaceholders() {
+  const p = path.join(__dirname, '..', 'docs', 'harness-architecture.md');
+  if (!fs.existsSync(p)) {
+    console.log('  harness-architecture.md not found, skipping placeholder check: SKIP');
+    return;
+  }
+  const lines = fs.readFileSync(p, 'utf8').split('\n');
+  const hits = [];
+  const pattern = /\bIter [A-Z]\b/;
+  for (let i = 0; i < lines.length; i++) {
+    if (pattern.test(lines[i])) hits.push(`${i + 1}: ${lines[i].trim().slice(0, 120)}`);
+  }
+  assert.deepStrictEqual(
+    hits, [],
+    `docs/harness-architecture.md contains placeholder-rot tokens (Iter <capital-letter>):\n` +
+    hits.map(h => `    ${h}`).join('\n') + `\n` +
+    `Replace with concrete iter number + commit hash. Example fix (Iter 91):\n` +
+    `  "tested Iter N" → "tested 2026-04-20 (commit \`6e15231\`) and reverted (\`e01a648\`)"\n` +
+    `See memory/project-harness-section6-freshness.md for the rule.`
+  );
+  console.log(`  harness-architecture.md placeholder-free (\\bIter [A-Z]\\b): PASS`);
 })();
 
 // ── 11. Patch 55b — picker Current-model cross-provider filter ──

@@ -107,6 +107,18 @@ if (Test-Path (Join-Path $installDir '.git')) {
 $headSha = (& git -C $installDir rev-parse --short HEAD).Trim()
 Ok "Repo: $installDir ($headSha)"
 
+# ── Vendor ripgrep so patch.cjs fail-fast passes ─────────────
+# MUST run BEFORE patch.cjs: patch.cjs exits 1 if vendor/ripgrep missing on
+# Windows (no npx cache fallback). Installer stages rg.exe here so patch.cjs
+# sees a pre-populated vendor dir.
+if ($rgBin -and (Test-Path $rgBin)) {
+  $nodeArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
+  $rgVendorDir = [System.IO.Path]::Combine($installDir, 'pipeline', 'build', 'vendor', 'ripgrep', "$nodeArch-win32")
+  New-Item -ItemType Directory -Force -Path $rgVendorDir | Out-Null
+  Copy-Item $rgBin (Join-Path $rgVendorDir 'rg.exe') -Force
+  Ok "Vendored ripgrep: $rgVendorDir\rg.exe"
+}
+
 # ── Build patched binary ───────────────────────────────────────
 # patch.cjs is pure text transformation + deploys vendored ws into
 # pipeline\build\node_modules\ws. Zero downloads at this step. The clone is
@@ -124,14 +136,6 @@ Ok "Patched binary: $installDir\pipeline\build\cli-patched.js"
 $wsPkg = Join-Path $installDir 'pipeline\build\node_modules\ws\package.json'
 if (-not (Test-Path $wsPkg)) {
   Fail "Vendored ws missing after patch.cjs — repo corrupt. Reinstall via the install URL."
-}
-
-# ── Vendor ripgrep so adapter can find it ────────────────────
-if ($rgBin -and (Test-Path $rgBin)) {
-  $nodeArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
-  $rgVendorDir = [System.IO.Path]::Combine($installDir, 'pipeline', 'build', 'vendor', 'ripgrep', "$nodeArch-win32")
-  New-Item -ItemType Directory -Force -Path $rgVendorDir | Out-Null
-  Copy-Item $rgBin (Join-Path $rgVendorDir 'rg.exe') -Force
 }
 
 # ── Create Windows .cmd launchers ─────────────────────────────

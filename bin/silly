@@ -3,7 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
-source "$ROOT_DIR/bin/silly-common.sh"
+# dist tarball relocates shared libs to bin/.lib/; dev repo keeps them flat in bin/
+LIB_DIR="$ROOT_DIR/bin/.lib"
+[ -d "$LIB_DIR" ] || LIB_DIR="$ROOT_DIR/bin"
+source "$LIB_DIR/silly-common.sh"
 
 DATA_DIR="${SILLY_CODE_DATA:-$HOME/.silly-code}"
 mkdir -p "$DATA_DIR"
@@ -198,7 +201,7 @@ case "${1:-}" in
   cron)
     case "${2:-status}" in
       install)
-        exec bash "$ROOT_DIR/bin/install-upgrade-cron.sh"
+        exec bash "$LIB_DIR/install-upgrade-cron.sh"
         ;;
       uninstall)
         if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -234,7 +237,7 @@ case "${1:-}" in
         ;;
       run)
         info "running upgrade-check now..."
-        exec bash "$ROOT_DIR/bin/upgrade-check.sh"
+        exec bash "$LIB_DIR/upgrade-check.sh"
         ;;
       *)
         err "Unknown cron subcommand: ${2:-}"

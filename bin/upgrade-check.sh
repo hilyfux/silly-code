@@ -39,7 +39,14 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# dist tarball: bin/.lib/upgrade-check.sh — go up TWO to install root
+# dev repo:    bin/upgrade-check.sh        — go up ONE
+if [ "$(basename "$_SCRIPT_DIR")" = ".lib" ]; then
+  ROOT_DIR="$(cd "$_SCRIPT_DIR/../.." && pwd)"
+else
+  ROOT_DIR="$(cd "$_SCRIPT_DIR/.." && pwd)"
+fi
 cd "$ROOT_DIR"
 
 DRY_RUN="${SILLY_UPGRADE_CHECK_DRY_RUN:-0}"

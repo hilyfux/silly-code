@@ -8,9 +8,23 @@ set -euo pipefail
 # (TCC sandbox). Prefer the ~/.local/share/silly-code/ install copy — it's in
 # ~/Library territory and launchd reads it without "Full Disk Access" grants.
 INSTALL_ROOT="$HOME/.local/share/silly-code"
-SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# dist tarball: bin/.lib/install-upgrade-cron.sh — go up TWO to install root
+# dev repo:    bin/install-upgrade-cron.sh       — go up ONE
+if [ "$(basename "$_SCRIPT_DIR")" = ".lib" ]; then
+  SRC_ROOT="$(cd "$_SCRIPT_DIR/../.." && pwd)"
+else
+  SRC_ROOT="$(cd "$_SCRIPT_DIR/.." && pwd)"
+fi
 
-if [ -x "$INSTALL_ROOT/bin/upgrade-check.sh" ]; then
+# Resolve trigger path under a given root: prefer bin/.lib/ (dist), fall back to bin/ (dev)
+_trigger_for() {
+  if   [ -x "$1/bin/.lib/upgrade-check.sh" ]; then echo "$1/bin/.lib/upgrade-check.sh"
+  elif [ -x "$1/bin/upgrade-check.sh" ];      then echo "$1/bin/upgrade-check.sh"
+  fi
+}
+
+if [ -n "$(_trigger_for "$INSTALL_ROOT")" ]; then
   ROOT_DIR="$INSTALL_ROOT"
 elif [[ "$SRC_ROOT" == "$HOME/Desktop/"* || "$SRC_ROOT" == "$HOME/Documents/"* || "$SRC_ROOT" == "$HOME/Downloads/"* ]]; then
   echo "error: source tree at $SRC_ROOT is under a TCC-protected directory."
@@ -21,7 +35,8 @@ else
   ROOT_DIR="$SRC_ROOT"
 fi
 
-TRIGGER="$ROOT_DIR/bin/upgrade-check.sh"
+TRIGGER="$(_trigger_for "$ROOT_DIR")"
+[ -n "$TRIGGER" ] || { echo "error: upgrade-check.sh not found under $ROOT_DIR" >&2; exit 1; }
 [ -x "$TRIGGER" ] || chmod +x "$TRIGGER"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then

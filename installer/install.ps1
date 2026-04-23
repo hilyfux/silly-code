@@ -1,5 +1,19 @@
 $ErrorActionPreference = 'Stop'
 
+# Force TLS 1.2 (and 1.3 if available). PowerShell 5.x on Windows defaults to
+# TLS 1.0/1.1 which GitHub rejects with "基础连接已经关闭: 发送时发生错误"
+# (the underlying connection was closed: an error occurred on a send). Must
+# run BEFORE any Invoke-WebRequest. Bitwise-OR so we don't downgrade callers
+# that already enabled stronger protocols.
+try {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor `
+    [Net.SecurityProtocolType]::Tls12
+  if ([Enum]::IsDefined([Net.SecurityProtocolType], 'Tls13')) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor `
+      [Net.SecurityProtocolType]::Tls13
+  }
+} catch {}
+
 $installDir = if ($env:SILLY_CODE_HOME) { $env:SILLY_CODE_HOME } else { Join-Path $HOME '.local\share\silly-code' }
 $binDir     = Join-Path $HOME '.local\bin'
 $dataDir    = if ($env:SILLY_CODE_DATA) { $env:SILLY_CODE_DATA } else { Join-Path $HOME '.silly-code' }
@@ -61,15 +75,30 @@ if (Get-Command rg -ErrorAction SilentlyContinue) {
 }
 
 # ── Download tarball ─────────────────────────────────────────────────────────
+# Two-strategy download: Invoke-WebRequest first (works on most setups);
+# curl.exe fallback (ships in Windows 10 1803+, handles TLS / proxy / redirect
+# cases that .NET WebRequest still mangles in 2026). If both fail, we surface
+# the original PowerShell error AND tell the user how to download manually.
 Info 'Downloading silly-code...'
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid())
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 try {
   $tgz = Join-Path $tmp 'silly-code.tar.gz'
+  $iwrErr = $null
   try {
     Invoke-WebRequest -Uri $downloadUrl -OutFile $tgz -UseBasicParsing
   } catch {
-    Fail "Download failed: $($_.Exception.Message). Visit https://github.com/hilyfux/silly-code/releases"
+    $iwrErr = $_.Exception.Message
+    Warn "Invoke-WebRequest failed ($iwrErr). Trying curl.exe fallback..."
+    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+      $curlOut = & curl.exe -fsSL --retry 3 --retry-delay 2 -o $tgz $downloadUrl 2>&1
+      if ($LASTEXITCODE -ne 0) {
+        Fail "Download failed via both Invoke-WebRequest and curl.exe.`n  IWR error : $iwrErr`n  curl error: $curlOut`n  Manual: download $downloadUrl in a browser, then re-run with `$env:SILLY_CODE_TARBALL=<path>`."
+      }
+      Ok 'Downloaded via curl.exe fallback'
+    } else {
+      Fail "Download failed: $iwrErr.`n  curl.exe not present (Windows 10 1803+ ships it). Manual: download $downloadUrl in a browser."
+    }
   }
 
   # ── Extract ───────────────────────────────────────────────────────────────

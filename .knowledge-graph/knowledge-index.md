@@ -15,6 +15,7 @@ docs/guide/CLAUDE.md: guide/user
 docs/memory/CLAUDE.md: memory/memory
 docs/reference/CLAUDE.md: reference/refer
 docs/superpowers/specs/CLAUDE.md: specs/architect
+installer/CLAUDE.md: installer/TLS+sync
 pipeline/CLAUDE.md: pipeline/patch
 pipeline/patches/CLAUDE.md: patches/patch
 pipeline/patches/providers/CLAUDE.md: providers/provi

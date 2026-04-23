@@ -5,7 +5,7 @@
  * Consumed by: provider-core, provider-ux, provider-identity, upgrade-probe, ci-upgrade
  *
  * Tri-layer anchor model:
- *   Layer 1 (varmap): EH, uq, uM, $T, Kd, DR1 — auto-renamed by ci-upgrade
+ *   Layer 1 (varmap): EH, uq, uM, DR1 — auto-renamed by ci-upgrade
  *   Layer 2 (content-anchor): qI6, joq, Doq, wB — auto-re-anchored via string tail
  *   Layer 2b (self-anchored): z2 — function pattern → rename causes build fail
  *   Layer 3 (bare inject): kV, Qi, YU, Yh — MUST have structural guard below
@@ -15,8 +15,6 @@
 const MATCH = {
   DETECT:      'return EH(process.env.CLAUDE_CODE_USE_BEDROCK)?"bedrock"',
   INJECT:      'M=uM(q);if(M==="bedrock")',
-  RESOLVE:     'function $T(H=uq()){return H==="firstParty"||H==="anthropicAws"}',
-  FAMILY:      'function Kd(H=uq()){return H==="firstParty"||H==="anthropicAws"||H==="foundry"||H==="mantle"}',
   CONTEXT_DEFAULT: 'AE6=200000',
   DISPLAY:     'function z2(H){if(uq()==="foundry")return;',
   IDENTITY:    'qI6="You are Claude Code, Anthropic\'s official CLI for Claude."',
@@ -64,16 +62,42 @@ function verifyAnchors(upstreamSrc) {
 }
 
 // ── Varmap discovery ──
-// Returns the path to the newest varmap-<ver>.json under pipeline/, using
-// semver-aware ordering (so varmap-2.1.114 > varmap-2.1.2, which a plain
-// string sort would reverse). Returns null if none are present.
+// Returns the path to the varmap-<ver>.json that matches the upstream binary
+// checked into `pipeline/upstream/package/`. Rationale: assertions against the
+// patched build (which comes from that exact upstream) need the matching
+// varmap, not a draft varmap staged ahead of an upstream bump.
+//
+// Resolution order:
+//   1. Exact match: `varmap-<upstream.version>.json` (platform-plain file preferred)
+//   2. Fallback: highest semver varmap (legacy behavior — used when upstream
+//      package.json is missing or unreadable, e.g. in ci-upgrade dry runs)
+//
+// Filename convention: `varmap-<ver>.json` (canonical/darwin) or
+// `varmap-<ver>-<platform>-<arch>.json` (per-platform). Only the canonical
+// file is considered here; platform-specific variants are consumed separately
+// (see tests/varmap-parity.test.cjs).
 function latestVarmap(pipelineDir) {
   const fs = require('fs');
   const path = require('path');
-  const files = fs.readdirSync(pipelineDir).filter(f => /^varmap-.+\.json$/.test(f));
-  if (files.length === 0) return null;
   const parse = v => v.split('.').map(n => parseInt(n, 10) || 0);
-  files.sort((a, b) => {
+
+  const allFiles = fs.readdirSync(pipelineDir).filter(f => /^varmap-.+\.json$/.test(f));
+  if (allFiles.length === 0) return null;
+
+  // Canonical (no platform suffix) varmaps only.
+  const canonical = allFiles.filter(f => /^varmap-\d+\.\d+\.\d+\.json$/.test(f));
+
+  // Try to pin to upstream's actual version.
+  try {
+    const pkgPath = path.join(pipelineDir, 'upstream', 'package', 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const pin = `varmap-${pkg.version}.json`;
+    if (canonical.includes(pin)) return path.join(pipelineDir, pin);
+  } catch { /* fall through to highest-semver */ }
+
+  // Fallback: highest semver canonical, or highest across all if no canonicals.
+  const pool = canonical.length ? canonical : allFiles;
+  pool.sort((a, b) => {
     const pa = parse(a.slice(7, -5));
     const pb = parse(b.slice(7, -5));
     for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -82,7 +106,7 @@ function latestVarmap(pipelineDir) {
     }
     return 0;
   });
-  return path.join(pipelineDir, files[files.length - 1]);
+  return path.join(pipelineDir, pool[pool.length - 1]);
 }
 
 module.exports = { MATCH, BARE_INJECT_TOKENS, verifyAnchors, latestVarmap };

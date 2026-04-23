@@ -15,6 +15,13 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// Guard against require-time detonation. Same pattern as pipeline/ci-upgrade.cjs
+// (Iter 80): the entire file body below spawns python3 subprocesses, scans
+// upstream binary, writes to .knowledge-graph/, and can process.exit(1|2). A
+// stray require() would trigger the full audit. Iter 83 closure —
+// defense-in-depth, not a feature.
+if (require.main !== module) return;
+
 const ROOT = path.join(__dirname, '..');
 const UPSTREAM = path.join(__dirname, 'upstream/package/cli.js');
 const PRIVACY_CJS = path.join(__dirname, 'patches/privacy.cjs');

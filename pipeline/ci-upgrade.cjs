@@ -23,6 +23,13 @@ const UPSTREAM_DIR = path.join(PIPELINE, 'upstream');
 const PATCHES_DIR = path.join(PIPELINE, 'patches');
 const PKG = '@anthropic-ai/claude-code';
 const TEST_MODE = process.env.SILLY_CI_UPGRADE_TEST_MODE === '1';
+// DRY_RUN (Iter 82): print intended actions and exit cleanly before any
+// disk-mutating stage. Useful for inspecting "what would this run do" without
+// detonating npm-pack + bun-extract + varmap-regen + cross-patch-rename. v1
+// scope: short-circuits the whole upgrade body after diagnostics; future v2
+// can thread per-stage dry-run through applyVarRenames / applyRenamesAcrossPatches
+// (see memory/project-ci-upgrade-dry-run-gap.md leverage #2 plan).
+const DRY_RUN = process.env.SILLY_CI_UPGRADE_DRY_RUN === '1';
 
 function envJson(name, fallback = null) {
   const raw = process.env[name];
@@ -441,8 +448,54 @@ function applyRenamesAcrossPatches(renames) {
 
 function applyVarRenames(oldMap, newMap) {
   if (!oldMap || !newMap) return 0;
+  // Iter 72: platform guard. `oldMap` (pre-upgrade staged varmap) and
+  // `newMap` (post-upgrade candidate varmap) MUST describe the same bundle
+  // platform — cross-platform renames silently corrupt patch source
+  // (Iter 23 landmine: `Kd` means `providerFamily` on darwin and
+  // `sessionCronTasks_remover` on linux). The source of truth for the
+  // currently staged platform is `upstream/package/package.json::silly-code:platform`.
+  //   * soft check: if either side is missing `platform` (e.g. legacy
+  //     varmap-2.1.114.json pre-Iter-72), skip the assertion so upgrade
+  //     can still run through the transition.
+  //   * hard check: if both declare `platform`, they MUST match each other
+  //     AND match the staged upstream bundle. Mismatch → throw before any
+  //     rewrite touches patch source.
+  if (oldMap.platform && newMap.platform && oldMap.platform !== newMap.platform) {
+    throw new Error(
+      `ci-upgrade: cross-platform varmap rename blocked — oldMap.platform="${oldMap.platform}" but newMap.platform="${newMap.platform}". ` +
+      `A rename pair drawn from different-platform bundles silently corrupts patch source. ` +
+      `Fix: regenerate the new-version varmap against the same platform as the staged upstream (see bun-extract.cjs --platform).`
+    );
+  }
+  try {
+    const upstreamPkgPath = path.join(UPSTREAM_DIR, 'package', 'package.json');
+    if (fs.existsSync(upstreamPkgPath)) {
+      const upstreamPkg = JSON.parse(fs.readFileSync(upstreamPkgPath, 'utf8'));
+      const stagedPlatform = upstreamPkg['silly-code:platform'];
+      if (stagedPlatform && newMap.platform && stagedPlatform !== newMap.platform) {
+        throw new Error(
+          `ci-upgrade: varmap platform mismatch — newMap.platform="${newMap.platform}" but staged upstream is "${stagedPlatform}" (${upstreamPkgPath}). ` +
+          `Regenerate the varmap for ${stagedPlatform} before applying renames.`
+        );
+      }
+    }
+  } catch (e) {
+    if (e instanceof SyntaxError) { /* malformed upstream package.json — skip guard, let downstream fail loud */ }
+    else throw e;
+  }
+  // Iter 71: tighten schema filter. Only semantic-key → mangled-name string
+  // pairs participate in the cross-patch word-boundary rewrite; metadata
+  // fields (`platform`, `version`, any future `_`-prefixed reserved key)
+  // and non-string values must never be coerced to a rename pair. Prior
+  // code only filtered `version`, leaving `platform` as a silent-corrupt
+  // hole if an upgrade ever shipped with a different `platform` header.
+  const isSemanticKey = (k) =>
+    k !== 'version' && k !== 'platform' && !k.startsWith('_');
   const renames = Object.keys(newMap)
-    .filter(k => k !== 'version' && oldMap[k] && oldMap[k] !== newMap[k])
+    .filter((k) => isSemanticKey(k)
+      && typeof oldMap[k] === 'string'
+      && typeof newMap[k] === 'string'
+      && oldMap[k] && oldMap[k] !== newMap[k])
     .map(k => [oldMap[k], newMap[k], k]);
   if (!renames.length) { log('  no varmap renames to apply'); return 0; }
   log(`  applying ${renames.length} varmap renames: ${renames.map(r => `${r[0]}→${r[1]}(${r[2]})`).join(', ')}`);
@@ -548,6 +601,14 @@ function writeOutput(kv) {
 
 // ── Main ────────────────────────────────────────────────────
 (async function main() {
+  // Guard against require-time detonation. This file is an unattended upgrade
+  // runner; `require('./pipeline/ci-upgrade.cjs')` from a sibling test or probe
+  // would otherwise trigger the full npm-pack + bun-extract + varmap-regen +
+  // cross-patch-rename flow at import time (see memory/project-ci-upgrade-
+  // no-require-guard.md — Iter 72-73 incident). Only the direct `node
+  // pipeline/ci-upgrade.cjs` invocation should execute the upgrade body.
+  if (require.main !== module) return;
+
   const current = getCurrentVersion();
   const latest = getLatestVersion();
   currentVersionForFailure = current;
@@ -558,6 +619,23 @@ function writeOutput(kv) {
   if (current === latest) {
     log('already current, nothing to do');
     concludeAlreadyCurrent(current, latest);
+  }
+
+  // Iter 82: dry-run exit. Print the intended action plan and exit before
+  // touching disk. Deliberately placed AFTER version diagnostics (so dry-run
+  // output includes current→latest) and BEFORE every mutation stage.
+  if (DRY_RUN) {
+    log(`DRY-RUN: would upgrade ${current} → ${latest}`);
+    log('DRY-RUN: planned stages (all skipped):');
+    log('  1. fetchTarball + stageUpstream (npm pack + write upstream/package/)');
+    log('  2. bumpVersionRefs (rewrite deps.json, match-registry.cjs, branding.cjs)');
+    log('  3. regenerateVarmap (run upgrade-probe derive step)');
+    log('  4. applyVarRenames (cross-patch word-boundary rewrite)');
+    log('  5. runPatch + content-anchor rename sweep');
+    log('  6. npm test');
+    log('  7. git commit + push (commit-and-push stage)');
+    log('DRY-RUN: no disk mutations performed; exiting 0');
+    process.exit(0);
   }
 
   // Before staging: load OLD varmap for rename diff

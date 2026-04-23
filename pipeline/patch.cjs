@@ -15,6 +15,14 @@ const path = require('path')
 const os = require('os')
 const { execSync } = require('child_process')
 
+// Guard against require-time detonation. Same pattern as pipeline/ci-upgrade.cjs
+// (Iter 80): the entire file body below runs at require-time (git rev-parse,
+// fs.readFileSync of upstream cli.js, patch module loading, writeFileSync of
+// build output, symlink vendoring, process.exit on failure). A stray
+// `require('./pipeline/patch.cjs')` from any diagnostic/test would trigger a
+// full patch run. Iter 83 closure — defense-in-depth, not a feature.
+if (require.main !== module) return
+
 const INPUT = process.argv[2] || path.join(__dirname, 'upstream/package/cli.js')
 const OUTPUT = process.argv[3] || path.join(__dirname, 'build/cli-patched.js')
 

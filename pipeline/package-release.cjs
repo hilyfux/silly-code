@@ -6,6 +6,13 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// Guard against require-time detonation. Same pattern as pipeline/ci-upgrade.cjs
+// (Iter 80): the entire file body below runs at require-time — stage() wipes
+// dist/, vendorWs() spawns npm install, packTar() shells out to `tar`. A stray
+// require() would detonate the full release build. Iter 83 closure —
+// defense-in-depth, not a feature.
+if (require.main !== module) return;
+
 const ROOT = path.resolve(__dirname, '..');
 const BUILD_DIR = path.join(ROOT, 'pipeline', 'build');
 const PATCHED_CLI = path.join(BUILD_DIR, 'cli-patched.js');
@@ -43,6 +50,7 @@ function stage() {
   }
 
   const libFromBin = [
+    'auth-files.sh',
     'install-upgrade-cron.sh',
     'lib-deps.sh',
     'silly-auth.js',

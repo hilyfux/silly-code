@@ -16,6 +16,13 @@
 const fs = require('fs');
 const path = require('path');
 
+// Guard against require-time detonation. Same pattern as pipeline/ci-upgrade.cjs
+// (Iter 80): the entire file body below runs at require-time (reads upstream
+// cli.js, match-registry.cjs, varmap, iterates MATCH block, ends with
+// process.exit(missingUnguarded)). A stray require() from any diagnostic would
+// trigger the full probe. Iter 83 closure — defense-in-depth, not a feature.
+if (require.main !== module) return;
+
 const ROOT = path.join(__dirname, '..');
 const PIPELINE = __dirname;
 const UPSTREAM = path.join(PIPELINE, 'upstream/package/cli.js');
@@ -106,8 +113,13 @@ function countOccurrences(token) {
 
 // ── Classify each token ──
 const varmapValues = new Map(); // minified → semantic
+// Iter 71: align filter with ci-upgrade.cjs::applyVarRenames and
+// tests/match-token-drift.test.cjs — skip metadata fields (`platform`,
+// `version`, future `_`-prefixed reserved keys) and non-string values so a
+// stray meta entry cannot poison the classifier.
 for (const [k, v] of Object.entries(varmap)) {
-  if (k === 'version') continue;
+  if (k === 'version' || k === 'platform' || k.startsWith('_')) continue;
+  if (typeof v !== 'string' || v.length === 0) continue;
   varmapValues.set(v, k);
 }
 

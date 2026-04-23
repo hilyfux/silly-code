@@ -1,4 +1,5 @@
 {
+  "platform": "darwin-arm64",
   "isEnvTruthy_in_getAPIProvider": "EH",
   "getAPIProvider": "uq",
   "modelAwareProviderResolver": "uM",

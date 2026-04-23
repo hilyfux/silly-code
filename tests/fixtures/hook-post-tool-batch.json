@@ -1,0 +1,38 @@
+{
+  "model": "claude-opus-4-6",
+  "system": [
+    {
+      "type": "text",
+      "text": "You are Claude Code, Anthropic's official CLI for Claude.\nYou are an interactive agent that helps users with software engineering tasks.\n<system-reminder>\nPostToolBatch hook additional context: 3 bash calls completed — ready for summary. Invoke Skill (boost) for batch review.\n</system-reminder>\n<system-reminder>\nUserPromptExpansion hook additional context: /help expanded into Skill list. Available skills: using-superpowers, boost. Use ToolSearch to load Skill schema.\n</system-reminder>"
+    }
+  ],
+  "messages": [
+    { "role": "user", "content": "Summarize what just happened in the batch." }
+  ],
+  "stream": false,
+  "max_tokens": 512,
+  "tools": [
+    {
+      "name": "ToolSearch",
+      "description": "Load tool schemas by name.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "Agent",
+      "description": "Dispatch a subagent.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string" }
+        },
+        "required": ["prompt"]
+      }
+    }
+  ]
+}

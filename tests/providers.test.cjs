@@ -304,5 +304,38 @@ function loadFixture(name) {
     } catch (e) { fail('openai oauth — worktree+subagent fixture flow preserved', e); }
   }
 
+  // Scenario 8 — PostToolBatch + UserPromptExpansion hook rewriting (C2 extension)
+  // Validates that the SKILL_TAMING_HOOKS whitelist now covers 2.1.115+ hook
+  // channels. Each hook body should reach the Responses API instructions as a
+  // labeled "[HOOK CONTEXT] <Name>:" prefix, and the Skill keyword in the
+  // PostToolBatch body should trigger the ToolSearch loading hint.
+  {
+    const fx = loadFixture('hook-post-tool-batch');
+    const plan = [{
+      urlPart: '/codex/responses',
+      body: {
+        id: 'resp_hook_batch_1',
+        output: [],
+        usage: { input_tokens: 8, output_tokens: 2 },
+      },
+    }];
+    try {
+      const fetch = makeMockFetch(plan);
+      const adapter = buildAdapter(openai, { headers: { 'Authorization': 'Bearer eyJfake' }, kind: 'oauth' })(fetch);
+      await adapter('https://api.anthropic.com/v1/messages', { body: JSON.stringify(fx) });
+      const [call] = fetch._calls();
+      assert.ok(call.url.includes('/codex/responses'), 'hook taming flow should hit Codex OAuth path');
+      assert.ok(typeof call.body.instructions === 'string', 'Responses API instructions missing');
+      assert.ok(/\[HOOK CONTEXT\] PostToolBatch:/.test(call.body.instructions), 'PostToolBatch hook not labeled');
+      assert.ok(/\[HOOK CONTEXT\] UserPromptExpansion:/.test(call.body.instructions), 'UserPromptExpansion hook not labeled');
+      // Skill reference in PostToolBatch should trigger ToolSearch hint
+      assert.ok(/call ToolSearch/.test(call.body.instructions), 'Skill hint missing');
+      assert.ok(!/<system-reminder>/.test(call.body.instructions), 'raw system-reminder wrapper leaked after hook taming');
+      assert.ok(/3 bash calls completed/.test(call.body.instructions), 'PostToolBatch body text dropped');
+      assert.ok(/Available skills: using-superpowers, boost/.test(call.body.instructions), 'UserPromptExpansion body text dropped');
+      pass('openai oauth — PostToolBatch/UserPromptExpansion hook taming');
+    } catch (e) { fail('openai oauth — PostToolBatch/UserPromptExpansion hook taming', e); }
+  }
+
   console.log(`\n${passed} provider tests passed.`);
 })().catch(e => { console.error(e); process.exit(1); });

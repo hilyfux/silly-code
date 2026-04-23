@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { mapModel, _cleanToolArgs, msgToOai, msgsToResponsesInput, flattenSystem, oaiToAnthropicResponse, makeSseStream, makeResponsesSseStream, collectResponsesSse } = require('../pipeline/patches/providers/_base.cjs');
+const { mapModel, _cleanToolArgs, msgToOai, msgsToResponsesInput, flattenSystem, oaiToAnthropicResponse, makeSseStream, makeResponsesSseStream, collectResponsesSse, tameSkillPrompts } = require('../pipeline/patches/providers/_base.cjs');
 
 // Helper: create a mock Response with SSE body from lines
 function mockSseResponse(lines) {
@@ -432,28 +432,47 @@ async function drainStream(stream) {
     console.log('  collectResponsesSse tool_call: PASS');
   }
 
-  // ── tameSkillPrompts extended hook family (C2) ──
+  // ── tameSkillPrompts extended hook family (C2) ────────────────────────
+  // Upstream 2.1.115+ exposes 29 hook channels. SKILL_TAMING_HOOKS must
+  // cover the 10 channels where projects wire skill/verifier/routing context,
+  // while still leaving Stop / Notification alone so flow-control signals
+  // pass through the generic system-reminder pipeline.
   {
-    const { tameSkillPrompts } = require('../pipeline/patches/providers/_base.cjs');
     const cases = [
-      { name: 'UserPromptSubmit', shouldTame: true },
-      { name: 'SubagentStart',   shouldTame: true },
-      { name: 'PreToolUse',      shouldTame: true },
-      { name: 'SessionStart',    shouldTame: true },
-      { name: 'Stop',            shouldTame: false },
-      { name: 'PostToolUse',     shouldTame: false },
+      { name: 'UserPromptSubmit',       shouldTame: true },
+      { name: 'SubagentStart',          shouldTame: true },
+      { name: 'PreToolUse',             shouldTame: true },
+      { name: 'SessionStart',           shouldTame: true },
+      { name: 'PostToolUse',            shouldTame: true }, // NEW
+      { name: 'PostToolBatch',          shouldTame: true }, // NEW
+      { name: 'UserPromptExpansion',    shouldTame: true }, // NEW
+      { name: 'SubagentStop',           shouldTame: true }, // NEW
+      { name: 'PreCompact',             shouldTame: true }, // NEW
+      { name: 'SessionEnd',             shouldTame: true }, // NEW
+      { name: 'Stop',                   shouldTame: false }, // flow-control — not whitelisted
+      { name: 'Notification',           shouldTame: false }, // noise — not whitelisted
     ];
     for (const { name, shouldTame } of cases) {
-      const input = '<system-reminder>\n' + name + ' hook additional context: body containing Skill reference\n</system-reminder>';
-      const output = tameSkillPrompts(input);
+      const body = 'Invoke Skill (boost) to continue.';
+      const input = `<system-reminder>\n${name} hook additional context: ${body}\n</system-reminder>`;
+      const out = tameSkillPrompts(input);
       if (shouldTame) {
-        assert.ok(output.includes('[HOOK CONTEXT] ' + name), name + ' hook should be labeled');
-        assert.ok(/call ToolSearch\(\{query:"select:Skill"\}\)/.test(output), name + ' hook with Skill must get ToolSearch hint');
+        assert.ok(
+          out.includes(`[HOOK CONTEXT] ${name}:`),
+          `hook ${name} should be labeled but got: ${out}`
+        );
+        assert.ok(out.includes('Invoke Skill (boost) to continue.'),
+          `hook ${name} body dropped`);
+        assert.ok(!/<system-reminder>/.test(out),
+          `hook ${name} still wrapped in system-reminder after taming`);
       } else {
-        assert.ok(!output.includes('[HOOK CONTEXT] ' + name), name + ' must NOT be in whitelist');
+        assert.ok(!out.includes(`[HOOK CONTEXT] ${name}:`),
+          `hook ${name} should NOT be whitelisted but was rewritten: ${out}`);
+        assert.ok(/<system-reminder>/.test(out),
+          `hook ${name} should have kept its system-reminder wrapper (flow-control / noise)`);
       }
     }
-    console.log('  tameSkillPrompts extended hooks: PASS');
+    console.log('  tameSkillPrompts extended hook family (C2): PASS');
   }
 
   console.log('\nAll _base tests passed.');

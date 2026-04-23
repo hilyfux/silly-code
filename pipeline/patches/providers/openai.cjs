@@ -295,6 +295,7 @@ async function _openaiAdapter(url, init) {
         tools_count: (_req.tools || []).length,
         tool_names: (_req.tools || []).map(t => t.name),
         observed_skill_call: false,
+        observed_skill_completed: false,
         observed_toolsearch_call: false,
         observed_followup_action: false,
         observed_agent_spawn: false,
@@ -367,6 +368,13 @@ async function _openaiAdapter(url, init) {
         const _clone = _r.clone();
         const _peek = await _clone.text();
         _obs.observed_skill_call = /"name"\s*:\s*"Skill"|"type"\s*:\s*"function_call"[\s\S]*?"name"\s*:\s*"Skill"/.test(_peek);
+        // observed_skill_completed — response-side success signal. True only
+        // when the stream shows a Skill function_call AND a completion event
+        // (arguments fully streamed or the overall response completed). This
+        // distinguishes "Skill was invoked" from "Skill invocation succeeded",
+        // avoiding false positives on truncated or errored streams. See
+        // memory/project-sillyx-runtime-observation-bridge.md.
+        _obs.observed_skill_completed = _obs.observed_skill_call && /"response\.function_call_arguments\.done"|"response\.completed"/.test(_peek);
         _obs.observed_toolsearch_call = /"name"\s*:\s*"ToolSearch"|"type"\s*:\s*"function_call"[\s\S]*?"name"\s*:\s*"ToolSearch"/.test(_peek);
         _obs.observed_agent_spawn = /"name"\s*:\s*"Agent"|"type"\s*:\s*"function_call"[\s\S]*?"name"\s*:\s*"Agent"/.test(_peek);
         _obs.observed_followup_action = /"name"\s*:\s*"(Skill|ToolSearch|Agent|ScheduleWakeup)"|"type"\s*:\s*"function_call"/.test(_peek);

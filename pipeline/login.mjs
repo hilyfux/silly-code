@@ -136,12 +136,21 @@ async function loginCodex() {
   const { spawn } = await import('node:child_process')
   let browserOpened = false
   try {
-    const [cmd, args] = process.platform === 'win32'
-      ? ['rundll32', ['url.dll,FileProtocolHandler', authUrl]]
-      : process.platform === 'darwin'
-        ? ['open', [authUrl]]
-        : ['xdg-open', [authUrl]]
-    spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref()
+    if (process.platform === 'win32') {
+      // `rundll32 url.dll,FileProtocolHandler <url>` mishandles OAuth URLs
+      // because CommandLine tokenization splits on unquoted `&` / `=` that
+      // appear in the query string. Use `cmd /c start "" "<url>"` instead:
+      // the first quoted arg to `start` is the window title (empty here) and
+      // the second is the target, which start passes to the default protocol
+      // handler verbatim. Windows-only quirk — without the empty-title arg,
+      // `start "https://…"` treats the URL as the window title and does
+      // nothing.
+      spawn('cmd', ['/c', 'start', '""', authUrl], { detached: true, stdio: 'ignore', shell: false, windowsVerbatimArguments: true }).unref()
+    } else if (process.platform === 'darwin') {
+      spawn('open', [authUrl], { detached: true, stdio: 'ignore' }).unref()
+    } else {
+      spawn('xdg-open', [authUrl], { detached: true, stdio: 'ignore' }).unref()
+    }
     browserOpened = true
   } catch (_) {
     // fall through to the manual-URL message below

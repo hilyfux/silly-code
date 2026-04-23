@@ -528,6 +528,125 @@ console.log('Build integrity tests\n');
   console.log(`  harness-architecture.md placeholder-free (\\bIter [A-Z]\\b): PASS`);
 })();
 
+// ── 10d. CI Windows test coverage parity ──
+//
+// `.github/workflows/ci.yml` runs a 3-OS matrix (ubuntu/macos/windows) but only a
+// subset of tests execute on Windows. The user-curated PURE_NODE_TESTS list names
+// the ten tests/*.test.cjs files with no bash/launchctl/security dependency — i.e.
+// files that SHOULD run on Windows because nothing in them needs a POSIX shell.
+//
+// If CI is ever extended to run these on Windows, great. If one is deliberately
+// skipped, it must be named in SKIPPED_ALLOWLIST with a reason comment so the
+// rationale survives. Unlisted + unrun = silent Windows coverage hole, which is
+// exactly the class of regression that the Iter 100 Windows cascade (see
+// memory/project-dist-layout-gotchas + project-windows-baked-runner-urls) showed
+// is expensive to debug after the fact.
+//
+// Parsing strategy: no YAML dep. We scan ci.yml for every `node tests/<file>`
+// token and treat the set-union across the job as "what CI can run". If a step
+// is guarded by `if: runner.os != 'Windows'`, its tests are collected as
+// unix-only and excluded from the Windows-reachable set. This is deliberately
+// conservative — false-positive noise (test listed as Windows-ok when actually
+// skipped) would cause a spurious fail, so we err toward allowing skip and only
+// catch the truly unlisted case.
+
+(function testCiWindowsCoverageParity() {
+  const ciPath = path.join(__dirname, '..', '.github', 'workflows', 'ci.yml');
+  if (!fs.existsSync(ciPath)) {
+    console.log('  CI Windows coverage parity (ci.yml not found, skipping): SKIP');
+    return;
+  }
+  const ciYml = fs.readFileSync(ciPath, 'utf8');
+
+  // Pure-Node tests that SHOULD run on Windows unless explicitly allowlisted.
+  // Scoped to the set R-D research flagged — these have no bash/launchctl/
+  // security/POSIX-only dependency and exist to catch cross-platform drift.
+  const PURE_NODE_TESTS = [
+    'tests/launcher-parity.test.cjs',
+    'tests/install-mode-parity.test.cjs',
+    'tests/release-manifest.test.cjs',
+    'tests/varmap-parity.test.cjs',
+    'tests/match-token-drift.test.cjs',
+    'tests/provider-flag-parity.test.cjs',
+    'tests/gen-auth-files.test.cjs',
+    'tests/ci-upgrade-kg.test.cjs',
+    'tests/agent-core.test.cjs',
+    'tests/build-invariants.test.cjs',
+  ];
+
+  // Any test in PURE_NODE_TESTS that's deliberately NOT run on Windows must
+  // appear here with a reason comment explaining why. Current baseline locks
+  // the pre-expansion CI state: ci.yml only runs 4 tests cross-platform (base +
+  // schema + providers + compat + build-integrity, all pure Node). The ten
+  // below are reachable but not wired into the matrix. Removing an entry here
+  // after adding it to ci.yml tightens coverage; adding a new entry (without a
+  // reason) signals deliberate skipping. Keeping this explicit prevents silent
+  // regressions — any NEW pure-Node test added to PURE_NODE_TESTS without a CI
+  // step and without allowlisting will fail build-integrity immediately.
+  const SKIPPED_ALLOWLIST = new Map([
+    ['tests/launcher-parity.test.cjs',    'pre-expansion CI baseline — pure Node, wire when CI grows'],
+    ['tests/install-mode-parity.test.cjs','pre-expansion CI baseline — pure Node, wire when CI grows'],
+    ['tests/release-manifest.test.cjs',   'pre-expansion CI baseline — pure Node, wire when CI grows'],
+    ['tests/varmap-parity.test.cjs',      'pre-expansion CI baseline — pure Node, wire when CI grows'],
+    ['tests/match-token-drift.test.cjs',  'pre-expansion CI baseline — pure Node, wire when CI grows'],
+    ['tests/provider-flag-parity.test.cjs','pre-expansion CI baseline — pure Node, wire when CI grows'],
+    ['tests/gen-auth-files.test.cjs',     'pre-expansion CI baseline — pure Node, wire when CI grows'],
+    ['tests/ci-upgrade-kg.test.cjs',      'pre-expansion CI baseline — pure Node, wire when CI grows'],
+    ['tests/agent-core.test.cjs',         'pre-expansion CI baseline — pure Node, wire when CI grows'],
+    ['tests/build-invariants.test.cjs',   'pre-expansion CI baseline — pure Node, wire when CI grows'],
+  ]);
+
+  // Split ci.yml into lines + walk to find every `node tests/<file>.test.cjs`
+  // reference, tagging each with whether its enclosing step is Unix-only.
+  const lines = ciYml.split('\n');
+  const windowsReachable = new Set();  // tests the Windows runner will execute
+  const unixOnly = new Set();          // tests behind `if: runner.os != 'Windows'`
+
+  let stepIsUnixOnly = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Step boundary — `- name:` or `- uses:` resets the guard scope.
+    if (/^\s*-\s+(name|uses):/.test(line)) {
+      stepIsUnixOnly = false;
+      // Look ahead up to 5 lines for an `if:` that excludes Windows.
+      for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+        if (/^\s*-\s+(name|uses):/.test(lines[j])) break; // next step
+        if (/^\s*if:\s*.*runner\.os\s*!=\s*['"]Windows['"]/.test(lines[j])) {
+          stepIsUnixOnly = true;
+          break;
+        }
+      }
+    }
+    const matches = line.matchAll(/node\s+(tests\/[\w-]+\.test\.cjs)/g);
+    for (const m of matches) {
+      const testFile = m[1];
+      if (stepIsUnixOnly) unixOnly.add(testFile);
+      else windowsReachable.add(testFile);
+    }
+  }
+
+  // Find pure-Node tests that CI doesn't run on Windows and aren't allowlisted.
+  const gaps = PURE_NODE_TESTS.filter(t =>
+    !windowsReachable.has(t) && !SKIPPED_ALLOWLIST.has(t)
+  );
+
+  assert.deepStrictEqual(
+    gaps, [],
+    `CI Windows test coverage gap — pure-Node tests with no Windows run:\n` +
+    gaps.map(t => `    ${t}`).join('\n') + `\n` +
+    `Either add them to .github/workflows/ci.yml's cross-platform step, OR\n` +
+    `add an entry to SKIPPED_ALLOWLIST in this test with a reason explaining\n` +
+    `why the test genuinely cannot run on Windows.\n` +
+    `(Windows-only coverage holes are exactly the class of bug that produced\n` +
+    ` the Iter 100 cascade — see memory/project-dist-layout-gotchas.)`
+  );
+
+  console.log(
+    `  CI Windows coverage parity (${PURE_NODE_TESTS.length} pure-Node tests, ` +
+    `${windowsReachable.size} reachable on Windows, ${SKIPPED_ALLOWLIST.size} allowlisted): PASS`
+  );
+})();
+
 // ── 11. Patch 55b — picker Current-model cross-provider filter ──
 
 (function testPickerCurrentModelFilter() {

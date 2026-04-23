@@ -1,56 +1,50 @@
 name: sync-installer
 
+# Mirror installer/* → repo root so the install URL
+#   raw.githubusercontent.com/hilyfux/silly-code/main/install.sh
+# stays current. Source of truth lives at installer/; root files are
+# regenerated copies maintained by this workflow.
+
 on:
   push:
     branches: [main]
     paths:
-      - 'installer/**'
+      - 'installer/install.sh'
+      - 'installer/install.ps1'
+      - 'installer/uninstall.sh'
+      - 'installer/uninstall.ps1'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  sync:
+  mirror:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout private source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Checkout public mirror
-        uses: actions/checkout@v4
-        with:
-          repository: hilyfux/silly-code
-          token: ${{ secrets.PUBLIC_REPO_PAT }}
-          path: public-mirror
-          fetch-depth: 1
-
-      - name: Sync installer/ → public root
+      - name: Copy installer/* to root
         run: |
           set -euo pipefail
-          cd public-mirror
-          rm -f install.sh install.ps1 uninstall.sh uninstall.ps1 README.md
-          cd ..
-          cp installer/install.sh      public-mirror/install.sh
-          cp installer/install.ps1     public-mirror/install.ps1
-          cp installer/uninstall.sh    public-mirror/uninstall.sh
-          cp installer/uninstall.ps1   public-mirror/uninstall.ps1
-          cp installer/README.md       public-mirror/README.md
+          cp installer/install.sh      install.sh
+          cp installer/install.ps1     install.ps1
+          cp installer/uninstall.sh    uninstall.sh
+          cp installer/uninstall.ps1   uninstall.ps1
 
       - name: Commit + push if changed
-        working-directory: public-mirror
         run: |
           set -euo pipefail
-          git config user.name "silly-code-bot"
+          git config user.name  "silly-code-bot"
           git config user.email "silly-code-bot@users.noreply.github.com"
           if git diff --quiet; then
-            echo "No changes — nothing to sync"
+            echo "No changes — nothing to mirror"
             exit 0
           fi
-          SHA=$(cd .. && git rev-parse --short HEAD)
-          git add install.sh install.ps1 uninstall.sh uninstall.ps1 README.md
-          git commit -m "chore: sync installer from silly-code-src@${SHA}"
-          git push origin main
+          SHA=$(git rev-parse --short HEAD)
+          git add install.sh install.ps1 uninstall.sh uninstall.ps1
+          git commit -m "chore: mirror installer/ → root@${SHA}"
+          git push

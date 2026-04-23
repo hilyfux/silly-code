@@ -23,11 +23,67 @@ process.on('unhandledRejection', (e) => {
 const DEBUG = process.env.SILLY_DEBUG === '1' || process.env.SILLY_DEBUG === 'true';
 const dbg = (...a) => { if (DEBUG) process.stderr.write(`[silly-debug] ${a.join(' ')}\n`); };
 
+// ── Boot trace + silent-hang watchdog (Windows P0 triage) ────────────────────
+// Two independent safety nets that together make a silent hang self-diagnosing:
+//
+//   (1) SILLY_TRACE_BOOT=1  →  per-step elapsed-ms line on stderr so the user
+//       can see WHERE boot stalls. Zero cost when flag is unset.
+//
+//   (2) Watchdog             →  if boot doesn't reach the `spawn(cli-patched)`
+//       handoff within 30s, print a clear explanation + exit 42 so the user
+//       never sees a mute prompt. Opt-out via SILLY_NO_BOOT_WATCHDOG=1 for CI
+//       or embedded use. Uses .unref() so it never keeps the event loop alive
+//       on normal paths — success spawn clears it before the timer fires.
+//
+// 30s rationale: cold `node pipeline/patch.cjs` on a clean machine takes
+// ~8-12s (patch + vendor-ws copy). Doctor runs spawnSync(compat.test.cjs)
+// which adds ~2-4s. 30s gives 3× headroom; real hangs are usually infinite
+// (TTY read, network with no timeout), not "almost done in 35s".
+const TRACE_BOOT = process.env.SILLY_TRACE_BOOT === '1' || process.env.SILLY_TRACE_BOOT === 'true';
+const _bootT0 = Date.now();
+const trace = (tag) => {
+  if (TRACE_BOOT) process.stderr.write(`[silly-boot +${Date.now() - _bootT0}ms] ${tag}\n`);
+};
+trace('silly-launcher.js top');
+
+const WATCHDOG_MS = Number(process.env.SILLY_BOOT_WATCHDOG_MS) || 30_000;
+const WATCHDOG_ENABLED = process.env.SILLY_NO_BOOT_WATCHDOG !== '1';
+let _bootWatchdog = null;
+if (WATCHDOG_ENABLED) {
+  _bootWatchdog = setTimeout(() => {
+    process.stderr.write(
+      `\n[silly] startup did not complete within ${WATCHDOG_MS}ms — likely a blocking I/O call.\n` +
+      `[silly] Re-run with SILLY_TRACE_BOOT=1 to see per-step progress:\n` +
+      `[silly]   PowerShell:  $env:SILLY_TRACE_BOOT=1; sillye\n` +
+      `[silly]   cmd.exe:     set SILLY_TRACE_BOOT=1 && sillye\n` +
+      `[silly]   bash:        SILLY_TRACE_BOOT=1 sillye\n` +
+      `[silly] Or disable the watchdog:   SILLY_NO_BOOT_WATCHDOG=1\n` +
+      `[silly] File an issue: https://github.com/hilyfux/silly-code/issues (tag: windows-hang)\n`
+    );
+    process.exit(42);  // stable exit code for "boot watchdog fired"
+  }, WATCHDOG_MS);
+  // unref() so this timer alone never blocks a clean exit — the parent event
+  // loop can close as soon as spawn() has detached its child handle.
+  _bootWatchdog.unref();
+}
+// Call once we've successfully handed off to the child process. Any path
+// that reaches `spawn(patched, ...)` clears the watchdog; pre-spawn errors
+// (missing binary, login failure) call process.exit() which tears down the
+// timer anyway.
+function clearBootWatchdog(reason) {
+  if (_bootWatchdog) {
+    clearTimeout(_bootWatchdog);
+    _bootWatchdog = null;
+    trace(`watchdog cleared (${reason})`);
+  }
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const command = process.env.SILLY_TARGET_COMMAND;
 const isWindows = process.platform === 'win32';
 dbg('boot', `cmd=${command} cwd=${process.cwd()} dir=${__dirname} platform=${process.platform} node=${process.version}`);
+trace(`boot cmd=${command} platform=${process.platform} node=${process.version}`);
 
 // Single source of truth for all install paths. Two layouts exist:
 //   dist (tarball): <root>/versions/<ver>, <root>/bin/.lib/{login.mjs,uninstall.ps1,silly-launcher.js}
@@ -71,6 +127,7 @@ const INSTALL = (() => {
 })();
 const rootDir = INSTALL.root;
 dbg('install', `root=${INSTALL.root} mode=${INSTALL.mode} patched=${INSTALL.patched} exists=${fs.existsSync(INSTALL.patched)} nodePath=${INSTALL.nodePath || '(none)'}`);
+trace(`install resolved mode=${INSTALL.mode} root=${INSTALL.root} patched=${INSTALL.patched} exists=${fs.existsSync(INSTALL.patched)}`);
 
 if (!command) {
   console.error('Missing SILLY_TARGET_COMMAND');
@@ -79,20 +136,25 @@ if (!command) {
 
 if (!isWindows) {
   const target = path.join(__dirname, command);
+  trace(`spawn unix target=${target}`);
   const child = spawn(target, process.argv.slice(2), { stdio: 'inherit', shell: false });
+  clearBootWatchdog('unix-spawn');
   child.on('exit', code => process.exit(code ?? 0));
   child.on('error', err => { console.error(err.message); process.exit(1); });
 } else {
+  trace('enter runOnWindows');
   await runOnWindows();
 }
 
 async function runOnWindows() {
+  trace('runOnWindows: resolve dataDir');
   const dataDir = process.env.SILLY_CODE_DATA || path.join(os.homedir(), '.silly-code');
   fs.mkdirSync(dataDir, { recursive: true });
   // Pin the resolved dataDir for every child process (login.mjs, cli-patched.js)
   // so a bare HOME env or cwd change can never re-route tokens.
   process.env.SILLY_CODE_DATA = dataDir;
   const patched = INSTALL.patched;
+  trace(`runOnWindows: dataDir=${dataDir} dispatch cmd=${command}`);
 
   const providers = {
     sillyx: { env: 'CLAUDE_CODE_USE_OPENAI', label: 'OpenAI Codex', authKey: 'codex' },
@@ -112,7 +174,7 @@ async function runOnWindows() {
 }
 
 function ensurePatched(patched) {
-  if (fs.existsSync(patched)) return;
+  if (fs.existsSync(patched)) { trace('ensurePatched: binary present'); return; }
   if (INSTALL.mode === 'dist' || !fs.existsSync(INSTALL.patchScript)) {
     // dist install lost its binary, or dev install has no patch.cjs — either
     // way, pointing at the installer is the only recovery.
@@ -121,7 +183,9 @@ function ensurePatched(patched) {
     process.exit(1);
   }
   console.log('[silly] Building patched binary (first run)...');
+  trace('ensurePatched: spawnSync patch.cjs (may take 10-20s)');
   const r = spawnSync(process.execPath, [INSTALL.patchScript], { stdio: 'inherit', cwd: rootDir });
+  trace(`ensurePatched: patch.cjs exit=${r.status}`);
   if (r.status !== 0) {
     console.error('[silly] Patch build failed');
     process.exit(r.status ?? 1);
@@ -134,16 +198,20 @@ function providerLoggedIn(authKey, dataDir) {
 }
 
 function launchProvider(name, info, dataDir, patched, userArgs) {
+  trace(`launchProvider: name=${name}`);
   if (info.env) process.env[info.env] = '1';
   const loggedIn = providerLoggedIn(info.authKey, dataDir);
   dbg('provider', `name=${name} env=${info.env || '(none)'} loggedIn=${loggedIn}`);
+  trace(`launchProvider: loggedIn=${loggedIn}`);
   if (!loggedIn) {
     if (name === 'sillyx') {
       console.log(`\n  ${name} — ${info.label}\n`);
       console.log('[silly] Not logged in. Starting login now...\n');
       dbg('login', `spawn ${process.execPath} ${INSTALL.login} codex`);
+      trace('launchProvider: spawnSync login.mjs');
       const r = spawnSync(process.execPath, [INSTALL.login, 'codex'], { stdio: 'inherit' });
       dbg('login', `exit=${r.status}`);
+      trace(`launchProvider: login.mjs exit=${r.status}`);
       if (r.status !== 0 || !providerLoggedIn(info.authKey, dataDir)) {
         console.log('\n[silly] Login was cancelled. Run the command again when ready.');
         process.exit(1);
@@ -155,8 +223,10 @@ function launchProvider(name, info, dataDir, patched, userArgs) {
   }
   ensurePatched(patched);
   dbg('spawn', `${process.execPath} ${patched} ${userArgs.join(' ')}`);
+  trace(`launchProvider: spawn cli-patched.js (${patched})`);
   const child = spawn(process.execPath, [patched, ...userArgs], { stdio: 'inherit', env: spawnEnv() });
-  child.on('exit', code => { dbg('child', `exit code=${code}`); process.exit(code ?? 0); });
+  clearBootWatchdog('cli-patched-spawn');
+  child.on('exit', code => { dbg('child', `exit code=${code}`); trace(`launchProvider: child exit code=${code}`); process.exit(code ?? 0); });
   child.on('error', err => { console.error(`[silly-launcher] spawn error: ${err.message}`); process.exit(1); });
 }
 

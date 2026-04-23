@@ -69,6 +69,24 @@ const path = require('path');
     ['Node `silly doctor` warns when versions/ and pipeline/ both exist', () =>
       /Layout ambiguous/.test(launcherJs) &&
       /hasVersions.*hasPipeline/s.test(launcherJs)],
+
+    // Dist runtime deps (ws) live at $root/.deps/node_modules — not on
+    // Node's default resolver path. All three launcher surfaces (bash
+    // launchers, Windows .cmd wrappers, silly-launcher.js spawn) must
+    // wire NODE_PATH to that directory in dist mode. See memory:
+    // project-dist-layout-gotchas.md for the regression history.
+    ['silly-common.sh exports NODE_PATH to .deps/node_modules in dist mode', () =>
+      /NODE_PATH="\$root\/\.deps\/node_modules/.test(commonSh)],
+
+    ['install.ps1 sets NODE_PATH=%SILLY_INSTALL_DIR%\\.deps\\node_modules in every .cmd wrapper', () => {
+      const ps1 = fs.readFileSync(path.join(root, 'installer', 'install.ps1'), 'utf8');
+      return /NODE_PATH=%SILLY_INSTALL_DIR%\\\.deps\\node_modules/.test(ps1);
+    }],
+
+    ['silly-launcher.js threads NODE_PATH through spawn() env in dist mode', () =>
+      /INSTALL\.nodePath/.test(launcherJs) &&
+      /\.deps['"].*['"]node_modules['"]/.test(launcherJs) &&
+      /env:\s*spawnEnv\(\)/.test(launcherJs)],
   ];
 
   for (const [desc, fn] of checks) {

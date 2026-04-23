@@ -45,7 +45,12 @@ const INSTALL = (() => {
   const uninstallPs1 = pick(path.join(__dirname, 'uninstall.ps1'), path.join(root, 'installer', 'uninstall.ps1'));
   const patchScript = path.join(root, 'pipeline', 'patch.cjs');
 
-  return { root, mode, patched, login, uninstallPs1, patchScript };
+  // Runtime deps (ws) ship at $root/.deps/node_modules in dist mode; dev mode
+  // uses the repo's top-level node_modules (standard npm resolution).
+  const depsModules = path.join(root, '.deps', 'node_modules');
+  const nodePath = mode === 'dist' && fs.existsSync(depsModules) ? depsModules : null;
+
+  return { root, mode, patched, login, uninstallPs1, patchScript, nodePath };
 })();
 const rootDir = INSTALL.root;
 
@@ -127,9 +132,16 @@ function launchProvider(name, info, dataDir, patched, userArgs) {
     }
   }
   ensurePatched(patched);
-  const child = spawn(process.execPath, [patched, ...userArgs], { stdio: 'inherit' });
+  const child = spawn(process.execPath, [patched, ...userArgs], { stdio: 'inherit', env: spawnEnv() });
   child.on('exit', code => process.exit(code ?? 0));
   child.on('error', err => { console.error(err.message); process.exit(1); });
+}
+
+function spawnEnv() {
+  if (!INSTALL.nodePath) return process.env;
+  const sep = process.platform === 'win32' ? ';' : ':';
+  const existing = process.env.NODE_PATH || '';
+  return { ...process.env, NODE_PATH: existing ? `${INSTALL.nodePath}${sep}${existing}` : INSTALL.nodePath };
 }
 
 async function handleSilly(args, dataDir, patched) {
@@ -276,7 +288,7 @@ function cmdLogin(provider, patched) {
   if (provider === 'claude') {
     ensurePatched(patched);
     console.log('[silly] Launching Silly Code — use /login inside the TUI to sign in to claude.ai');
-    const child = spawn(process.execPath, [patched], { stdio: 'inherit' });
+    const child = spawn(process.execPath, [patched], { stdio: 'inherit', env: spawnEnv() });
     child.on('exit', code => process.exit(code ?? 0));
     child.on('error', err => { console.error(err.message); process.exit(1); });
     return;

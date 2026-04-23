@@ -51,6 +51,7 @@ function stage() {
 
   const libFromBin = [
     'auth-files.sh',
+    'clean-claude-settings.cjs',
     'install-upgrade-cron.sh',
     'lib-deps.sh',
     'silly-auth.js',

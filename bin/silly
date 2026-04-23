@@ -368,6 +368,14 @@ case "${1:-}" in
       exit 1
     fi
     ;;
+  clean-claude-settings)
+    # Strip non-Claude `model` pollution from ~/.claude/settings.json so
+    # vanilla `claude` doesn't open on gpt-5.4 or another foreign slug.
+    echo ""
+    echo -e "  ${B}silly clean-claude-settings${N}"
+    echo ""
+    exec node "$LIB_DIR/clean-claude-settings.cjs"
+    ;;
   report)
     # Bundle recent debug dumps for a bug report.
     # Usage: silly report          # create local bundle, print instructions
@@ -504,6 +512,7 @@ Bundle path: \`$BUNDLE\`
     echo "    silly update check    Probe only — don't apply"
     echo "    silly report          Bundle debug dumps for a bug report"
     echo "    silly report --submit Additionally open GitHub issue (needs gh)"
+    echo "    silly clean-claude-settings  Remove foreign model pollution from ~/.claude/settings.json"
     echo "    silly uninstall       Remove silly-code completely"
     echo ""
     echo "  Launch:"

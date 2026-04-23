@@ -103,6 +103,24 @@ _silly_refresh_remote_sha() {
 }
 _silly_check_update 2>/dev/null || true
 
+# ── Anti-pollution: strip foreign `model` from ~/.claude/settings.json ──
+# Patch 57 stops new writes; this heals pre-existing pollution from older
+# sillyx installs where /model or --model persisted gpt-* into the shared
+# settings file. Safe: only strips non-Claude slugs (gpt-*, o1*, codex*, ...).
+# Throttled to once per 24h via $SILLY_CODE_DATA/.claude-settings-heal.
+_silly_heal_claude_settings() {
+  local lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local helper="$lib_dir/clean-claude-settings.cjs"
+  [ -f "$helper" ] || return 0
+  command -v node >/dev/null 2>&1 || return 0
+  # Run in silent auto-heal mode via module API; never fail a launch.
+  SILLY_CODE_DATA="${SILLY_CODE_DATA:-$HOME/.silly-code}" \
+    node -e "try{require('$helper').autoHealOnLaunch()}catch(e){}" \
+    >/dev/null 2>&1 || true
+}
+_silly_heal_claude_settings &
+disown 2>/dev/null || true
+
 # ── Auth file constants ───────────────────────────────────
 # Canonical filenames for provider tokens in $SILLY_CODE_DATA.
 # Adapters write -auth.json on refresh; login writes -oauth.json.

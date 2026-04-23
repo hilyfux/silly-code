@@ -195,6 +195,8 @@ async function handleSilly(args, dataDir, patched) {
       return cmdCron(rest);
     case 'report':
       return cmdReport(dataDir, rest);
+    case 'clean-claude-settings':
+      return cmdCleanClaudeSettings();
     default:
       console.error(`Unknown subcommand: ${sub}`);
       console.error("Run 'silly help' for usage.");
@@ -389,12 +391,42 @@ function cmdHelp() {
   console.log('    silly doctor          Check prerequisites');
   console.log('    silly update          Pull latest and rebuild patched binary');
   console.log('    silly report          Collect anonymized debug dumps for a bug report');
+  console.log('    silly clean-claude-settings  Strip foreign model pollution from ~/.claude/settings.json');
   console.log('    silly uninstall       Remove silly-code completely');
   console.log('    silly help            Show this help');
   console.log('');
   console.log('  Launch:');
   console.log('    sillyx                Start with Codex');
   console.log('    sillye                Start with Claude');
+  console.log('');
+}
+
+// Strip non-Claude `model` pollution from ~/.claude/settings.json.
+// Delegates to the shared clean-claude-settings CJS module so the logic is
+// identical between bash (bin/silly clean-claude-settings) and Node
+// (silly-launcher for Windows).
+function cmdCleanClaudeSettings() {
+  // The helper is CommonJS; require() via createRequire to avoid ESM import fuss.
+  const { createRequire } = require('node:module');
+  const localRequire = createRequire(import.meta.url);
+  const helper = localRequire('./clean-claude-settings.cjs');
+  console.log('');
+  console.log('  silly clean-claude-settings');
+  console.log('');
+  const results = helper.cleanClaudeSettings({ log: (m) => console.log(m) });
+  let changed = 0;
+  for (const r of results) {
+    if (r.changed) {
+      console.log(`  cleaned: ${r.path}`);
+      console.log(`    removed model=${r.strippedModel}`);
+      console.log(`    kept keys: ${(r.keptKeys || []).join(', ') || '(none)'}`);
+      changed++;
+    } else {
+      console.log(`  skipped: ${r.path} (${r.reason})`);
+    }
+  }
+  console.log('');
+  console.log(changed === 0 ? '  No pollution found.' : `  ${changed} file(s) cleaned.`);
   console.log('');
 }
 

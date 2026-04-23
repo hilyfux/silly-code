@@ -63,7 +63,7 @@ module.exports = function applyProviderIdentity({ patch }) {
   // ── Patch 64: Model ID in prompt (two occurrences with different var names) ──
   patch('64-model-id-in-prompt',
     MATCH.MODEL_ID,
-    'You are powered by the model named ${$}.'
+    'You are powered by the model named ${z}.'
   );
   patch('64b-model-id-in-prompt-2',
     MATCH.MODEL_ID_2,

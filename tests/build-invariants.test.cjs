@@ -68,5 +68,15 @@ function countOccurrences(haystack, needle) {
     console.log(`  claude.ai/code drift alarm: PASS (${marker} ≤ ${CEILING})`);
   }
 
+  {
+    const tdzNeedle = 'You are powered by the model named ${$}.';
+    assert.strictEqual(
+      countOccurrences(src, tdzNeedle),
+      0,
+      'subagent env prompt references ${$} before its declaration — patch 64 regressed',
+    );
+    console.log('  subagent env prompt TDZ guard: PASS');
+  }
+
   console.log('build-invariants tests passed');
 })();

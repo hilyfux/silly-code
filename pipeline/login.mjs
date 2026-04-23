@@ -14,6 +14,17 @@ import path from 'node:path'
 import os from 'node:os'
 import readline from 'node:readline'
 
+// Force stdout/stderr to UTF-8 on Windows. Without this, Node writes in the
+// active codepage (often 936/GBK on CN locale or 437/850 on EN locale) and
+// the Chinese / emoji copy in this file mojibakes to garbage. setDefaultEncoding
+// on a TTY stream is a no-op on POSIX but flips the fs.WriteStream encoding on
+// Windows to UTF-8, matching what modern terminals (Windows Terminal, VS Code)
+// expect.
+if (process.platform === 'win32') {
+  try { process.stdout.setDefaultEncoding && process.stdout.setDefaultEncoding('utf8') } catch {}
+  try { process.stderr.setDefaultEncoding && process.stderr.setDefaultEncoding('utf8') } catch {}
+}
+
 const DATA_DIR = process.env.SILLY_CODE_DATA || path.join(os.homedir(), '.silly-code')
 
 // ── Colors ──
@@ -23,7 +34,37 @@ const C = {
   blue: '\x1b[34m', cyan: '\x1b[36m',
 }
 
-function log(color, msg) { console.log(`${color}${msg}${C.reset}`) }
+// Strip non-ASCII glyphs when the host terminal can't render UTF-8. Heuristic:
+//   Windows + NOT Windows Terminal (WT_SESSION) + NOT VS Code + NOT explicit
+//   UTF-8 codepage → legacy cmd.exe, which renders multi-byte UTF-8 as
+//   mojibake. Users can force-enable or force-disable via SILLY_ASCII=0/1.
+const ASCII_ONLY = (() => {
+  if (process.env.SILLY_ASCII === '1') return true
+  if (process.env.SILLY_ASCII === '0') return false
+  if (process.platform !== 'win32') return false
+  if (process.env.WT_SESSION) return false           // Windows Terminal
+  if (process.env.TERM_PROGRAM === 'vscode') return false
+  if ((process.env.__PSLockdownPolicy || '') === '8') return false
+  // Default ON for legacy cmd/PowerShell 5.1 on Windows to avoid mojibake.
+  return true
+})()
+
+const ASCII_MAP = [
+  [/🔑/g, '[key]'], [/✅/g, '[ok]'], [/✓/g, '[ok]'], [/✗/g, '[x]'],
+  [/—/g, '--'], [/─/g, '-'], [/…/g, '...'],
+]
+function _ascii(s) {
+  let out = s
+  for (const [re, repl] of ASCII_MAP) out = out.replace(re, repl)
+  // Drop any remaining non-ASCII (e.g. Chinese copy) — upstream the copy is
+  // informational; losing it is less bad than rendering garbage.
+  return out.replace(/[^\x00-\x7F]/g, '?')
+}
+
+function log(color, msg) {
+  const _m = ASCII_ONLY ? _ascii(msg) : msg
+  console.log(`${color}${_m}${C.reset}`)
+}
 
 function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 })
@@ -100,6 +141,8 @@ async function loginCodex() {
       return
     }
 
+    // HTML response goes to the browser, which always renders UTF-8 from the
+    // Content-Type charset above — no ASCII fallback needed here.
     res.end('<html><body><h2>✅ 登录成功!</h2><p>可以关闭此窗口了。</p></body></html>')
     server.close()
     codeResolve(code)

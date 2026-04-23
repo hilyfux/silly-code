@@ -19,3 +19,4 @@ cli-dev
 .mcp.json
 .playwright/
 .playwright-mcp/
+.worktrees/

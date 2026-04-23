@@ -70,7 +70,7 @@ module.exports = function applyProviderIdentity({ patch }) {
   );
   patch('64b-model-id-in-prompt-2',
     MATCH.MODEL_ID_2,
-    'You are powered by the model named ${H}.'
+    'You are powered by the model named ${Y}.'
   );
 
   // ── Patch 65: Agent identity ──

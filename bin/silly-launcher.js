@@ -207,16 +207,53 @@ function cmdModels() {
 
 function cmdDoctor(dataDir, patched) {
   const patchedOk = fs.existsSync(patched);
+  const hasVersions = fs.existsSync(path.join(rootDir, 'versions'));
+  const hasPipeline = fs.existsSync(path.join(rootDir, 'pipeline'));
   console.log('');
   console.log('  silly-code doctor');
   console.log('');
   console.log(`  ✓ Node: ${process.version}`);
   console.log(`  ✓ Platform: ${process.platform} ${process.arch}`);
   console.log(`  ${patchedOk ? '✓' : '✗'} Patched binary: ${patchedOk ? 'found' : 'missing (run: silly login claude OR sillyx)'}`);
+  if (hasVersions && hasPipeline) {
+    console.log(`  ⚠ Layout ambiguous: both ${rootDir}/versions/ and ${rootDir}/pipeline/ exist — dist + dev copies overlap. Remove one to pick a single source of truth.`);
+  }
   console.log('');
   renderAuthLines(dataDir);
   console.log('');
   console.log('  Mode: patched binary (upstream + silly-code patches)');
+  // Ripgrep detection — parity with bash doctor's `command -v rg`. On Windows
+  // install.ps1 places rg.exe at ~/.local/bin/rg.exe if not already on PATH;
+  // check both to cover system-installed and installer-shipped layouts.
+  const rgOnPath = spawnSync(isWindows ? 'where' : 'which', ['rg'], { encoding: 'utf8' });
+  if (rgOnPath.status === 0) {
+    const v = spawnSync('rg', ['--version'], { encoding: 'utf8' });
+    const first = (v.stdout || '').split('\n')[0].trim();
+    console.log(`  ✓ ripgrep: ${first || 'found on PATH'}`);
+  } else if (isWindows) {
+    const fallback = path.join(os.homedir(), '.local', 'bin', 'rg.exe');
+    if (fs.existsSync(fallback)) {
+      const v = spawnSync(fallback, ['--version'], { encoding: 'utf8' });
+      const first = (v.stdout || '').split('\n')[0].trim();
+      console.log(`  ✓ ripgrep: ${first || fallback} (installer copy)`);
+    } else {
+      console.log('  ⚠ ripgrep: not found (file search will be slow — run: silly update)');
+    }
+  } else {
+    console.log('  ⚠ ripgrep: not found (file search will be slow — run: silly update)');
+  }
+  // Git detection — parity with bash doctor's `command -v git` check (bin/silly:123).
+  // Optional dependency: needed for dev `silly update` (git pull) + version/commit
+  // readout from HEAD. Windows dist installs without git still work via installer
+  // re-run, so this is a soft warning like ripgrep above.
+  const gitOnPath = spawnSync(isWindows ? 'where' : 'which', ['git'], { encoding: 'utf8' });
+  if (gitOnPath.status === 0) {
+    const v = spawnSync('git', ['--version'], { encoding: 'utf8' });
+    const first = (v.stdout || '').split('\n')[0].trim();
+    console.log(`  ✓ Git: ${first || 'found on PATH'}`);
+  } else {
+    console.log('  ⚠ Git: not found (optional — needed for `silly update` in dev installs)');
+  }
   // Adapter compat probe — dev installs only (tests/ not in dist)
   const compatTest = path.join(rootDir, 'tests', 'compat.test.cjs');
   if (fs.existsSync(compatTest)) {

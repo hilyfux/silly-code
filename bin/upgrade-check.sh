@@ -1,11 +1,41 @@
 #!/usr/bin/env bash
-# Fires from launchd/cron; three daily tasks:
+# bin/upgrade-check.sh — scheduled daily-check entrypoint
+# ─────────────────────────────────────────────────────────────────────────────
+# Fires from launchd (macOS) / crontab (Linux) / `silly cron install` (Windows).
+# Runs three daily tasks:
 #   1. Version alignment  — ci-upgrade fast-path or sillyx agent
 #   2. Privacy audit      — always runs; findings escalate to sillyx
 #   3. Self-optimization  — sillyx updates skills/KG after any non-trivial run
 #
 # Sillyx (OpenAI) handles all non-trivial work so scheduled tasks drain
 # the ChatGPT Pro quota instead of the user's Claude subscription.
+#
+# EXIT-CODE CONTRACT (locked by tests/upgrade-check.test.cjs):
+#   0 — no-op this slot. Any of:
+#       • not a git repo
+#       • uncommitted WIP present (skip to protect user's work)
+#       • npm registry unreachable
+#       • version already current AND privacy clean
+#       • ci-upgrade exit 0 (already current) or 1 (fast-path clean) — commit + push done
+#       • privacy findings noted but no sillyx binary (privacy-only fallback)
+#   1 — hard stop. Any of:
+#       • needs_agent (ci-upgrade exit 2) AND no sillyx binary
+#       • ci-upgrade exit in {other unexpected value}
+#
+# ENV OVERRIDES (for tests only — never set in production):
+#   SILLY_UPGRADE_CHECK_DRY_RUN=1        — narrate git mutations, don't run
+#   SILLY_UPGRADE_CHECK_ASSUME_CLEAN=1   — skip WIP check
+#   SILLY_UPGRADE_CHECK_ASSUME_SYNCED=1  — skip fetch+self-update
+#   SILLY_UPGRADE_CHECK_CURRENT_VERSION  — pin current (else from deps.json)
+#   SILLY_UPGRADE_CHECK_LATEST_VERSION   — pin latest (else from npm)
+#   SILLY_UPGRADE_CHECK_CI_EXIT          — pin capture_ci_exit result
+#   SILLY_UPGRADE_CHECK_AGENT_CMD        — pin sillyx path (else `command -v sillyx`)
+#   SILLY_UPGRADE_CHECK_NO_EXEC=1        — narrate the final exec, don't invoke
+#   SILLY_UPGRADE_CHECK_LOG_DIR          — redirect logs (default ~/.silly-code/logs)
+#   SILLY_UPGRADE_CHECK_STAMP_FILE       — redirect dedup stamp (default
+#                                          $ROOT_DIR/.knowledge-graph/.upgrade-check-agent-stamp)
+#   SILLY_UPGRADE_CHECK_DEDUP_WINDOW     — dedup window in seconds (default 21600 = 6h)
+#   SILLY_UPGRADE_CHECK_NOW_EPOCH        — pin "now" for dedup tests (default: date -u +%s)
 
 set -euo pipefail
 
@@ -24,6 +54,40 @@ LOG_DIR="${SILLY_UPGRADE_CHECK_LOG_DIR:-$HOME/.silly-code/logs}"
 mkdir -p "$LOG_DIR"
 STAMP="$(date -u +%Y%m%d-%H%M%SZ)"
 LOG="$LOG_DIR/upgrade-$STAMP.log"
+
+AGENT_STAMP_FILE="${SILLY_UPGRADE_CHECK_STAMP_FILE:-$ROOT_DIR/.knowledge-graph/.upgrade-check-agent-stamp}"
+DEDUP_WINDOW_SECONDS="${SILLY_UPGRADE_CHECK_DEDUP_WINDOW:-21600}"
+NOW_EPOCH_OVERRIDE="${SILLY_UPGRADE_CHECK_NOW_EPOCH:-}"
+
+now_epoch() {
+  if [ -n "$NOW_EPOCH_OVERRIDE" ]; then
+    echo "$NOW_EPOCH_OVERRIDE"
+  else
+    date -u +%s
+  fi
+}
+
+has_recent_agent_stamp() {
+  # Returns 0 (true) if the stamp file exists, is for the same version, and
+  # the age in seconds is strictly less than DEDUP_WINDOW_SECONDS.
+  local version="$1"
+  [ -f "$AGENT_STAMP_FILE" ] || return 1
+  local contents stamp_version stamp_epoch now age
+  contents="$(cat "$AGENT_STAMP_FILE" 2>/dev/null || echo "")"
+  stamp_version="${contents%%|*}"
+  stamp_epoch="${contents##*|}"
+  [ "$stamp_version" = "$version" ] || return 1
+  case "$stamp_epoch" in ''|*[!0-9]*) return 1 ;; esac
+  now="$(now_epoch)"
+  age=$(( now - stamp_epoch ))
+  [ "$age" -ge 0 ] && [ "$age" -lt "$DEDUP_WINDOW_SECONDS" ]
+}
+
+write_agent_stamp() {
+  local version="$1"
+  mkdir -p "$(dirname "$AGENT_STAMP_FILE")"
+  printf '%s|%s\n' "$version" "$(now_epoch)" > "$AGENT_STAMP_FILE"
+}
 
 run_or_note() {
   if [ "$DRY_RUN" = "1" ]; then
@@ -250,6 +314,15 @@ no Claude agent needed. All 96 patches + unit tests passed before commit."
   # ── Decide if sillyx agent is needed ──────────────────────────────────────
   AGENT_CMD="$(resolve_agent_cmd)"
 
+  # Agent dedup: if we invoked sillyx for this same LATEST within the window,
+  # downgrade needs_agent → current. Prevents burning Codex tokens re-invoking
+  # the agent on the same broken upgrade every 8h launchd slot. Privacy findings
+  # still flow through (they should always get eyes on them).
+  if [ "$UPGRADE_STATUS" = "needs_agent" ] && has_recent_agent_stamp "$LATEST"; then
+    echo "dedup: sillyx already invoked for $LATEST within ${DEDUP_WINDOW_SECONDS}s window — skipping upgrade path this slot"
+    UPGRADE_STATUS="dedup_skip"
+  fi
+
   if [ "$UPGRADE_STATUS" != "needs_agent" ] && [ "$PRIVACY_STATUS" = "clean" ]; then
     echo "all tasks clean — no agent needed today"
     exit 0
@@ -280,6 +353,10 @@ Execute the manual rename sweep from the sillyx-behavior skill:
   Step 2: run the grep battery (python3 inline from the skill)
   Step 3: edit the 3 patch files with new MATCH constants
   Step 4: rebuild → test → commit → push"
+  elif [ "$UPGRADE_STATUS" = "dedup_skip" ]; then
+    UPGRADE_SECTION="
+## TASK 1 — Version alignment
+Upstream released $LATEST (current: $CURRENT) but sillyx was already invoked for this LATEST within the dedup window. Skipping — privacy work only this slot."
   else
     UPGRADE_SECTION="
 ## TASK 1 — Version alignment
@@ -327,6 +404,13 @@ Non-interactive: no AskUserQuestion, no stopping midway, no brainstorming. Show 
 
 Recent knowledge graph snapshot:
 $SNAPSHOT"
+  fi
+
+  # Write the dedup stamp before exec so the next slot sees it even though
+  # the exec replaces this shell process. Only stamp needs_agent invocations —
+  # privacy-only runs should not suppress a real upgrade on the next slot.
+  if [ "$UPGRADE_STATUS" = "needs_agent" ]; then
+    write_agent_stamp "$LATEST"
   fi
 
   note_or_exec "$AGENT_CMD" "$PROMPT"

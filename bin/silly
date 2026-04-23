@@ -129,6 +129,12 @@ case "${1:-}" in
       PATCHED="$ROOT_DIR/pipeline/build/cli-patched.js"
     fi
     [ -f "$PATCHED" ] && ok "Patched binary: found ($PATCHED)" || { err "Patched binary: missing. Reinstall: curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"; MISSING=true; }
+    # Layout sanity: dist (versions/) and dev (pipeline/) should not coexist.
+    # If both are present the launcher silently prefers versions/ — but the
+    # user probably wants to build from pipeline/. Flag it loudly.
+    if [ -d "$ROOT_DIR/versions" ] && [ -d "$ROOT_DIR/pipeline" ]; then
+      warn "Layout ambiguous: both $ROOT_DIR/versions/ and $ROOT_DIR/pipeline/ exist — dist + dev copies overlap. Remove one to pick a single source of truth."
+    fi
 
     # Provider auth
     echo ""

@@ -298,6 +298,56 @@ console.log('Build integrity tests\n');
   console.log('  Patch 56 cross-provider model guard present: PASS');
 })();
 
+// ── 9b. Patch 57 — settings.json cross-provider WRITE guard ──
+//
+// Root-fix sibling of patch 56 (which stops READ leak). Patch 57 injects a
+// provider-aware gate at W8 (updateSettingsForSource) entry so non-firstParty
+// providers never write a `model` key into ~/.claude/settings.json. Without
+// this, sillyx's /model persists gpt-5.4 to the shared file, and vanilla
+// `claude` opens with "Using gpt-5.4 (from .claude/settings.json)".
+//
+// Invariants locked here (tests/settings-pollution.test.cjs has the
+// behavior-level checks; this is the build-time artifact check):
+//   (a) the guard is present at W8 entry, before any disk write
+//   (b) the predicate is the exact conjunction — dropping any term breaks
+//       either Track-1 purity (Claude's own writes) or the fix
+//   (c) the strip loop preserves non-model keys (partial update still lands)
+
+(function testPatch57SettingsWriteGuard() {
+  if (!build) {
+    console.log('  Patch 57 W8 write-guard (build not found, skipping): SKIP');
+    return;
+  }
+  const w8Idx = build.indexOf('function W8(H,_){');
+  assert.ok(w8Idx !== -1, 'W8 (updateSettingsForSource) not found in build');
+  const w8Body = build.substring(w8Idx, w8Idx + 500);
+
+  // (a) the guard must fire BEFORE jA/mkdirSync/PB8 — i.e. inside the entry
+  // prefix right after the policySettings/flagSettings short-circuit.
+  const guardIdx = w8Body.indexOf('"model"in _');
+  const mkdirIdx = w8Body.indexOf('mkdirSync');
+  assert.ok(guardIdx !== -1, 'Patch 57: "model"in _ predicate missing from W8 entry');
+  assert.ok(mkdirIdx !== -1, 'Patch 57: could not locate mkdirSync anchor');
+  assert.ok(
+    guardIdx < mkdirIdx,
+    'Patch 57: guard must run BEFORE mkdirSync (disk mutation) — ordering inverted'
+  );
+
+  // (b) the full predicate shape — all three terms required
+  assert.ok(
+    /"model"in _&&typeof uq==="function"&&uq\(\)!=="firstParty"/.test(w8Body),
+    'Patch 57: guard predicate must be `"model"in _&&typeof uq==="function"&&uq()!=="firstParty"`; ' +
+    'dropping any term either breaks Track-1 purity or leaks pollution'
+  );
+
+  // (c) model key stripped but siblings preserved via property copy
+  assert.ok(
+    w8Body.includes('if(_k!=="model")'),
+    'Patch 57: model-only strip loop missing — partial-update fields must still write'
+  );
+  console.log('  Patch 57 W8 settings write-guard present: PASS');
+})();
+
 // ── 10. Patch 53 family — menu parity across provider branches ──
 
 (function testMenuParity() {

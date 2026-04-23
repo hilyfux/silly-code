@@ -276,5 +276,33 @@ function loadFixture(name) {
     } catch (e) { fail('openai oauth — skill/subagent prompt flow preserved', e); }
   }
 
+  // Scenario 7 — worktree + subagent fixture: Agent/EnterWorktree/ExitWorktree tool passthrough
+  {
+    const fx = loadFixture('worktree-subagent');
+    const plan = [{
+      urlPart: '/codex/responses',
+      body: {
+        id: 'resp_worktree_1',
+        output: [],
+        usage: { input_tokens: 15, output_tokens: 3 },
+      },
+    }];
+    try {
+      const fetch = makeMockFetch(plan);
+      const adapter = buildAdapter(openai, { headers: { 'Authorization': 'Bearer eyJfake' }, kind: 'oauth' })(fetch);
+      await adapter('https://api.anthropic.com/v1/messages', { body: JSON.stringify(fx) });
+      const [call] = fetch._calls();
+      assert.ok(call.url.includes('/codex/responses'), 'worktree flow should hit codex OAuth path');
+      assert.ok(Array.isArray(call.body.tools), 'tools array missing');
+      const toolNames = call.body.tools.map(t => t.name);
+      assert.ok(toolNames.includes('Agent'), 'Agent tool missing');
+      assert.ok(toolNames.includes('EnterWorktree'), 'EnterWorktree tool missing');
+      assert.ok(toolNames.includes('ExitWorktree'), 'ExitWorktree tool missing');
+      assert.ok(!/Claude Code/.test(call.body.instructions), 'Claude identity leaked in worktree scenario');
+      assert.strictEqual(call.body.parallel_tool_calls, false, 'parallel_tool_calls must stay false');
+      pass('openai oauth — worktree+subagent fixture flow preserved');
+    } catch (e) { fail('openai oauth — worktree+subagent fixture flow preserved', e); }
+  }
+
   console.log(`\n${passed} provider tests passed.`);
 })().catch(e => { console.error(e); process.exit(1); });

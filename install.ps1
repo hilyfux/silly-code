@@ -38,14 +38,22 @@ Ok "git:  $((git --version) -replace '^git version ','')"
 Ok "node: $(node --version)"
 
 # ── ripgrep (optional but recommended) ─────────────────────────
+# Resolve an actual rg.exe file path (not a shim/alias/function). `(Get-Command rg).Source`
+# returns shim paths on Scoop/Chocolatey that Test-Path rejects, so we fall through to
+# where.exe (returns real paths) and finally to the download branch.
 $rgBin = $null
 if (Get-Command rg -ErrorAction SilentlyContinue) {
-  $rgBin = (Get-Command rg).Source
-  Ok "ripgrep: $((rg --version | Select-Object -First 1))"
-} elseif (Test-Path (Join-Path $binDir 'rg.exe')) {
+  $rgWhere = & where.exe rg.exe 2>$null | Select-Object -First 1
+  if ($rgWhere -and (Test-Path $rgWhere)) {
+    $rgBin = $rgWhere
+    Ok "ripgrep: $rgBin ($(rg --version | Select-Object -First 1))"
+  }
+}
+if (-not $rgBin -and (Test-Path (Join-Path $binDir 'rg.exe'))) {
   $rgBin = Join-Path $binDir 'rg.exe'
   Ok "ripgrep: $rgBin"
-} else {
+}
+if (-not $rgBin) {
   $rgVersion = '14.1.1'
   $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }
   $rgAsset = "ripgrep-$rgVersion-$arch-pc-windows-msvc"

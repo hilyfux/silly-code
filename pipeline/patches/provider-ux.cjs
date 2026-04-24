@@ -112,21 +112,23 @@ module.exports = function applyProviderUx({ patch }) {
     'function MqH(H){if(typeof uq==="function"&&uq()==="firstParty"&&H==="claude-opus-4-6")return !0;let _=C8()||{}'
   );
 
-  // Patch 53i: provider-scoped effort-level descriptions + semantics
+  // Patch 53i: provider-scoped effort-level descriptions
   //
-  // Upstream o_1(H) returns a Claude-centric description string for each
-  // /effort level, including the infamous '"just below maximum (Opus 4.7 only)"'
-  // for xhigh that leaks Claude's Opus branding into sillyx. sillyx also
-  // doesn't have a real "max" tier (that's a Claude-only API extension), so
-  // selecting max on GPT should be described as a graceful fallback to xhigh.
-  // Fast mode semantics differ too: sillyx fast is free to use; sillye fast
-  // routes to Anthropic's priority tier which is billed extra.
+  // Upstream o_1(H) returns Claude-centric copy for each /effort level (the
+  // xhigh case reads '"just below maximum (Opus 4.7 only)"' which leaks
+  // Opus branding into sillyx sessions). Replace with the VERBATIM strings
+  // from Codex 0.124's models-manager/models.json — these are the exact
+  // descriptions shown by the official Codex CLI 0.124 /model picker for
+  // gpt-5.x (including gpt-5.5), so sillyx users see the same copy they'd
+  // see in raw `codex`. Provider-gated: firstParty path is untouched so
+  // sillye users keep Claude's original wording.
   //
-  // Patch: prepend an openai early-return switch that provides GPT-friendly
-  // copy. firstParty path is unchanged (Claude's original wording intact).
+  // "max" is a Claude-only tier (Codex has only low/medium/high/xhigh), so
+  // the openai branch intentionally omits the max case — the effort map in
+  // openai.cjs:_effMap gracefully routes max → high for runtime behavior.
   patch('53i-effort-desc-openai',
     'function o_1(H){switch(H){case"low":return"Quick, straightforward implementation with',
-    'function o_1(H){if(typeof uq==="function"&&uq()==="openai"){switch(H){case"low":return"Quick implementation with minimal reasoning overhead";case"medium":return"Balanced reasoning — GPT\'s default for everyday coding";case"high":return"Deeper reasoning for complex coding tasks";case"xhigh":return"Maximum GPT reasoning effort — frontier-model deep thinking";case"max":return"Claude-only tier — falls back to xhigh on GPT"}}switch(H){case"low":return"Quick, straightforward implementation with'
+    'function o_1(H){if(typeof uq==="function"&&uq()==="openai"){switch(H){case"low":return"Fast responses with lighter reasoning";case"medium":return"Balanced reasoning depth and speed for everyday tasks";case"high":return"Greater reasoning depth for complex problems";case"xhigh":return"Extra high reasoning depth for complex problems";case"max":return"Claude-only tier (falls back to Extra High on GPT)"}}switch(H){case"low":return"Quick, straightforward implementation with'
   );
 
   // ── Patch 54: q_6 fallback short-circuit for openai ──

@@ -331,18 +331,31 @@ console.log(`  Output: ${OUTPUT}\n`)
       ok = st.isFile() && (process.platform === 'win32' || (st.mode & 0o111))
     } catch {}
     if (!ok) {
-      // Try to heal from system rg
+      // Heal from system rg. On macOS + Linux stage BOTH arm64/x64 symlinks —
+      // a user may legitimately run patch.cjs under one arch (Rosetta x64
+      // Node, say) and sillyx under a native arm64 Node launcher. Their
+      // runtime upstream picks arch via process.arch and ENOENTs if the
+      // "wrong" dir is missing. System `rg` may not actually run on the
+      // mismatched arch (brew-arm64 rg under x64 process errors "Bad CPU
+      // type"), but that's a DIFFERENT runtime error that stderr's loudly,
+      // instead of Glob silently falling back to /usr/bin/grep.
       try {
         const { execFileSync } = require('child_process')
         const whichCmd = process.platform === 'win32' ? 'where.exe' : 'which'
         const systemRg = execFileSync(whichCmd, ['rg'], { encoding: 'utf8', timeout: 2000 })
           .trim().split(/\r?\n/)[0]
         if (systemRg && fs.existsSync(systemRg)) {
-          fs.mkdirSync(path.dirname(expectedRg), { recursive: true })
-          try { fs.unlinkSync(expectedRg) } catch {}
-          if (process.platform === 'win32') fs.copyFileSync(systemRg, expectedRg)
-          else fs.symlinkSync(systemRg, expectedRg)
-          console.log(`  → vendor/ripgrep/${arch}-${plat}/${rgFile} post-resolve heal from system rg (${systemRg})`)
+          const archesToStage = process.platform === 'win32'
+            ? [arch]                            // win32: stage only the running arch
+            : ['arm64', 'x64']                  // posix: dual-stage to cover Rosetta / mixed-arch hosts
+          for (const targetArch of archesToStage) {
+            const targetPath = path.join(buildDir, 'vendor', 'ripgrep', `${targetArch}-${plat}`, rgFile)
+            fs.mkdirSync(path.dirname(targetPath), { recursive: true })
+            try { fs.unlinkSync(targetPath) } catch {}
+            if (process.platform === 'win32') fs.copyFileSync(systemRg, targetPath)
+            else fs.symlinkSync(systemRg, targetPath)
+            console.log(`  → vendor/ripgrep/${targetArch}-${plat}/${rgFile} post-resolve heal from system rg (${systemRg})`)
+          }
           ok = true
         }
       } catch {}

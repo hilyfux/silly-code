@@ -76,10 +76,14 @@ const CODEX_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const CODEX_AUTH_URL = 'https://auth.openai.com/oauth/authorize'
 const CODEX_TOKEN_URL = 'https://auth.openai.com/oauth/token'
 const CODEX_REDIRECT_PORT = 1455
-// Use 127.0.0.1 (IPv4 loopback) to match the explicit server.listen() bind
-// below. `localhost` may resolve to ::1 on Windows/Linux, and if the server
-// binds only 127.0.0.1 the callback would get ECONNREFUSED on an IPv6 host.
-const CODEX_REDIRECT_URI = `http://127.0.0.1:${CODEX_REDIRECT_PORT}/auth/callback`
+// MUST be "localhost" literal. Codex OAuth registration on chatgpt.com has
+// "http://localhost:1455/auth/callback" registered; OAuth demands byte-exact
+// match between authorize request / token exchange / registered URI. Using
+// 127.0.0.1 here produces redirect_uri_mismatch → browser callback page shows
+// "验证失败". To avoid the Windows Firewall prompt while still letting
+// "localhost" resolve to either loopback family, server.listen() below binds
+// '::' (dual-stack: accepts both IPv4 127.0.0.1 and IPv6 ::1) — still loopback.
+const CODEX_REDIRECT_URI = `http://localhost:${CODEX_REDIRECT_PORT}/auth/callback`
 
 async function loginCodex() {
   log(C.bold, '\n  🔑 OpenAI Codex 登录\n')
@@ -116,7 +120,7 @@ async function loginCodex() {
   })
 
   server.on('request', (req, res) => {
-    const url = new URL(req.url, `http://127.0.0.1:${CODEX_REDIRECT_PORT}`)
+    const url = new URL(req.url, `http://localhost:${CODEX_REDIRECT_PORT}`)
     if (url.pathname !== '/auth/callback') {
       res.writeHead(404)
       res.end()
@@ -159,11 +163,12 @@ async function loginCodex() {
         reject(err)
       }
     })
-    // Bind 127.0.0.1 explicitly (not default 0.0.0.0/::). On Windows, binding
-    // a wildcard triggers the Defender Firewall "Allow Node.js inbound" popup
-    // every time a user runs `silly login codex`. Loopback-only bind keeps
-    // the OAuth callback local and silently firewall-exempt.
-    server.listen(CODEX_REDIRECT_PORT, '127.0.0.1', () => {
+    // Bind 'localhost' — Node resolves it via the same resolver the browser
+    // uses, so server bind + browser resolution land on the same IP (loopback
+    // only, no firewall prompt). MUST match CODEX_REDIRECT_URI "localhost" to
+    // satisfy OAuth redirect_uri byte-exact match. Using "127.0.0.1" broke
+    // browsers where localhost resolves to ::1 first.
+    server.listen(CODEX_REDIRECT_PORT, 'localhost', () => {
       log(C.dim, `  回调服务器已启动 (port ${CODEX_REDIRECT_PORT})`)
       resolve()
     })

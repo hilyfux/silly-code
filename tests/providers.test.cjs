@@ -353,5 +353,68 @@ function loadFixture(name) {
     } catch (e) { fail('openai oauth — PostToolBatch/UserPromptExpansion hook taming', e); }
   }
 
+  // Scenario 9 — reasoning.effort forwarding (Claude /effort → OpenAI reasoning.effort).
+  //   openai.cjs:275-282 reads the upstream-mangled `n8z()` accessor to learn
+  //   the user's selected /effort level and forwards it to the Responses API.
+  //   The ladder mapping is Claude-wider-than-OpenAI: max→high (graceful
+  //   fallback), xhigh→high, high→high, medium→medium, low→low. Unknown or
+  //   undefined must leave `reasoning` unset so the server applies its own
+  //   default (no silent downgrade).
+  {
+    const fx = loadFixture('simple-text-stream');
+    const mkPlan = () => [{
+      urlPart: '/codex/responses',
+      sseLines: [
+        'data: {"type":"response.created","response":{"id":"r_eff"}}',
+        'data: {"type":"response.output_text.delta","delta":"ok"}',
+        'data: {"type":"response.completed","response":{"usage":{"output_tokens":1}}}',
+      ],
+    }];
+
+    // [n8z-return, expected reasoning shape on outbound body]
+    const cases = [
+      ['xhigh',       { effort: 'high' }],    // xhigh ceiling → high
+      ['max',         { effort: 'high' }],    // max graceful-fallback → high
+      ['medium',      { effort: 'medium' }],  // pass-through
+      ['low',         { effort: 'low' }],     // pass-through
+      ['unknown-tier', undefined],            // not in _effMap → no field set
+    ];
+
+    for (const [effReturn, expected] of cases) {
+      const label = `openai oauth — reasoning.effort forwarding (n8z=${effReturn})`;
+      try {
+        const fetch = makeMockFetch(mkPlan());
+        // n8z is the mangled /effort accessor in upstream. Stub with a
+        // lambda returning effReturn verbatim so _eff = n8z() gives us the
+        // test case's value.
+        const globals = { n8z: `() => ${JSON.stringify(effReturn)}` };
+        const adapter = buildAdapter(
+          openai,
+          { headers: { 'Authorization': 'Bearer eyJfake' }, kind: 'oauth' },
+          globals,
+        )(fetch);
+        const resp = await adapter('https://api.anthropic.com/v1/messages', {
+          body: JSON.stringify(fx),
+        });
+        const [call] = fetch._calls();
+        assert.ok(call.url.includes('/codex/responses'), 'must hit Codex OAuth path');
+
+        if (expected === undefined) {
+          assert.strictEqual(
+            call.body.reasoning, undefined,
+            `n8z=${effReturn}: reasoning must be UNSET (server applies default), got ${JSON.stringify(call.body.reasoning)}`
+          );
+        } else {
+          assert.deepStrictEqual(
+            call.body.reasoning, expected,
+            `n8z=${effReturn}: reasoning must be ${JSON.stringify(expected)}, got ${JSON.stringify(call.body.reasoning)}`
+          );
+        }
+        await drainStream(resp.body);
+        pass(label);
+      } catch (e) { fail(label, e); }
+    }
+  }
+
   console.log(`\n${passed} provider tests passed.`);
 })().catch(e => { console.error(e); process.exit(1); });

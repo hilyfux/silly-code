@@ -285,6 +285,13 @@ function loadFixture(name) {
       assert.ok(/interactive agent that helps users/.test(call.body.instructions), 'subagent role description damaged');
       assert.ok(!/Claude Code/.test(call.body.instructions), 'Claude identity leaked');
       assert.ok(/<continuation-discipline>/.test(call.body.instructions), 'continuation discipline missing');
+      // Tail-position continuation reminder (Candidate A — attention-adjacent nudge).
+      // Must ride as the final input item with role='developer' so the model
+      // sees it immediately before generating its next token.
+      assert.ok(Array.isArray(call.body.input), 'input array missing');
+      const _tail = call.body.input[call.body.input.length - 1];
+      assert.ok(_tail && _tail.role === 'developer' && /<continuation-reminder>/.test(_tail.content || ''),
+        'tail continuation-reminder missing or wrong role');
       assert.ok(Array.isArray(call.body.tools) && call.body.tools.some(t => t.name === 'ToolSearch'), 'ToolSearch tool missing from forwarded tool catalog');
       assert.ok(Array.isArray(call.body.tools) && call.body.tools.some(t => t.name === 'ScheduleWakeup'), 'ScheduleWakeup tool missing from forwarded tool catalog');
       assert.strictEqual(call.body.parallel_tool_calls, false, 'parallel tool calls must stay disabled for GPT provider path');

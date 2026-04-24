@@ -19,6 +19,7 @@ const {
   tameSkillPrompts,
   cleanIdentityForProvider,
   enforceContinuation,
+  buildContinuationReminder,
   findOpenTodos,
   msgToOai,
   msgsToResponsesInput,
@@ -288,6 +289,61 @@ test('continuation: LOOP ENFORCEMENT only when ScheduleWakeup was called before'
 test('continuation: handles undefined/null messages & tools without throw', () => {
   assert.doesNotThrow(() => enforceContinuation('sys', undefined, undefined));
   assert.doesNotThrow(() => enforceContinuation('sys', null, null));
+});
+
+// ── buildContinuationReminder (tail-position injection) ──────
+test('tail-reminder: unconditional core text regardless of state', () => {
+  const r = buildContinuationReminder([], []);
+  assert(r.length > 0, 'empty reminder');
+  assert(/<continuation-reminder>/.test(r), 'missing reminder tag');
+  assert(/Narration is not action/.test(r), 'missing core imperative');
+  assert(!/<open-todos/.test(r), 'open-todos leaked with empty messages');
+  assert(!/<loop-gate/.test(r), 'loop-gate leaked with no ScheduleWakeup');
+});
+
+test('tail-reminder: ≤ 650 chars — short by design for tail attention', () => {
+  const r = buildContinuationReminder([], []);
+  assert(r.length <= 650, 'tail reminder too long: ' + r.length + ' chars');
+});
+
+test('tail-reminder: surfaces open TodoWrite items', () => {
+  const messages = [{
+    role: 'assistant',
+    content: [{ type: 'tool_use', name: 'TodoWrite', input: { todos: [
+      { content: 'alpha', status: 'pending', activeForm: 'Doing alpha' },
+      { content: 'beta', status: 'completed' },
+      { content: 'gamma', status: 'in_progress', activeForm: 'Doing gamma' },
+    ]}}],
+  }];
+  const r = buildContinuationReminder(messages, []);
+  assert(/<open-todos count="2">/.test(r), 'open-todos count missing');
+  assert(/Doing alpha/.test(r), 'alpha missing');
+  assert(/Doing gamma/.test(r), 'gamma missing');
+  assert(!/beta/.test(r), 'completed item leaked');
+});
+
+test('tail-reminder: loop-gate only after ScheduleWakeup was called', () => {
+  const tools = [{ name: 'ScheduleWakeup' }];
+  const fresh = [{ role: 'user', content: 'start' }];
+  const afterWakeup = [{
+    role: 'assistant',
+    content: [{ type: 'tool_use', name: 'ScheduleWakeup', input: { delaySeconds: 60 } }],
+  }];
+  assert(!/<loop-gate/.test(buildContinuationReminder(fresh, tools)), 'false-positive loop-gate');
+  assert(/<loop-gate/.test(buildContinuationReminder(afterWakeup, tools)), 'missing loop-gate after wakeup');
+});
+
+test('tail-reminder: handles undefined/null without throw', () => {
+  assert.doesNotThrow(() => buildContinuationReminder(undefined, undefined));
+  assert.doesNotThrow(() => buildContinuationReminder(null, null));
+});
+
+test('tail-reminder: distinct from enforceContinuation (different tags, complementary)', () => {
+  const head = enforceContinuation('sys', [], []);
+  const tail = buildContinuationReminder([], []);
+  assert(/<continuation-discipline>/.test(head), 'head uses <continuation-discipline>');
+  assert(/<continuation-reminder>/.test(tail), 'tail uses <continuation-reminder>');
+  assert(!head.includes(tail), 'tail text accidentally baked into head block');
 });
 
 // ── findOpenTodos ────────────────────────────────────────────

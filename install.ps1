@@ -14,14 +14,37 @@ $dataDir    = if ($env:SILLY_CODE_DATA) { $env:SILLY_CODE_DATA } else { Join-Pat
 $repoUrl    = if ($env:SILLY_CODE_REPO) { $env:SILLY_CODE_REPO } else { 'https://github.com/hilyfux/silly-code.git' }
 $branch     = if ($env:SILLY_CODE_BRANCH) { $env:SILLY_CODE_BRANCH } else { 'main' }
 
-function Info($msg) { Write-Host "[silly] $msg" -ForegroundColor Cyan }
-function Ok($msg)   { Write-Host "[silly] $msg" -ForegroundColor Green }
-function Warn($msg) { Write-Host "[silly] $msg" -ForegroundColor Yellow }
-function Fail($msg) { throw "[silly] $msg" }
+# ── palette (warm-workshop, ANSI 256-color) ────────────────────
+# PowerShell 7+ renders ANSI escapes natively. PS5.x falls back to
+# VirtualTerminalLevel which still emits them. NO_COLOR opts out.
+$e = [char]27
+if ($env:NO_COLOR) {
+  $C_RESET=''; $C_DIM=''; $C_BOLD=''; $C_ITAL=''
+  $C_BRAND=''; $C_LIME=''; $C_TAN=''
+  $C_OK=''; $C_INFO=''; $C_WARN=''; $C_ERR=''; $C_MUTED=''
+} else {
+  $C_RESET="$e[0m"; $C_DIM="$e[2m"; $C_BOLD="$e[1m"; $C_ITAL="$e[3m"
+  $C_BRAND="$e[38;5;215m"; $C_LIME="$e[38;5;192m"; $C_TAN="$e[38;5;180m"
+  $C_OK="$e[38;5;114m"; $C_INFO="$e[38;5;110m"; $C_WARN="$e[38;5;214m"
+  $C_ERR="$e[38;5;174m"; $C_MUTED="$e[38;5;244m"
+}
 
+function Section($name) { Write-Host ""; Write-Host "  $C_BOLD$C_BRAND▸$C_RESET $C_BOLD$name$C_RESET" }
+function Info($msg)     { Write-Host "      $C_INFO⋯$C_RESET $msg$C_MUTED`u{2026}$C_RESET" }
+function Ok($msg)       { Write-Host "      $C_OK✓$C_RESET $msg" }
+function Warn($msg)     { Write-Host "      $C_WARN▲$C_RESET $msg" }
+function Fail($msg)     { Write-Host "      $C_ERR✕$C_RESET $msg"; throw "[silly] $msg" }
+function Dim($msg)      { Write-Host "      $C_MUTED$msg$C_RESET" }
+function Divider()      { Write-Host ""; Write-Host "  $C_DIM────────────────────────────────────────────────────$C_RESET" }
+
+# ── banner ─────────────────────────────────────────────────────
 Write-Host ''
-Write-Host '  silly-code installer (open-source)' -ForegroundColor Cyan
-Write-Host ''
+Write-Host "        $C_TAN╭──────╮$C_RESET          $C_BOLD$C_BRAND`Silly Code$C_RESET"
+Write-Host "        $C_TAN│$C_LIME ◕  ◕ $C_TAN│$C_RESET          $C_MUTED──────────$C_RESET"
+Write-Host "        $C_TAN│$C_LIME  ▽   $C_TAN│$C_RESET          $C_ITAL$C_MUTED`multi-provider ai$C_RESET"
+Write-Host "        $C_TAN╰─┬──┬─╯$C_RESET          $C_ITAL$C_MUTED`first-time install$C_RESET"
+Write-Host "          $C_TAN│  │$C_RESET"
+Write-Host "         $C_TAN╱    ╲$C_RESET"
 
 # ── Prerequisites ──────────────────────────────────────────────
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -246,19 +269,22 @@ if ($smokeCode -ne 0 -or [string]::IsNullOrWhiteSpace($smoke)) {
   Ok "Self-smoke: $smoke"
 }
 
+Divider
 Write-Host ''
-Ok 'Installation complete!'
+Write-Host "  $C_BOLD`ready$C_RESET  $C_MUTED· type:$C_RESET"
 Write-Host ''
-Write-Host '  Launch:'
-Write-Host '    sillyx    # OpenAI Codex (GPT)'
-Write-Host '    sillye    # Claude (Anthropic)'
+Write-Host "      $C_BRAND`sillyx$C_RESET              $C_MUTED`openai codex · gpt$C_RESET"
+Write-Host "      $C_BRAND`sillye$C_RESET              $C_MUTED`anthropic · claude$C_RESET"
+Write-Host "      $C_DIM$C_MUTED`sillyxs / sillyes   same, --dangerously-skip-permissions$C_RESET"
 Write-Host ''
-Write-Host '  Login:'
-Write-Host '    silly login codex'
-Write-Host '    silly login claude'
+Write-Host "  $C_BOLD`first-time login$C_RESET"
 Write-Host ''
-Write-Host '  Update:    silly update      # git pull + rebuild patches'
-Write-Host '  Uninstall: silly uninstall'
+Write-Host "      $C_BRAND`silly login codex$C_RESET"
+Write-Host "      $C_BRAND`silly login claude$C_RESET"
 Write-Host ''
-Write-Host "Installed: $installDir"
-Write-Host "Commands:  $binDir"
+Write-Host "  $C_MUTED`update:     $C_RESET$C_BRAND`silly update$C_RESET       $C_MUTED`git pull + rebuild$C_RESET"
+Write-Host "  $C_MUTED`uninstall:  $C_RESET$C_BRAND`silly uninstall$C_RESET"
+Write-Host ''
+Write-Host "  $C_MUTED`installed:  $installDir$C_RESET"
+Write-Host "  $C_MUTED`commands:   $binDir$C_RESET"
+Write-Host ''

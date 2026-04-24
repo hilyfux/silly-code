@@ -26,14 +26,30 @@ const FIXTURES = path.join(__dirname, 'fixtures');
 // Mirrors provider-engine.cjs injection: _base fns + provider state +
 // (stubbed) auth + adapter, all hoisted into one function scope with
 // `fetch` as the only external.
-function buildAdapter(providerModule, authStub) {
+//
+// `globals` (optional) lets a test inject upstream-mangled helpers the
+// adapter references by bare name (e.g. `n8z` for the /effort level).
+// These names are mangled in the real binary and cannot be imported —
+// the adapter guards with `typeof <name> === 'function'` so tests can
+// stub them with a predictable return value. Each entry is emitted as
+// a `const <name> = <expr>;` at the top of the sandbox body so the
+// adapter's `typeof`-guarded lookup finds it. Value must be a string
+// that is a valid JS expression (e.g. `"() => 'xhigh'"`).
+function buildAdapter(providerModule, authStub, globals = {}) {
   const baseStr = Object.values(base).map(f => f.toString()).join('\n;\n');
   const stateVar = `let _${providerModule.key}Data = null;`;
   const authFn = `async function _${providerModule.key}Auth() { return ${JSON.stringify(authStub)}; }`;
   const adapterStr = providerModule.adapter.toString();
   const adapterName = providerModule.adapter.name;
 
-  const body = [baseStr, stateVar, authFn, adapterStr, `return ${adapterName};`].join('\n;\n');
+  const globalDecls = Object.entries(globals)
+    .map(([name, expr]) => `const ${name} = ${expr};`)
+    .join('\n');
+
+  const parts = [];
+  if (globalDecls) parts.push(globalDecls);
+  parts.push(baseStr, stateVar, authFn, adapterStr, `return ${adapterName};`);
+  const body = parts.join('\n;\n');
 
   // eslint-disable-next-line no-new-func
   return new Function('fetch', body);

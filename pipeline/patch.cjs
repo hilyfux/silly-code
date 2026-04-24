@@ -320,16 +320,28 @@ console.log(`  Output: ${OUTPUT}\n`)
   // executable. If not, stage it from system `rg` as a last resort (overwrites
   // whatever is at that path).
   {
-    const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
     const plat = process.platform === 'win32' ? 'win32'
       : (process.platform === 'darwin' ? 'darwin' : 'linux')
     const rgFile = process.platform === 'win32' ? 'rg.exe' : 'rg'
-    const expectedRg = path.join(buildDir, 'vendor', 'ripgrep', `${arch}-${plat}`, rgFile)
-    let ok = false
-    try {
-      const st = fs.statSync(expectedRg) // follows symlinks
-      ok = st.isFile() && (process.platform === 'win32' || (st.mode & 0o111))
-    } catch {}
+    // On posix, require BOTH arm64 and x64 rg symlinks to exist — a user may
+    // run patch.cjs under one arch of Node (say x64 Rosetta) and sillyx
+    // launcher under a different arch (arm64 native). If only the running
+    // arch is checked, heal skips and the OTHER arch ENOENTs at runtime.
+    const archesToCheck = process.platform === 'win32'
+      ? [process.arch === 'arm64' ? 'arm64' : 'x64']
+      : ['arm64', 'x64']
+    const isValidRg = (p) => {
+      try {
+        const st = fs.statSync(p) // follows symlinks
+        return st.isFile() && (process.platform === 'win32' || (st.mode & 0o111))
+      } catch { return false }
+    }
+    const expectedRg = path.join(buildDir, 'vendor', 'ripgrep',
+      `${process.arch === 'arm64' ? 'arm64' : 'x64'}-${plat}`, rgFile)
+    const ok = archesToCheck.every(a =>
+      isValidRg(path.join(buildDir, 'vendor', 'ripgrep', `${a}-${plat}`, rgFile))
+    )
+    let _healed = false
     if (!ok) {
       // Heal from system rg. On macOS + Linux stage BOTH arm64/x64 symlinks —
       // a user may legitimately run patch.cjs under one arch (Rosetta x64
@@ -345,22 +357,20 @@ console.log(`  Output: ${OUTPUT}\n`)
         const systemRg = execFileSync(whichCmd, ['rg'], { encoding: 'utf8', timeout: 2000 })
           .trim().split(/\r?\n/)[0]
         if (systemRg && fs.existsSync(systemRg)) {
-          const archesToStage = process.platform === 'win32'
-            ? [arch]                            // win32: stage only the running arch
-            : ['arm64', 'x64']                  // posix: dual-stage to cover Rosetta / mixed-arch hosts
-          for (const targetArch of archesToStage) {
+          for (const targetArch of archesToCheck) {
             const targetPath = path.join(buildDir, 'vendor', 'ripgrep', `${targetArch}-${plat}`, rgFile)
+            if (isValidRg(targetPath)) continue  // don't re-symlink what's already valid
             fs.mkdirSync(path.dirname(targetPath), { recursive: true })
             try { fs.unlinkSync(targetPath) } catch {}
             if (process.platform === 'win32') fs.copyFileSync(systemRg, targetPath)
             else fs.symlinkSync(systemRg, targetPath)
             console.log(`  → vendor/ripgrep/${targetArch}-${plat}/${rgFile} post-resolve heal from system rg (${systemRg})`)
           }
-          ok = true
+          _healed = true
         }
       } catch {}
     }
-    if (!ok && process.env.SILLY_VENDOR_OPTIONAL !== '1') {
+    if (!ok && !_healed && process.env.SILLY_VENDOR_OPTIONAL !== '1') {
       console.warn(`  ⚠ post-resolve: ${expectedRg} still missing. Glob/Grep will ENOENT at runtime. Install ripgrep: brew install ripgrep (macOS) / apt install ripgrep (Linux).`)
     }
   }

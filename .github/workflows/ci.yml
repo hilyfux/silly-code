@@ -35,6 +35,8 @@ jobs:
 
       - name: Build patched binary
         run: node pipeline/patch.cjs
+        env:
+          SILLY_VENDOR_OPTIONAL: "1"
 
       - name: Build integrity tests (post-build)
         run: node tests/build-integrity.test.cjs

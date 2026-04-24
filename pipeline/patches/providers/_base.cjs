@@ -317,7 +317,14 @@ function msgsToResponsesInput(system, messages) {
 function _cleanToolArgs(raw) {
   let obj;
   try { obj = JSON.parse(raw || '{}'); } catch { return null; }
-  for (const k of Object.keys(obj)) { if (obj[k] === '' || obj[k] === null) delete obj[k]; }
+  // Strip `null` values only — those are GPT hallucinations for unset optional
+  // params. Do NOT strip empty strings: `Edit({old_string:"X", new_string:""})`
+  // is the canonical way to DELETE text, and `Write({content:""})` is how you
+  // truncate a file. Stripping `""` turns these legitimate operations into
+  // "missing required parameter" errors upstream. Observed 2026-04-24: user's
+  // GPT session got stuck in retry loop on a qwen3.5-plus removal task because
+  // every Edit({new_string:""}) got silently neutered here.
+  for (const k of Object.keys(obj)) { if (obj[k] === null) delete obj[k]; }
   return obj;
 }
 

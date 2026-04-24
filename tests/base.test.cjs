@@ -72,9 +72,18 @@ async function drainStream(stream) {
 
   // ── _cleanToolArgs ──
   {
-    // Strips empty strings and nulls
+    // Strips `null` (GPT hallucination for unset optional) but PRESERVES
+    // empty strings — Edit({new_string:""}) is the canonical way to delete
+    // text, and Write({content:""}) truncates a file. Stripping "" turned
+    // these into "missing required parameter" errors upstream (2026-04-24
+    // user report: sillyx stuck in Edit-retry loop on qwen3.5-plus removal).
     const r1 = _cleanToolArgs('{"a":"hello","b":"","c":null}');
-    assert.deepStrictEqual(r1, { a: 'hello' });
+    assert.deepStrictEqual(r1, { a: 'hello', b: '' },
+      'empty string must be preserved — it is legitimate data for Edit/Write');
+    // Edit-delete canonical pattern
+    const rEdit = _cleanToolArgs('{"file_path":"/x","old_string":"foo","new_string":""}');
+    assert.deepStrictEqual(rEdit, { file_path: '/x', old_string: 'foo', new_string: '' },
+      'Edit({new_string:""}) must survive _cleanToolArgs — otherwise delete operations fail');
     // Returns null on invalid JSON
     assert.strictEqual(_cleanToolArgs('not json'), null);
     // Handles empty/missing input

@@ -683,12 +683,28 @@ test('MCP: mcp__<server>__<tool> name format survives msgsToResponsesInput funct
   assert.strictEqual(fc.name, 'mcp__pencil__batch_get', 'MCP name mangled in Responses API path');
 });
 
-test('_cleanToolArgs: strips empty-string optional params that GPT emits', () => {
+test('_cleanToolArgs: strips null (GPT hallucination) but preserves empty strings', () => {
+  // Semantics changed 2026-04-24: empty strings are LEGITIMATE data (Edit
+  // delete, Write truncate). Only `null` is stripped — GPT emits null as a
+  // stand-in for "unset optional param" which upstream tools typically reject.
   const cleaned = _cleanToolArgs('{"file_path":"/x","pages":"","offset":null,"limit":10}');
   assert.strictEqual(cleaned.file_path, '/x');
   assert.strictEqual(cleaned.limit, 10);
-  assert(!('pages' in cleaned), 'empty string pages should be stripped');
+  assert.strictEqual(cleaned.pages, '',
+    'empty string preserved — it is legitimate data for many tools');
   assert(!('offset' in cleaned), 'null offset should be stripped');
+});
+
+test('_cleanToolArgs: Edit({new_string:""}) survives — regression guard for qwen-removal bug', () => {
+  // 2026-04-24: user report — sillyx stuck in retry loop on openclaw.json
+  // qwen3.5-plus removal because every Edit({old_string:"qwen3.5-plus",
+  // new_string:""}) got silently neutered here to {old_string only}, upstream
+  // Edit then rejected it as "missing required parameter".
+  const cleaned = _cleanToolArgs('{"file_path":"/a","old_string":"qwen3.5-plus","new_string":""}');
+  assert.strictEqual(cleaned.new_string, '',
+    'Edit({new_string:""}) MUST survive — deleting text is a first-class Edit use case');
+  assert.strictEqual(cleaned.old_string, 'qwen3.5-plus');
+  assert.strictEqual(cleaned.file_path, '/a');
 });
 
 test('_cleanToolArgs: returns null on invalid JSON, {} on empty string (raw || "{}" fallback)', () => {

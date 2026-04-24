@@ -268,6 +268,9 @@ if ($smokeCode -ne 0 -or [string]::IsNullOrWhiteSpace($smoke)) {
 } else {
   Ok "Self-smoke: $smoke"
 }
+# Anchor line for tests/install-ps1-self-smoke.test.cjs — bounds the self-smoke
+# block. Required literal; do not reword.
+Ok 'Installation complete!'
 
 Divider
 Write-Host ''

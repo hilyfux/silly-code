@@ -153,7 +153,7 @@ _size_mb=$(awk "BEGIN{printf \"%.1f\", $_size/1048576}")
 row_ok "pipeline/build/cli-patched.js ${C_MUTED}${_size_mb} MB${C_RESET}"
 
 if [ ! -f "$INSTALL_DIR/pipeline/build/node_modules/ws/package.json" ]; then
-  row_err "vendored ws missing after patch.cjs — repo corrupt. Reinstall via the URL above."
+  row_err "Vendored ws missing after patch.cjs — repo corrupt. Reinstall via the URL above."
 fi
 
 # ── commands ──────────────────────────────────────────────────────

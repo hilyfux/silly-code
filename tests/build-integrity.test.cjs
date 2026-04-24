@@ -120,6 +120,50 @@ console.log('Build integrity tests\n');
   console.log('  No baked file:///home/runner/ URLs in build: PASS');
 })();
 
+// ── Cross-platform: Windows shell detection fallback landed (patches 87-88) ──
+// Upstream's shell-detection (zs1) builds a candidate list of ONLY POSIX paths
+// (/bin, /usr/bin, /usr/local/bin, /opt/homebrew/bin) × (bash, zsh), then
+// throws "No suitable shell found. Claude CLI requires a Posix shell
+// environment." if none exist. On native Windows (not WSL), none of those
+// paths resolve → sillyx crashes at module load before any tool runs.
+//
+// cross-platform.cjs patches 87-88 inject Git-for-Windows bash.exe paths into
+// the candidate list AND replace the hard error with actionable guidance.
+// This test locks both so a future upstream rename of the anchor is caught
+// loud, not silent.
+(function testWindowsShellFallback() {
+  if (!build) {
+    console.log('  Windows shell fallback (build not found, skipping): SKIP');
+    return;
+  }
+  // Patch 87: Windows bash candidate injection landed.
+  assert.ok(
+    build.includes('_sillyWinBash'),
+    `Patch 87 missing: _sillyWinBash candidate array not injected into build — ` +
+    `upstream's zs1() shell-detection anchor likely drifted. Check ` +
+    `pipeline/patches/cross-platform.cjs patch 87-windows-shell-candidates.`
+  );
+  // The built cli.js has JS source-level escapes: "C:\\Program Files\\Git\\bin\\bash.exe".
+  // Each run of backslashes in source is two backslashes (one escape). In a JS
+  // literal here, `\\\\` is two source-level backslashes — what we want to match.
+  assert.ok(
+    build.includes('C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe'),
+    `Patch 87 body missing: Git for Windows bash.exe path not baked into build.`
+  );
+  // Patch 88: actionable error message replaced the upstream hard error.
+  assert.ok(
+    build.includes('silly-code requires a POSIX shell'),
+    `Patch 88 missing: new actionable shell-missing error not in build.`
+  );
+  assert.ok(
+    !build.includes('Claude CLI requires a Posix shell environment'),
+    `Patch 88 silent failure: upstream "Claude CLI requires a Posix shell ` +
+    `environment" string still present. The replace targeted the wrong ` +
+    `occurrence or missed it entirely.`
+  );
+  console.log('  Windows shell fallback patches (87-88) landed: PASS');
+})();
+
 // ── 3. Sentinel injection: verify injected data matches config ──
 
 (function testInjectedDataMatchesConfig() {

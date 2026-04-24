@@ -71,4 +71,58 @@ module.exports = function applyCrossPlatform({ patch }) {
       'require'
     )
   }
+
+  // ── Patches 87-88: Windows shell detection fallback ────────────────────
+  //
+  // Upstream zs1() hardcodes POSIX shell candidates:
+  //   ["/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"] × ["bash","zsh"]
+  // plus process.env.SHELL and `sT("bash"/"zsh")` auto-detect (which walks PATH).
+  // On native Windows (not WSL), SHELL is usually unset and none of those POSIX
+  // paths exist — the detection `z.find((Y)=>Y&&pq8(Y))` returns undefined and
+  // upstream throws "No suitable shell found. Claude CLI requires a Posix shell
+  // environment.", killing sillyx before any tool can run.
+  //
+  // Git for Windows installs real bash.exe (identical POSIX semantics — it IS
+  // bash, MSYS2-compiled) at known locations. Adding those paths to the
+  // candidate array keeps the downstream contract intact: upstream's
+  // buildExecCommand() emits bash scripts with `; exit $_ec`, `$VAR`
+  // expansions, heredoc — all run unmodified under Git Bash. No Windows
+  // semantics change.
+  //
+  // Patch 87 — PREPEND Git Bash candidates to `z` on Windows (conditional on
+  //            `process.platform === 'win32'` so non-Windows behavior is
+  //            byte-identical). The append-before-find is injected right
+  //            before `let w=z.find(...)` at the join seam.
+  //
+  // Patch 88 — Replace the hard error message with actionable Windows
+  //            guidance. Non-Windows error text is preserved verbatim up to
+  //            the actionable suffix.
+  //
+  // Adapter discipline: the injected code only references `process`, `z`
+  // (the candidate array already in scope), and `pq8` (the executable-probe
+  // function in the same module scope). All three are reachable at the
+  // minified injection site — verified by the unique anchor.
+  patch('87-windows-shell-candidates',
+    'if(q&&pq8(_))z.unshift(_);let w=z.find((Y)=>Y&&pq8(Y));if(!w){',
+    'if(q&&pq8(_))z.unshift(_);' +
+    'if(process.platform==="win32"){' +
+      'var _sillyWinBash=[' +
+        '"C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe",' +
+        '"C:\\\\Program Files (x86)\\\\Git\\\\usr\\\\bin\\\\bash.exe",' +
+        '"C:\\\\Program Files (x86)\\\\Git\\\\bin\\\\bash.exe",' +
+        '(process.env.LOCALAPPDATA||"")+"\\\\Programs\\\\Git\\\\bin\\\\bash.exe",' +
+        '(process.env.ProgramW6432||"C:\\\\Program Files")+"\\\\Git\\\\bin\\\\bash.exe"' +
+      '];' +
+      'for(var _i=_sillyWinBash.length-1;_i>=0;_i--){if(_sillyWinBash[_i]&&pq8(_sillyWinBash[_i]))z.unshift(_sillyWinBash[_i]);}' +
+    '}' +
+    'let w=z.find((Y)=>Y&&pq8(Y));if(!w){'
+  )
+
+  patch('88-windows-shell-error-msg',
+    'No suitable shell found. Claude CLI requires a Posix shell environment. Please ensure you have a valid shell installed and the SHELL environment variable set.',
+    'No suitable shell found. silly-code requires a POSIX shell (bash/zsh). ' +
+    'On Windows: install Git for Windows (https://git-scm.com/download/win) — it ships bash.exe which this CLI will auto-detect. ' +
+    'Or use WSL for the best experience. ' +
+    'On macOS/Linux: ensure bash or zsh is installed and SHELL points to it.'
+  )
 }

@@ -64,3 +64,35 @@ safety net across that handoff:
 `tests/downstream-watchdog.test.cjs` locks the contract (env-flag names, exit codes
 45/46, stdio shape, first-output clear+forward, unref'd timer, live smoke tests
 verifying silent-child → exit 45 / eager-child → exit 0 / non-zero exit propagation).
+
+### Windows shell detection (patches 87-88)
+Upstream's shell-detection (`zs1()` in cli.js) scans a hardcoded POSIX candidate
+list — `/bin`, `/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin` × `bash`, `zsh`.
+None of those paths exist on native Windows (non-WSL), and `process.env.SHELL`
+is typically unset there. The result is a hard error — `"No suitable shell
+found. Claude CLI requires a Posix shell environment."` — at module load,
+before any tool can run.
+
+`pipeline/patches/cross-platform.cjs` patches 87-88 handle this:
+
+- **Patch 87** — on `process.platform==="win32"`, prepend Git-for-Windows
+  bash.exe paths to the candidate list (checked via `pq8()` executable probe):
+  `C:\Program Files\Git\bin\bash.exe`, `C:\Program Files (x86)\Git\bin\bash.exe`,
+  `%LOCALAPPDATA%\Programs\Git\bin\bash.exe`, and the `%ProgramW6432%` variant
+  (for ARM64 / 32-on-64 Program Files layouts). Git Bash IS bash (MSYS2-compiled)
+  so all of upstream's `buildExecCommand`-generated scripts (`; exit $_ec`,
+  `$VAR` expansions, heredoc) run unchanged. No Windows-semantics compromise.
+- **Patch 88** — replace the hard error string with actionable guidance
+  pointing users to Git for Windows (https://git-scm.com/download/win) or WSL.
+
+**Recommended Windows setup:**
+1. **Best:** WSL2 — native bash, POSIX paths, full tooling compatibility.
+2. **Good:** Git for Windows — auto-detected by patch 87, zero user config.
+3. **Unsupported:** pure cmd.exe / PowerShell without bash installed — patch 88
+   will print an actionable error pointing to option 1 or 2.
+
+`tests/build-integrity.test.cjs::testWindowsShellFallback` locks the
+`_sillyWinBash` marker, at least one `C:\Program Files\Git\bin\bash.exe` baked
+path, the new actionable error text, AND the absence of the upstream "Claude
+CLI requires a Posix shell environment" string. If upstream renames the `zs1`
+detection anchor, the test fails loud with a pointer back to patch 87/88.

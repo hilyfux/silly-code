@@ -90,6 +90,20 @@ else
 fi
 ok "Repo: $INSTALL_DIR ($(git -C "$INSTALL_DIR" rev-parse --short HEAD))"
 
+# ── Vendor ripgrep so patch.cjs fail-fast passes ─────────────
+# MUST run BEFORE patch.cjs: patch.cjs exits 1 if vendor/ripgrep missing (no
+# silent warn anymore). Installer stages rg here so patch.cjs sees a
+# pre-populated vendor dir — mirrors install.ps1 flow order.
+RG_BIN=$(command -v rg 2>/dev/null || echo "$BIN_DIR/rg")
+if [ -x "$RG_BIN" ]; then
+  _arch=$(uname -m | sed 's/x86_64/x64/; s/aarch64/arm64/')
+  _plat=$(uname -s | tr '[:upper:]' '[:lower:]')
+  RG_VENDOR_DIR="$INSTALL_DIR/pipeline/build/vendor/ripgrep/${_arch}-${_plat}"
+  mkdir -p "$RG_VENDOR_DIR"
+  ln -sf "$RG_BIN" "$RG_VENDOR_DIR/rg"
+  ok "Vendored ripgrep: $RG_VENDOR_DIR/rg → $RG_BIN"
+fi
+
 # ── Build patched binary ─────────────────────────────────────
 # patch.cjs is pure text transformation + deploys vendored ws into
 # pipeline/build/node_modules/ws. Zero downloads at this step. The clone is
@@ -101,16 +115,6 @@ ok "Patched binary: $INSTALL_DIR/pipeline/build/cli-patched.js"
 if [ ! -f "$INSTALL_DIR/pipeline/build/node_modules/ws/package.json" ]; then
   err "Vendored ws missing after patch.cjs — repo corrupt. Reinstall:"
   err "  curl -fsSL https://raw.githubusercontent.com/hilyfux/silly-code/main/install.sh | bash"
-fi
-
-# ── Vendor ripgrep so adapter can find it ────────────────────
-RG_BIN=$(command -v rg 2>/dev/null || echo "$BIN_DIR/rg")
-if [ -x "$RG_BIN" ]; then
-  _arch=$(uname -m | sed 's/x86_64/x64/; s/aarch64/arm64/')
-  _plat=$(uname -s | tr '[:upper:]' '[:lower:]')
-  RG_VENDOR_DIR="$INSTALL_DIR/pipeline/build/vendor/ripgrep/${_arch}-${_plat}"
-  mkdir -p "$RG_VENDOR_DIR"
-  ln -sf "$RG_BIN" "$RG_VENDOR_DIR/rg"
 fi
 
 # ── Install commands ─────────────────────────────────────────

@@ -274,7 +274,10 @@ async function _openaiAdapter(url, init) {
     // responses (the status bar shows the effort; the API call must honor it).
     try {
       const _eff = typeof n8z === 'function' ? n8z() : undefined;
-      const _effMap = { xhigh: 'high', high: 'high', medium: 'medium', low: 'low' };
+      // max is a Claude-only tier; sillyx gracefully maps it to high (OpenAI's
+      // ceiling) so users who explicitly pick max still get the deepest GPT
+      // reasoning rather than a silent no-op.
+      const _effMap = { max: 'high', xhigh: 'high', high: 'high', medium: 'medium', low: 'low' };
       if (_eff && _effMap[_eff]) _req.reasoning = { effort: _effMap[_eff] };
     } catch { /* n8z is upstream-mangled; guard against future renames */ }
     if (_tools.length) {

@@ -112,6 +112,23 @@ module.exports = function applyProviderUx({ patch }) {
     'function MqH(H){if(typeof uq==="function"&&uq()==="firstParty"&&H==="claude-opus-4-6")return !0;let _=C8()||{}'
   );
 
+  // Patch 53i: provider-scoped effort-level descriptions + semantics
+  //
+  // Upstream o_1(H) returns a Claude-centric description string for each
+  // /effort level, including the infamous '"just below maximum (Opus 4.7 only)"'
+  // for xhigh that leaks Claude's Opus branding into sillyx. sillyx also
+  // doesn't have a real "max" tier (that's a Claude-only API extension), so
+  // selecting max on GPT should be described as a graceful fallback to xhigh.
+  // Fast mode semantics differ too: sillyx fast is free to use; sillye fast
+  // routes to Anthropic's priority tier which is billed extra.
+  //
+  // Patch: prepend an openai early-return switch that provides GPT-friendly
+  // copy. firstParty path is unchanged (Claude's original wording intact).
+  patch('53i-effort-desc-openai',
+    'function o_1(H){switch(H){case"low":return"Quick, straightforward implementation with',
+    'function o_1(H){if(typeof uq==="function"&&uq()==="openai"){switch(H){case"low":return"Quick implementation with minimal reasoning overhead";case"medium":return"Balanced reasoning — GPT\'s default for everyday coding";case"high":return"Deeper reasoning for complex coding tasks";case"xhigh":return"Maximum GPT reasoning effort — frontier-model deep thinking";case"max":return"Claude-only tier — falls back to xhigh on GPT"}}switch(H){case"low":return"Quick, straightforward implementation with'
+  );
+
   // ── Patch 54: q_6 fallback short-circuit for openai ──
   patch('54-menu-fallback-openai-skip',
     '||_.some((A)=>A.value===O))return BMH(_);else if(O==="opusplan")',

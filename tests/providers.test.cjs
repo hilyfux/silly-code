@@ -372,9 +372,14 @@ function loadFixture(name) {
     }];
 
     // [n8z-return, expected reasoning shape on outbound body]
+    // OpenAI Responses API accepts "xhigh" directly (Codex 0.124's
+    // ReasoningEffort::XHigh serializes to lowercase "xhigh"), so we
+    // pass xhigh through unchanged — NOT downgraded to "high". max is
+    // a Claude-only tier, gracefully mapped to xhigh (OpenAI's ceiling).
     const cases = [
-      ['xhigh',       { effort: 'high' }],    // xhigh ceiling → high
-      ['max',         { effort: 'high' }],    // max graceful-fallback → high
+      ['xhigh',       { effort: 'xhigh' }],   // passthrough — OpenAI accepts xhigh
+      ['max',         { effort: 'xhigh' }],   // max graceful-fallback → xhigh (OpenAI ceiling)
+      ['high',        { effort: 'high' }],    // pass-through
       ['medium',      { effort: 'medium' }],  // pass-through
       ['low',         { effort: 'low' }],     // pass-through
       ['unknown-tier', undefined],            // not in _effMap → no field set

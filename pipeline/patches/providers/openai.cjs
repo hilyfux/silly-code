@@ -274,10 +274,13 @@ async function _openaiAdapter(url, init) {
     // responses (the status bar shows the effort; the API call must honor it).
     try {
       const _eff = typeof n8z === 'function' ? n8z() : undefined;
-      // max is a Claude-only tier; sillyx gracefully maps it to high (OpenAI's
-      // ceiling) so users who explicitly pick max still get the deepest GPT
-      // reasoning rather than a silent no-op.
-      const _effMap = { max: 'high', xhigh: 'high', high: 'high', medium: 'medium', low: 'low' };
+      // OpenAI Responses API accepts xhigh directly (Codex 0.124 rust enum
+      // ReasoningEffort::XHigh with #[serde(rename_all="lowercase")] serializes
+      // to "xhigh"). Pass xhigh through verbatim — do NOT downgrade to "high",
+      // that's lossy. max is a Claude-only tier; sillyx gracefully maps it to
+      // xhigh (OpenAI's ceiling) so users who pick max still get deepest GPT
+      // reasoning rather than a silent downgrade.
+      const _effMap = { max: 'xhigh', xhigh: 'xhigh', high: 'high', medium: 'medium', low: 'low' };
       if (_eff && _effMap[_eff]) _req.reasoning = { effort: _effMap[_eff] };
     } catch { /* n8z is upstream-mangled; guard against future renames */ }
     if (_tools.length) {

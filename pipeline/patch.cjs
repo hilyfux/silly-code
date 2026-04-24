@@ -301,4 +301,54 @@ console.log(`  Output: ${OUTPUT}\n`)
       process.exit(1)
     }
   }
+
+  // ── Post-resolve verification: does the current platform's rg actually exist? ──
+  //
+  // All the paths above (preservedRealDir, npx symlink, node_modules lookup)
+  // can "succeed" while leaving `pipeline/build/vendor/ripgrep/<arch>-<plat>/rg`
+  // missing — e.g. the npx cache was populated by an older claude-code version
+  // whose vendor/ripgrep layout didn't match the current OS/arch, or the
+  // installer-populated dir has ripgrep for a DIFFERENT arch.
+  //
+  // Upstream Glob/Grep spawn this exact path. If it's not there at runtime, the
+  // tool ENOENTs and the LLM is forced to fall back to /usr/bin/grep or quit.
+  // We detected this 2026-04-24 when a macOS user saw ENOENT on
+  //   /Users/server/.local/share/silly-code/pipeline/build/vendor/ripgrep/arm64-darwin/rg
+  // even though patch.cjs reported "→ vendor: ... (preserved, installer-populated)".
+  //
+  // Fix: after whichever path above ran, verify the exact file exists and is
+  // executable. If not, stage it from system `rg` as a last resort (overwrites
+  // whatever is at that path).
+  {
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
+    const plat = process.platform === 'win32' ? 'win32'
+      : (process.platform === 'darwin' ? 'darwin' : 'linux')
+    const rgFile = process.platform === 'win32' ? 'rg.exe' : 'rg'
+    const expectedRg = path.join(buildDir, 'vendor', 'ripgrep', `${arch}-${plat}`, rgFile)
+    let ok = false
+    try {
+      const st = fs.statSync(expectedRg) // follows symlinks
+      ok = st.isFile() && (process.platform === 'win32' || (st.mode & 0o111))
+    } catch {}
+    if (!ok) {
+      // Try to heal from system rg
+      try {
+        const { execFileSync } = require('child_process')
+        const whichCmd = process.platform === 'win32' ? 'where.exe' : 'which'
+        const systemRg = execFileSync(whichCmd, ['rg'], { encoding: 'utf8', timeout: 2000 })
+          .trim().split(/\r?\n/)[0]
+        if (systemRg && fs.existsSync(systemRg)) {
+          fs.mkdirSync(path.dirname(expectedRg), { recursive: true })
+          try { fs.unlinkSync(expectedRg) } catch {}
+          if (process.platform === 'win32') fs.copyFileSync(systemRg, expectedRg)
+          else fs.symlinkSync(systemRg, expectedRg)
+          console.log(`  → vendor/ripgrep/${arch}-${plat}/${rgFile} post-resolve heal from system rg (${systemRg})`)
+          ok = true
+        }
+      } catch {}
+    }
+    if (!ok && process.env.SILLY_VENDOR_OPTIONAL !== '1') {
+      console.warn(`  ⚠ post-resolve: ${expectedRg} still missing. Glob/Grep will ENOENT at runtime. Install ripgrep: brew install ripgrep (macOS) / apt install ripgrep (Linux).`)
+    }
+  }
 }

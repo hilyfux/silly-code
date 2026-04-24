@@ -808,4 +808,112 @@ console.log('Build integrity tests\n');
   console.log('  bun-extract native-binary helpers present: PASS');
 })();
 
+// ── 12. Switch invariants — 5 recent switches (commits ddf9712..b3f8a67) ──
+//
+// Each of these is a tiny patch with large product consequences; a silent
+// regression would be hard to notice at runtime. Lock them at build-time
+// as string-level invariants so a future MATCH rename or ordering shuffle
+// fails loud instead of shipping a dead switch.
+
+// 12a. Patch 53i — GPT-native /effort descriptions
+//
+// provider-ux.cjs rewrites the /effort descriptions so ChatGPT users see
+// GPT-appropriate copy instead of Claude-tier copy. Two anchor strings:
+//   - xhigh description mentions "Claude-only tier — falls back to xhigh on GPT"
+//     (explains the max→high graceful-fallback to the user)
+//   - max description says "Maximum GPT reasoning effort — frontier-model deep thinking"
+// The openai branch must be injected as an early-return IIFE; otherwise
+// the firstParty (Claude) copy gets overwritten with GPT wording.
+
+(function testGptEffortDescriptions() {
+  if (!build) {
+    console.log('  Patch 53i GPT-native /effort descriptions (build not found, skipping): SKIP');
+    return;
+  }
+  const xhighDesc = 'Claude-only tier — falls back to xhigh on GPT';
+  const maxDesc = 'Maximum GPT reasoning effort — frontier-model deep thinking';
+  const xhighHits = (build.match(new RegExp(xhighDesc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+  const maxHits = (build.match(new RegExp(maxDesc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+  assert.strictEqual(
+    xhighHits, 1,
+    `Patch 53i: xhigh GPT-native description "${xhighDesc}" must appear exactly once, found ${xhighHits}`
+  );
+  assert.strictEqual(
+    maxHits, 1,
+    `Patch 53i: max GPT-native description "${maxDesc}" must appear exactly once, found ${maxHits}`
+  );
+  console.log('  Patch 53i GPT-native /effort descriptions present: PASS');
+})();
+
+// 12b. Patch 53e — gpt-5.5 family precedes gpt-5.4 in /model picker
+//
+// Commit d58fa27 surfaces the 5.5 family (5.5 / 5.5-codex / 5.5-mini) in the
+// openai branch of z85() ahead of 5.4. Lock positional order — if a future
+// refactor rebuilds the list in CODEX_MODELS order but then an alias reorder
+// sends 5.4 to the top, users stop seeing 5.5 as the default pick.
+
+(function testGpt55MenuOrder() {
+  if (!build) {
+    console.log('  Patch 53e gpt-5.5 menu order (build not found, skipping): SKIP');
+    return;
+  }
+  const i55 = build.indexOf('value:"gpt-5.5"');
+  const i54 = build.indexOf('value:"gpt-5.4"');
+  assert.ok(i55 !== -1, 'Patch 53e: gpt-5.5 slug missing from openai /model picker');
+  assert.ok(i54 !== -1, 'Patch 53e: gpt-5.4 slug missing from openai /model picker');
+  assert.ok(
+    i55 < i54,
+    `Patch 53e: gpt-5.5 (offset ${i55}) must appear BEFORE gpt-5.4 (offset ${i54}) in /model picker — ` +
+    `ordering inverted, users will no longer see 5.5 at the top of the list`
+  );
+  console.log('  Patch 53e gpt-5.5 family precedes gpt-5.4 in menu: PASS');
+})();
+
+// 12c. Patch 75 — auto-compact thrashing bailout 3→10
+//
+// Commit ddf9712 raises DD7 from 3 to 10. Too-low ceiling triggers spurious
+// auto-compact loops; the ratchet must not regress. Lock both the new value
+// (≥1 hit) and the absence of the upstream default (0 hits) so a silent
+// MATCH-string failure can't re-introduce the 3.
+
+(function testAutoCompactThrashing() {
+  if (!build) {
+    console.log('  Patch 75 auto-compact thrashing (build not found, skipping): SKIP');
+    return;
+  }
+  const newSeq = build.includes('x18=3,DD7=10,AY7');
+  const oldSeq = build.includes('x18=3,DD7=3,AY7');
+  assert.ok(
+    newSeq,
+    'Patch 75: raised thrashing bailout "x18=3,DD7=10,AY7" missing — patch did not land or anchor drifted'
+  );
+  assert.ok(
+    !oldSeq,
+    'Patch 75: upstream default "x18=3,DD7=3,AY7" still present — patch silently no-op, ' +
+    'regression in auto-compact thrashing limit'
+  );
+  console.log('  Patch 75 auto-compact thrashing bailout 3→10: PASS');
+})();
+
+// 12d. Patch 74 — Agent non-git fallback warning
+//
+// Agent worktree spawn must not crash when cwd is not a git repo; it should
+// warn and continue in-place. Lock the warning string so a future refactor
+// that silently removes the fallback (re-introducing the crash) fails loud.
+
+(function testAgentNonGitFallback() {
+  if (!build) {
+    console.log('  Patch 74 Agent non-git fallback (build not found, skipping): SKIP');
+    return;
+  }
+  const warning = 'Agent: cwd is not a git repo';
+  const hits = (build.match(new RegExp(warning, 'g')) || []).length;
+  assert.ok(
+    hits >= 1,
+    `Patch 74: Agent non-git fallback warning "${warning}" missing — ` +
+    `Agent spawn will crash when cwd is not a git repo instead of falling back in-place`
+  );
+  console.log('  Patch 74 Agent non-git fallback warning present: PASS');
+})();
+
 console.log('\nAll build integrity tests passed.');

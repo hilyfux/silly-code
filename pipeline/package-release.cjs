@@ -50,6 +50,7 @@ function stage() {
   }
 
   const libFromBin = [
+    '_entry-preamble.js',
     'auth-files.sh',
     'clean-claude-settings.cjs',
     'install-upgrade-cron.sh',

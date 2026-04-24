@@ -250,6 +250,15 @@ async function _openaiAdapter(url, init) {
     }
     const _sysText = flattenSystem(_b.system);
     const _input = msgsToResponsesInput(null, _b.messages);
+    // Tail-position continuation reminder — short, high-attention nudge appended
+    // as the FINAL input item so GPT sees it immediately before generating.
+    // Companion to enforceContinuation (which lives at system-prompt tail and
+    // suffers attention-decay on 20KB+ prompts). Default-on; opt-out via
+    // SILLY_CONTINUATION_TAIL=0 to A/B test or troubleshoot regressions.
+    if (process.env.SILLY_CONTINUATION_TAIL !== '0') {
+      const _tailText = buildContinuationReminder(_b.messages, _tools);
+      if (_tailText) _input.push({ type: 'message', role: 'developer', content: _tailText });
+    }
     const _stream = !!_b.stream;
     const _req = { model: _om, instructions: _sysText || 'You are a helpful coding assistant.', input: _input, store: false, stream: true };
     // Do NOT forward temperature / top_p — chatgpt.com's ResponsesApiRequest
@@ -455,6 +464,12 @@ async function _openaiAdapter(url, init) {
     const _msgs = [];
     if (_b.system) _msgs.push({ role: 'system', content: flattenSystem(_b.system) });
     for (const m of (_b.messages || [])) _msgs.push(...msgToOai(m));
+    // Tail-position continuation reminder — see OAuth path above for rationale.
+    // Chat Completions uses role='system' at the tail (developer role is Responses-only).
+    if (process.env.SILLY_CONTINUATION_TAIL !== '0') {
+      const _tailText = buildContinuationReminder(_b.messages, _tools);
+      if (_tailText) _msgs.push({ role: 'system', content: _tailText });
+    }
     const _req = { model: _om, messages: _msgs, stream: !!_b.stream, max_tokens: _b.max_tokens || 4096, temperature: _b.temperature != null ? _b.temperature : 1 };
     // Enable include_usage so the final SSE chunk carries prompt/completion tokens —
     // without it the adapter reports input_tokens:0 upstream, so Claude Code's vJ()

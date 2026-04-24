@@ -807,6 +807,51 @@ function enforceContinuation(text, messages, tools) {
 }
 
 /**
+ * Build a SHORT, high-attention continuation reminder for trailing injection.
+ *
+ * Rationale: the full `enforceContinuation` block lives at the END of a large
+ * system prompt (15-25KB typical). Attention-decay for GPT on long prompts
+ * weakens its effect. This companion reminder is designed to be inserted as
+ * the FINAL input item (developer/system role) — placing it immediately
+ * adjacent to the generation position, where attention is strongest.
+ *
+ * Intentionally terse (≤300 chars base + open-todos tail) so it doesn't
+ * duplicate the full discipline essay; it's a last-mile nudge, not a lecture.
+ *
+ * Returns empty string when there's no meaningful signal — callers should
+ * skip the injection entirely in that case (avoid polluting every request).
+ *
+ * @param {Array} messages
+ * @param {Array} tools
+ * @returns {string}
+ */
+function buildContinuationReminder(messages, tools) {
+  const open = findOpenTodos(messages);
+  const _toolNames = Array.isArray(tools) ? tools.map(t => t.name || '') : [];
+  const _hasScheduleWakeup = _toolNames.includes('ScheduleWakeup');
+  let _isActiveLoop = false;
+  if (_hasScheduleWakeup && Array.isArray(messages)) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role !== 'assistant') continue;
+      const blocks = Array.isArray(m.content) ? m.content : [];
+      if (blocks.some(b => b.type === 'tool_use' && b.name === 'ScheduleWakeup')) { _isActiveLoop = true; break; }
+    }
+  }
+  // Core reminder is UNCONDITIONAL — tail attention is the whole point.
+  // Keep it short, imperative, and action-oriented. No essay.
+  let _r = '<continuation-reminder>\nBefore ending this turn: if you plan to do more work ("I will continue", "next batch", "继续"), call the tool NOW in this same response. Narration is not action. End the turn only when all work is done or an unrecoverable error blocks you.\n</continuation-reminder>';
+  if (open.length) {
+    const lines = open.slice(0, 5).map(t => '- [' + (t.status || '?') + '] ' + (t.activeForm || t.content || '')).join('\n');
+    _r += '\n<open-todos count="' + open.length + '">\n' + lines + '\n</open-todos>';
+  }
+  if (_isActiveLoop) {
+    _r += '\n<loop-gate>Call ScheduleWakeup before ending — the /loop dies otherwise.</loop-gate>';
+  }
+  return _r;
+}
+
+/**
  * Collect a chatgpt.com Responses API SSE stream into a static Anthropic response body.
  * Used when the caller wants non-streaming but the endpoint requires stream:true.
  *
@@ -874,4 +919,4 @@ async function collectResponsesSse(oaiResp, model) {
   return new Response(JSON.stringify({ id: _msgId, type: 'message', role: 'assistant', content: _ct, model, stop_reason: _stopReason, stop_sequence: null, usage: { input_tokens: _inTokens, output_tokens: _outTokens } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
-module.exports = { mapModel, _cleanToolArgs, mapOaiStopReason, sillyFastTier, agentBudgetTrack, agentBudgetLog, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, findOpenTodos };
+module.exports = { mapModel, _cleanToolArgs, mapOaiStopReason, sillyFastTier, agentBudgetTrack, agentBudgetLog, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, buildContinuationReminder, findOpenTodos };

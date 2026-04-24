@@ -19,6 +19,16 @@
 // and the tierNames metadata. The adapter's inline _codexModelTable mirrors
 // the slug list; see the "KEEP IN SYNC" marker inside _openaiAdapter.
 const CODEX_MODELS = [
+  // 5.5 family added for forward-compat (user report 2026-04-24). Not yet in
+  // the Codex 0.124 native catalog models.json — listed here so sillyx /model
+  // picker surfaces the slugs, letting users opt-in if chatgpt.com is already
+  // serving them. Default aliases (CODEX_ALIASES below) still route to 5.4 to
+  // avoid a full-fleet regression if 5.5 hasn't actually been deployed yet.
+  // When upstream's models.json ships 5.5, consider promoting gpt-5.5 to the
+  // claude-opus alias and gpt-5.5-codex to claude-sonnet/haiku.
+  { slug: 'gpt-5.5',             display: 'gpt-5.5',             ctx: 272000 },
+  { slug: 'gpt-5.5-codex',       display: 'gpt-5.5-codex',       ctx: 272000 },
+  { slug: 'gpt-5.5-mini',        display: 'gpt-5.5-mini',        ctx: 272000 },
   { slug: 'gpt-5.4',             display: 'gpt-5.4',             ctx: 272000 },
   { slug: 'gpt-5.4-mini',        display: 'gpt-5.4-mini',        ctx: 272000 },
   { slug: 'gpt-5.3-codex',       display: 'gpt-5.3-codex',       ctx: 272000 },

@@ -151,4 +151,24 @@ module.exports = function applyEquality({ patch }) {
     'if(xu_=!0,q?.suppressResumeHint)ml6=!0;',
     'if(xu_=!0,q?.suppressResumeHint)ml6=!0;try{Qi(!1);YU(Yh().map(W=>W.id))}catch{}'
   )
+
+  // Patch 74: Agent worktree non-git fallback
+  //
+  // Upstream throws hard if Agent tool is asked for a worktree but cwd isn't a
+  // git repo — this breaks Explore/Agent/subagent-driven development in any
+  // non-git directory (e.g. a user's $HOME, a scratch folder, a freshly-created
+  // project before `git init`). Vanilla Claude Code users hit this too; sillyx/
+  // sillye users simply feel it more because subagent-heavy workflows are
+  // common in OpenAI-driven Explore/dispatch pipelines.
+  //
+  // Fix: when no git repo found, fall back to a no-isolation stub that runs the
+  // agent in-place (worktreePath = cwd, hookBased:false). Agent tool doesn't
+  // actually REQUIRE isolation to function — it just uses worktree as a safety
+  // net for VCS rollback. In non-git dirs there's nothing to roll back anyway.
+  //
+  // Non-firstParty providers benefit equally; this is provider-agnostic.
+  patch('74-agent-worktree-nongit-fallback',
+    'let q=JY(_?.fromCwd??S_());if(!q)throw Error("Cannot create agent worktree: not in a git repository and no WorktreeCreate hooks are configured. Configure WorktreeCreate/WorktreeRemove hooks in settings.json to use worktree isolation with other VCS systems.")',
+    'let q=JY(_?.fromCwd??S_());if(!q){try{if(typeof console!=="undefined")console.warn("[silly] Agent: cwd is not a git repo — running in-place without worktree isolation")}catch{}return{worktreePath:(_?.fromCwd??S_()),hookBased:!1,headCommit:void 0}}if(!1)throw Error("Cannot create agent worktree: not in a git repository and no WorktreeCreate hooks are configured. Configure WorktreeCreate/WorktreeRemove hooks in settings.json to use worktree isolation with other VCS systems.")'
+  )
 }

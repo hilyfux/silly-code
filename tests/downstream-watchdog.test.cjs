@@ -68,20 +68,25 @@ console.log('Downstream watchdog tests\n');
   console.log('  Exit codes 45 + 46 contract: PASS');
 })();
 
-// ── 3. stdio shape = ['inherit', 'pipe', 'pipe'] ──
+// ── 3. stdio shape conditional on print-mode ──
 //
-// stdin MUST stay 'inherit' so the TUI can read keyboard directly; stdout +
-// stderr MUST be 'pipe' so the launcher can observe the first-byte event and
-// clear the watchdog. Any other shape breaks either the TUI input path or
-// the hang detection.
+// PRINT mode (-p / --print): stdin MUST stay 'inherit' so the adapter can read
+//   tool_result input from stdin if upstream requests it; stdout + stderr MUST
+//   be 'pipe' so the launcher can observe the first-byte event and clear the
+//   watchdog.
+// TUI mode (bare): stdio MUST be full 'inherit' — upstream Ink auto-detects
+//   non-TTY stdout and silently switches to --print mode, which then fails
+//   with "Input must be provided..." for bare launches. Full inherit restores
+//   normal TUI rendering at the cost of losing first-output observability.
 
 (function testStdioShape() {
   assert.ok(
-    /stdio:\s*\[\s*['"]inherit['"]\s*,\s*['"]pipe['"]\s*,\s*['"]pipe['"]\s*\]/.test(launcher),
-    `silly-launcher.js: launchProvider spawn must use stdio: ['inherit', 'pipe', 'pipe'] ` +
-    `so the launcher can observe first-output events without stealing stdin from the TUI`
+    /stdio:\s*_isPrintMode\s*\?\s*\[\s*['"]inherit['"]\s*,\s*['"]pipe['"]\s*,\s*['"]pipe['"]\s*\]\s*:\s*['"]inherit['"]/.test(launcher),
+    `silly-launcher.js: launchProvider spawn must conditionally use ['inherit','pipe','pipe'] ` +
+    `only in print mode and full 'inherit' for TUI mode (bare) — otherwise upstream ` +
+    `auto-switches to --print and rejects bare launch with missing-prompt error`
   );
-  console.log('  stdio: [inherit, pipe, pipe] shape: PASS');
+  console.log('  stdio shape conditional on print mode: PASS');
 })();
 
 // ── 4. First-output handlers clear watchdog AND forward to process.stdout/err ──

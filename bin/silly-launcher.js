@@ -247,12 +247,17 @@ function launchProvider(name, info, dataDir, patched, userArgs) {
   // Exit codes:
   //   45 = downstream TUI silent-hang fired (stable contract, mirrors 42)
   //   46 = spawn() itself failed (binary missing / ENOENT / etc.)
+  // TUI mode needs full stdio:'inherit' so upstream sees real TTY on stdout
+  // (otherwise Ink detects non-TTY → auto-enables --print mode → "missing
+  // prompt" error on bare launch). Only print-mode (-p / --print) can safely
+  // use pipe stdio because stdout is already a discarded result stream there.
+  const _isPrintMode = userArgs.some(a => a === '-p' || a === '--print');
   const sp = spawn(process.execPath, [patched, ...userArgs], {
-    stdio: ['inherit', 'pipe', 'pipe'],
+    stdio: _isPrintMode ? ['inherit', 'pipe', 'pipe'] : 'inherit',
     env: spawnEnv(),
   });
 
-  let _firstOutputSeen = false;
+  let _firstOutputSeen = !_isPrintMode;  // TUI mode: no pipe observation, assume output fine
   const _markOutput = (src) => {
     if (!_firstOutputSeen) {
       _firstOutputSeen = true;
@@ -260,8 +265,16 @@ function launchProvider(name, info, dataDir, patched, userArgs) {
       trace(`launchProvider: first downstream output on ${src}`);
     }
   };
-  sp.stdout.on('data', (chunk) => { _markOutput('stdout'); process.stdout.write(chunk); });
-  sp.stderr.on('data', (chunk) => { _markOutput('stderr'); process.stderr.write(chunk); });
+  if (_isPrintMode) {
+    sp.stdout.on('data', (chunk) => { _markOutput('stdout'); process.stdout.write(chunk); });
+    sp.stderr.on('data', (chunk) => { _markOutput('stderr'); process.stderr.write(chunk); });
+  } else {
+    // TUI mode: clear boot watchdog at spawn-handoff (same as pre-Iter-103 behavior).
+    // Downstream watchdog disabled — Ink renders directly to inherited TTY; no pipe
+    // to observe. Users on broken terminals (Win10 conhost) still get boot watchdog
+    // at 30s if the spawn itself hangs, and can use -p or Windows Terminal workaround.
+    clearBootWatchdog('cli-patched-spawn-tui');
+  }
 
   const DOWNSTREAM_WATCHDOG_MS = Number(process.env.SILLY_DOWNSTREAM_WATCHDOG_MS) || 10_000;
   const DOWNSTREAM_WATCHDOG_ENABLED = process.env.SILLY_NO_DOWNSTREAM_WATCHDOG !== '1';
@@ -271,7 +284,9 @@ function launchProvider(name, info, dataDir, patched, userArgs) {
   // Without this, SIGTERM wins the race against the kill-then-exit timer and
   // the process leaks out as exit 0, hiding the silent-hang diagnosis.
   let _watchdogFired = false;
-  if (DOWNSTREAM_WATCHDOG_ENABLED) {
+  // Downstream watchdog only fires in print mode — TUI mode has inherit stdio
+  // so we have no first-output signal to clear the watchdog (would always fire).
+  if (DOWNSTREAM_WATCHDOG_ENABLED && _isPrintMode) {
     _downstreamDeadline = setTimeout(() => {
       if (_firstOutputSeen) return;
       _watchdogFired = true;

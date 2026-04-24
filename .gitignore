@@ -20,3 +20,6 @@ cli-dev
 .playwright/
 .playwright-mcp/
 .worktrees/
+# Codex CLI host auto-generates these (mirror of .claude/ for another AI host) — ephemeral, do not commit
+.agents/
+AGENTS.md

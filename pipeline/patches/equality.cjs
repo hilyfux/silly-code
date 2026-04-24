@@ -167,6 +167,13 @@ module.exports = function applyEquality({ patch }) {
   // net for VCS rollback. In non-git dirs there's nothing to roll back anyway.
   //
   // Non-firstParty providers benefit equally; this is provider-agnostic.
+  //
+  // The replacement preserves the original `throw Error("Cannot create agent
+  // worktree: ...")` behind `if(!1)` (dead-branch) INTENTIONALLY — do NOT
+  // "clean it up" as dead code. Keeping the original error string verbatim in
+  // the build lets upgrade-probe anchor on it when upstream refactors the
+  // worktree creator, and preserves regression visibility if upstream renames
+  // or rewords the error in a future release.
   patch('74-agent-worktree-nongit-fallback',
     'let q=JY(_?.fromCwd??S_());if(!q)throw Error("Cannot create agent worktree: not in a git repository and no WorktreeCreate hooks are configured. Configure WorktreeCreate/WorktreeRemove hooks in settings.json to use worktree isolation with other VCS systems.")',
     'let q=JY(_?.fromCwd??S_());if(!q){try{if(typeof console!=="undefined")console.warn("[silly] Agent: cwd is not a git repo — running in-place without worktree isolation")}catch{}return{worktreePath:(_?.fromCwd??S_()),hookBased:!1,headCommit:void 0}}if(!1)throw Error("Cannot create agent worktree: not in a git repository and no WorktreeCreate hooks are configured. Configure WorktreeCreate/WorktreeRemove hooks in settings.json to use worktree isolation with other VCS systems.")'

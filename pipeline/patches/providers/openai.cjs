@@ -266,6 +266,17 @@ async function _openaiAdapter(url, init) {
     // successful dump proves otherwise. SILLY_CODEX_FAST=1 remains available
     // for users who want to test.
     if (_fastTier && process.env.SILLY_CODEX_FAST === '1') _req.service_tier = 'priority';
+    // Forward Claude Code /effort level as OpenAI Responses API reasoning.effort.
+    // Claude ladder: low / medium / high / xhigh. OpenAI ladder: low / medium / high.
+    // xhigh maps to high (OpenAI's top). Unknown or undefined → no field set, server
+    // applies its own default. Codex 0.124 does the same forward for gpt-5.x — matching
+    // that behavior avoids surprising the user who selected xhigh but got medium
+    // responses (the status bar shows the effort; the API call must honor it).
+    try {
+      const _eff = typeof n8z === 'function' ? n8z() : undefined;
+      const _effMap = { xhigh: 'high', high: 'high', medium: 'medium', low: 'low' };
+      if (_eff && _effMap[_eff]) _req.reasoning = { effort: _effMap[_eff] };
+    } catch { /* n8z is upstream-mangled; guard against future renames */ }
     if (_tools.length) {
       // Clean tool descriptions too — 18+ upstream built-in tools (Spawn remote,
       // Submit feedback, Discover plugins, etc.) have "Claude Code" in their

@@ -223,7 +223,38 @@ console.log(`  Output: ${OUTPUT}\n`)
         if (fs.existsSync(candidate)) vendorSrc = candidate
       } catch {}
     }
-    if (vendorSrc) {
+    // Auto-heal fallback: if system `rg` is on PATH (brew, apt, Chocolatey),
+    // stage pipeline/build/vendor/ripgrep/<arch>-<plat>/rg ourselves. Covers
+    // the common `silly update` case where install.sh already created this
+    // symlink but the user has since moved to a different rg install, or the
+    // `silly update` path (patch.cjs only, no install.sh) on an old install
+    // that never got vendor staged. Upstream Glob/Grep wants this specific
+    // path — PATH lookups don't help it.
+    if (!vendorSrc) {
+      try {
+        const { execFileSync } = require('child_process')
+        const whichCmd = process.platform === 'win32' ? 'where.exe' : 'which'
+        const systemRg = execFileSync(whichCmd, ['rg'], { encoding: 'utf8', timeout: 2000 })
+          .trim().split(/\r?\n/)[0]
+        if (systemRg && fs.existsSync(systemRg)) {
+          const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
+          const plat = process.platform === 'win32' ? 'win32'
+            : (process.platform === 'darwin' ? 'darwin' : 'linux')
+          const rgFile = process.platform === 'win32' ? 'rg.exe' : 'rg'
+          const vendorRgDir = path.join(buildDir, 'vendor', 'ripgrep', `${arch}-${plat}`)
+          fs.mkdirSync(vendorRgDir, { recursive: true })
+          const vendorRgPath = path.join(vendorRgDir, rgFile)
+          try { fs.unlinkSync(vendorRgPath) } catch {}
+          // Prefer symlink on posix; copy on Windows (junctions are for dirs)
+          if (process.platform === 'win32') fs.copyFileSync(systemRg, vendorRgPath)
+          else fs.symlinkSync(systemRg, vendorRgPath)
+          console.log(`  → vendor/ripgrep/${arch}-${plat}/${rgFile} auto-healed from system rg (${systemRg})`)
+          // Mark handled — skip the downstream "fail-fast" branches.
+          vendorSrc = 'SYSTEM_RG_AUTOHEALED'
+        }
+      } catch {}
+    }
+    if (vendorSrc && vendorSrc !== 'SYSTEM_RG_AUTOHEALED') {
       // Update symlink if missing or pointing elsewhere.
       // Windows: use 'junction' for directories — works without admin/Developer Mode.
       // macOS/Linux: third arg is ignored.
@@ -243,6 +274,8 @@ console.log(`  Output: ${OUTPUT}\n`)
         fs.symlinkSync(vendorSrc, vendorLink, _symlinkType)
         console.log(`  → vendor: ${vendorLink}`)
       }
+    } else if (vendorSrc === 'SYSTEM_RG_AUTOHEALED') {
+      // already handled — vendor/ripgrep/<arch>-<plat>/rg staged from system PATH
     } else if (process.env.SILLY_VENDOR_OPTIONAL === '1') {
       console.warn('  ⚠ vendor/ripgrep not found (SILLY_VENDOR_OPTIONAL=1) — Glob/Grep will ENOENT at runtime')
     } else {

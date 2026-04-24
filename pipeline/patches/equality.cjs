@@ -178,4 +178,25 @@ module.exports = function applyEquality({ patch }) {
     'let q=JY(_?.fromCwd??S_());if(!q)throw Error("Cannot create agent worktree: not in a git repository and no WorktreeCreate hooks are configured. Configure WorktreeCreate/WorktreeRemove hooks in settings.json to use worktree isolation with other VCS systems.")',
     'let q=JY(_?.fromCwd??S_());if(!q){try{if(typeof console!=="undefined")console.warn("[silly] Agent: cwd is not a git repo — running in-place without worktree isolation")}catch{}return{worktreePath:(_?.fromCwd??S_()),hookBased:!1,headCommit:void 0}}if(!1)throw Error("Cannot create agent worktree: not in a git repository and no WorktreeCreate hooks are configured. Configure WorktreeCreate/WorktreeRemove hooks in settings.json to use worktree isolation with other VCS systems.")'
   )
+
+  // Patch 75: Auto-compact thrashing threshold (3 → 10 retries)
+  //
+  // Upstream defaults: if auto-compact fires but the context re-fills to the
+  // limit within 3 turns, 3 times in a row, upstream gives up and tells the
+  // user to /clear. For GPT providers (sillyx) the compaction quality varies
+  // and the 3-retry ceiling fires far too aggressively — users see "run
+  // /clear" mid-conversation even when the real problem would clear in a
+  // turn or two (big tool output rotating out of context).
+  //
+  // Change: raise DD7 from 3 to 10. The x18=3 "turn window" and m18=13000
+  // "compact trigger threshold" are unchanged — we only delay the hard
+  // bailout, giving upstream more rope before the user-visible error.
+  //
+  // Risk: purely positive. No context is sacrificed; compact still fires on
+  // the same schedule. The only behavior change is the thrashing-bailout
+  // threshold moves from "giveup after 3" to "giveup after 10".
+  patch('75-autocompact-thrashing-bailout',
+    'x18=3,DD7=3,AY7',
+    'x18=3,DD7=10,AY7'
+  )
 }

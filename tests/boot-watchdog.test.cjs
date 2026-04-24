@@ -91,25 +91,34 @@ console.log('Boot watchdog tests\n');
 // trace chain has a beginning even in catastrophic-launcher-load scenarios.
 
 (function testEntryShimTracing() {
+  // The SILLY_TRACE_BOOT trace line + launcher import live in the shared
+  // `bin/_entry-preamble.js` (the 5 entry shims are 3-line delegators).
+  // Shims themselves no longer contain either string, so the invariant is
+  // enforced once against the preamble. The live smoke below still exercises
+  // the shim→preamble→launcher chain end-to-end.
+  const preambleSrc = fs.readFileSync(path.join(BIN, '_entry-preamble.js'), 'utf8');
+  assert.ok(
+    /SILLY_TRACE_BOOT/.test(preambleSrc),
+    `bin/_entry-preamble.js: missing SILLY_TRACE_BOOT pre-import trace line — users lose ` +
+    `first-frame visibility if silly-launcher.js fails to load`
+  );
+  const traceIdx = preambleSrc.indexOf('SILLY_TRACE_BOOT');
+  const importIdx = preambleSrc.indexOf('silly-launcher.js');
+  assert.ok(
+    traceIdx >= 0 && importIdx >= 0 && traceIdx < importIdx,
+    `bin/_entry-preamble.js: SILLY_TRACE_BOOT write must come BEFORE launcher import ` +
+    `(found trace at ${traceIdx}, import at ${importIdx})`
+  );
+  // Shims must delegate to the preamble (no duplicated trace/import paths).
   const shims = ['sillye.js', 'sillyx.js', 'sillyes.js', 'sillyxs.js', 'silly.js'];
   for (const name of shims) {
     const src = fs.readFileSync(path.join(BIN, name), 'utf8');
     assert.ok(
-      /SILLY_TRACE_BOOT/.test(src),
-      `bin/${name}: missing SILLY_TRACE_BOOT pre-import trace line — users lose ` +
-      `first-frame visibility if silly-launcher.js fails to load`
-    );
-    // Trace write MUST come before the launcher import — otherwise it's dead
-    // code whenever the import itself is what blocks.
-    const traceIdx = src.indexOf('SILLY_TRACE_BOOT');
-    const importIdx = src.indexOf('silly-launcher.js');
-    assert.ok(
-      traceIdx >= 0 && importIdx >= 0 && traceIdx < importIdx,
-      `bin/${name}: SILLY_TRACE_BOOT write must come BEFORE launcher import ` +
-      `(found trace at ${traceIdx}, import at ${importIdx})`
+      /runEntry/.test(src) && /_entry-preamble\.js/.test(src),
+      `bin/${name}: must delegate to runEntry from ./_entry-preamble.js`
     );
   }
-  console.log(`  Entry shim pre-import tracing (${shims.length} shims): PASS`);
+  console.log(`  Entry preamble pre-import tracing (+ ${shims.length} shim delegation): PASS`);
 })();
 
 // ── 5. Live smoke test: SILLY_TRACE_BOOT emits stderr lines ──

@@ -115,77 +115,130 @@ function readInstallPs1(relPath) {
 
 // ── 2. Entry-shim pre-launcher watchdog contract ──
 //
-// Every bin/*.js entry shim gets its own 5s _preBootTimer BEFORE the
-// dynamic import of the launcher, because the in-launcher 30s watchdog
-// cannot fire if the launcher module itself fails to load (ESM import
-// hang, corrupt install, antivirus stalling the loader).
+// The 5s _preBootTimer + FATAL message + exit-code contract (43/44) all
+// live in the shared helper `bin/_entry-preamble.js` (extracted so 5 shims
+// stop duplicating ~25 lines each). The shims themselves are now 3-line
+// delegators that call `runEntry('<target>'[, { skipPermissions: true }])`.
+//
+// Shim-level asserts: delegation shape + correct target command.
+// Preamble-level asserts: every invariant that previously lived per-shim.
 
-const SHIMS = ['silly.js', 'sillyx.js', 'sillye.js', 'sillyxs.js', 'sillyes.js'];
+const SHIMS = [
+  { file: 'silly.js',   target: 'silly',  skip: false },
+  { file: 'sillyx.js',  target: 'sillyx', skip: false },
+  { file: 'sillye.js',  target: 'sillye', skip: false },
+  { file: 'sillyxs.js', target: 'sillyx', skip: true  },
+  { file: 'sillyes.js', target: 'sillye', skip: true  },
+];
+const PREAMBLE = '_entry-preamble.js';
 
-(function testEntryShimPreBootTimer() {
-  for (const name of SHIMS) {
-    const src = fs.readFileSync(path.join(BIN, name), 'utf8');
+(function testEntryShimDelegation() {
+  for (const { file, target, skip } of SHIMS) {
+    const src = fs.readFileSync(path.join(BIN, file), 'utf8');
 
-    // Timer declaration — setTimeout with 5s deadline
+    // Each shim imports runEntry from the shared preamble.
     assert.ok(
-      /const\s+_preBootTimer\s*=\s*setTimeout\(/.test(src),
-      `bin/${name}: missing _preBootTimer setTimeout declaration`
+      /import\s*\{\s*runEntry\s*\}\s*from\s*['"]\.\/_entry-preamble\.js['"]/.test(src),
+      `bin/${file}: must import { runEntry } from './_entry-preamble.js'`
+    );
+    // Each shim invokes runEntry with the correct target command.
+    const callRe = new RegExp(
+      `await\\s+runEntry\\(\\s*['"]${target}['"]` +
+      (skip ? `\\s*,\\s*\\{\\s*skipPermissions\\s*:\\s*true\\s*\\}` : '') +
+      `\\s*\\)`
     );
     assert.ok(
-      /5_?000/.test(src),
-      `bin/${name}: _preBootTimer must use 5000ms (5s) deadline`
+      callRe.test(src),
+      `bin/${file}: must call runEntry('${target}'${skip ? ", { skipPermissions: true }" : ''}) — regex ${callRe}`
     );
-    // unref() is mandatory — without it the 5s timer blocks clean exit paths
+    // Shim stays tiny — refactor gain is lost if someone starts inlining
+    // logic back into shims. 10 lines is generous (shebang + import + await
+    // call; <=5 non-blank lines in current form).
+    const loc = src.split('\n').filter(l => l.trim().length > 0).length;
     assert.ok(
-      /_preBootTimer\.unref\(\)/.test(src),
-      `bin/${name}: _preBootTimer must .unref() so clean boots do not block`
-    );
-    // Exit 43 is the "launcher-load hang" contract (distinct from
-    // silly-launcher.js exit 42 "in-launcher watchdog fired")
-    assert.ok(
-      /process\.exit\(43\)/.test(src),
-      `bin/${name}: _preBootTimer must process.exit(43) — stable contract`
-    );
-    // Exit 44 is the "launcher import threw" contract
-    assert.ok(
-      /process\.exit\(44\)/.test(src),
-      `bin/${name}: launcher import catch must process.exit(44) — stable contract`
-    );
-    // Timer is cleared on both success and failure paths — without clear,
-    // the 5s deadline still fires (unref'd so it wouldn't block exit) but
-    // the trace signal becomes misleading
-    const clearCount = (src.match(/clearTimeout\(_preBootTimer\)/g) || []).length;
-    assert.ok(
-      clearCount >= 2,
-      `bin/${name}: clearTimeout(_preBootTimer) must appear on both success + failure paths (got ${clearCount})`
-    );
-    // Try/catch wraps the import
-    assert.ok(
-      /try\s*\{[^}]*await\s+import/s.test(src),
-      `bin/${name}: await import must be wrapped in try/catch for exit-44 path`
+      loc <= 10,
+      `bin/${file}: entry shim must stay <=10 non-blank lines (got ${loc}) — any real logic belongs in _entry-preamble.js`
     );
   }
-  console.log(`  Entry-shim _preBootTimer contract (${SHIMS.length} shims): PASS`);
+  console.log(`  Entry-shim delegation contract (${SHIMS.length} shims): PASS`);
 })();
 
-(function testEntryShimFatalMessage() {
-  for (const name of SHIMS) {
-    const src = fs.readFileSync(path.join(BIN, name), 'utf8');
-    // Actionable diagnostic text
-    assert.ok(
-      /\[silly\]\[FATAL\]/.test(src),
-      `bin/${name}: _preBootTimer must print a [silly][FATAL] line`
-    );
-    assert.ok(
-      /SILLY_TRACE_BOOT/.test(src),
-      `bin/${name}: _preBootTimer message must point users at SILLY_TRACE_BOOT=1`
-    );
-    assert.ok(
-      /launcher import failed/.test(src),
-      `bin/${name}: catch branch must print "launcher import failed" for disambiguation from timer fire`
-    );
-  }
-  console.log(`  Entry-shim FATAL message content: PASS`);
+(function testPreamblePreBootTimer() {
+  const src = fs.readFileSync(path.join(BIN, PREAMBLE), 'utf8');
+
+  // Timer declaration — setTimeout with 5s deadline
+  assert.ok(
+    /const\s+_preBootTimer\s*=\s*setTimeout\(/.test(src),
+    `bin/${PREAMBLE}: missing _preBootTimer setTimeout declaration`
+  );
+  assert.ok(
+    /5_?000/.test(src),
+    `bin/${PREAMBLE}: _preBootTimer must use 5000ms (5s) deadline`
+  );
+  // unref() is mandatory — without it the 5s timer blocks clean exit paths
+  assert.ok(
+    /_preBootTimer\.unref\(\)/.test(src),
+    `bin/${PREAMBLE}: _preBootTimer must .unref() so clean boots do not block`
+  );
+  // Exit 43 is the "launcher-load hang" contract (distinct from
+  // silly-launcher.js exit 42 "in-launcher watchdog fired")
+  assert.ok(
+    /process\.exit\(43\)/.test(src),
+    `bin/${PREAMBLE}: _preBootTimer must process.exit(43) — stable contract`
+  );
+  // Exit 44 is the "launcher import threw" contract
+  assert.ok(
+    /process\.exit\(44\)/.test(src),
+    `bin/${PREAMBLE}: launcher import catch must process.exit(44) — stable contract`
+  );
+  // Timer is cleared on both success and failure paths — without clear,
+  // the 5s deadline still fires (unref'd so it wouldn't block exit) but
+  // the trace signal becomes misleading
+  const clearCount = (src.match(/clearTimeout\(_preBootTimer\)/g) || []).length;
+  assert.ok(
+    clearCount >= 2,
+    `bin/${PREAMBLE}: clearTimeout(_preBootTimer) must appear on both success + failure paths (got ${clearCount})`
+  );
+  // Try/catch wraps the import
+  assert.ok(
+    /try\s*\{[^}]*await\s+import/s.test(src),
+    `bin/${PREAMBLE}: await import must be wrapped in try/catch for exit-44 path`
+  );
+  // runEntry must be ESM-exported — shims consume it via `import { runEntry }`
+  assert.ok(
+    /export\s+async\s+function\s+runEntry\s*\(/.test(src),
+    `bin/${PREAMBLE}: must export async function runEntry (shims use \`await runEntry(...)\`)`
+  );
+  // skipPermissions option must splice --dangerously-skip-permissions into argv
+  assert.ok(
+    /process\.argv\.splice\(\s*2\s*,\s*0\s*,\s*['"]--dangerously-skip-permissions['"]\s*\)/.test(src),
+    `bin/${PREAMBLE}: skipPermissions branch must splice --dangerously-skip-permissions into argv`
+  );
+  // SILLY_TARGET_COMMAND must be set from the helper arg so downstream
+  // launcher resolution still sees the right target.
+  assert.ok(
+    /process\.env\.SILLY_TARGET_COMMAND\s*=\s*targetCommand/.test(src),
+    `bin/${PREAMBLE}: must assign process.env.SILLY_TARGET_COMMAND = targetCommand`
+  );
+  console.log(`  Preamble _preBootTimer contract: PASS`);
+})();
+
+(function testPreambleFatalMessage() {
+  const src = fs.readFileSync(path.join(BIN, PREAMBLE), 'utf8');
+  // Actionable diagnostic text
+  assert.ok(
+    /\[silly\]\[FATAL\]/.test(src),
+    `bin/${PREAMBLE}: _preBootTimer must print a [silly][FATAL] line`
+  );
+  assert.ok(
+    /SILLY_TRACE_BOOT/.test(src),
+    `bin/${PREAMBLE}: _preBootTimer message must point users at SILLY_TRACE_BOOT=1`
+  );
+  assert.ok(
+    /launcher import failed/.test(src),
+    `bin/${PREAMBLE}: catch branch must print "launcher import failed" for disambiguation from timer fire`
+  );
+  console.log(`  Preamble FATAL message content: PASS`);
 })();
 
 // ── 3. install.ps1 self-smoke test ──

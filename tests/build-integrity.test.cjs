@@ -815,34 +815,41 @@ console.log('Build integrity tests\n');
 // as string-level invariants so a future MATCH rename or ordering shuffle
 // fails loud instead of shipping a dead switch.
 
-// 12a. Patch 53i — GPT-native /effort descriptions
+// 12a. Patch 53i — Codex-verbatim /effort descriptions for sillyx
 //
 // provider-ux.cjs rewrites the /effort descriptions so ChatGPT users see
-// GPT-appropriate copy instead of Claude-tier copy. Two anchor strings:
-//   - xhigh description mentions "Claude-only tier — falls back to xhigh on GPT"
-//     (explains the max→high graceful-fallback to the user)
-//   - max description says "Maximum GPT reasoning effort — frontier-model deep thinking"
+// the same copy as official Codex CLI 0.124 (from its models-manager/
+// models.json supported_reasoning_levels). Anchor the two Codex-verbatim
+// strings that are specific enough to uniquely identify our patch and
+// also the max fallback annotation.
+//
 // The openai branch must be injected as an early-return IIFE; otherwise
 // the firstParty (Claude) copy gets overwritten with GPT wording.
 
 (function testGptEffortDescriptions() {
   if (!build) {
-    console.log('  Patch 53i GPT-native /effort descriptions (build not found, skipping): SKIP');
+    console.log('  Patch 53i Codex-verbatim /effort descriptions (build not found, skipping): SKIP');
     return;
   }
-  const xhighDesc = 'Claude-only tier — falls back to xhigh on GPT';
-  const maxDesc = 'Maximum GPT reasoning effort — frontier-model deep thinking';
-  const xhighHits = (build.match(new RegExp(xhighDesc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
-  const maxHits = (build.match(new RegExp(maxDesc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
-  assert.strictEqual(
-    xhighHits, 1,
-    `Patch 53i: xhigh GPT-native description "${xhighDesc}" must appear exactly once, found ${xhighHits}`
+  // Verbatim from codex-rs/models-manager/models.json (rust-v0.124.0).
+  const highDesc  = 'Greater reasoning depth for complex problems';
+  const xhighDesc = 'Extra high reasoning depth for complex problems';
+  // Our annotation for max (Codex has no max tier; we gracefully map to high).
+  const maxDesc   = 'Claude-only tier (falls back to Extra High on GPT)';
+  const countHits = (needle) => (build.match(new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+  assert.ok(
+    countHits(highDesc) >= 1,
+    `Patch 53i: high description "${highDesc}" must appear at least once in openai branch`
+  );
+  assert.ok(
+    countHits(xhighDesc) >= 1,
+    `Patch 53i: xhigh description "${xhighDesc}" must appear at least once (Codex 0.124 verbatim)`
   );
   assert.strictEqual(
-    maxHits, 1,
-    `Patch 53i: max GPT-native description "${maxDesc}" must appear exactly once, found ${maxHits}`
+    countHits(maxDesc), 1,
+    `Patch 53i: max annotation "${maxDesc}" must appear exactly once, found ${countHits(maxDesc)}`
   );
-  console.log('  Patch 53i GPT-native /effort descriptions present: PASS');
+  console.log('  Patch 53i Codex-verbatim /effort descriptions present: PASS');
 })();
 
 // 12b. Patch 53e — gpt-5.5 family precedes gpt-5.4 in /model picker

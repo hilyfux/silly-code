@@ -348,6 +348,23 @@ async function _openaiAdapter(url, init) {
         hint_schedulewakeup_available: (_req.tools || []).some(t => t.name === 'ScheduleWakeup'),
         hint_agent_available: (_req.tools || []).some(t => t.name === 'Agent'),
         hint_continuation_present: typeof _req.instructions === 'string' && _req.instructions.includes('<continuation-discipline>'),
+        // Tail-developer reminder diagnostics — let users confirm whether the
+        // FM1/FM2 structural gates fired for this request. Missing gates on a
+        // visibly-failed narration-stop session = gate logic bug.
+        hint_tail_reminder_present: (() => {
+          const _t = (_req.input || [])[(_req.input || []).length - 1];
+          return !!(_t && _t.role === 'developer' && typeof _t.content === 'string' && _t.content.indexOf('<continuation-reminder>') !== -1);
+        })(),
+        hint_slash_cmd_gate_fired: (() => {
+          const _t = (_req.input || [])[(_req.input || []).length - 1];
+          if (!_t || _t.role !== 'developer' || typeof _t.content !== 'string') return null;
+          const _m = _t.content.match(/<slash-command-gate cmd="([\w-]+)">/);
+          return _m ? _m[1] : null;
+        })(),
+        hint_no_prior_action_fired: (() => {
+          const _t = (_req.input || [])[(_req.input || []).length - 1];
+          return !!(_t && _t.role === 'developer' && typeof _t.content === 'string' && _t.content.indexOf('<no-prior-action>') !== -1);
+        })(),
         observation_status: 'request-captured',
         extra_fields: Object.keys(_req).filter(k => !['model','instructions','input','store','stream','temperature','top_p','tools','parallel_tool_calls','service_tier'].includes(k)),
       };

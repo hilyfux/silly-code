@@ -346,6 +346,95 @@ test('tail-reminder: distinct from enforceContinuation (different tags, compleme
   assert(!head.includes(tail), 'tail text accidentally baked into head block');
 });
 
+// ── FM1: slash-command-gate (2026-04-24 /figma-to-code narration-stop) ──────
+test('slash-command-gate: fires when latest user msg has <command-name>/X</command-name>', () => {
+  const messages = [{ role: 'user', content: '<command-name>/figma-to-code</command-name>\n<command-args>args…</command-args>' }];
+  const tools = [{ name: 'Skill' }];
+  const r = buildContinuationReminder(messages, tools);
+  assert(/<slash-command-gate cmd="figma-to-code">/.test(r), 'gate missing with cmd attr');
+  assert(/Skill\(\{ skill: "figma-to-code"/.test(r), 'gate missing literal Skill call');
+  // Positional: gate BEFORE core reminder (highest-attention top of developer msg)
+  assert(r.indexOf('<slash-command-gate') < r.indexOf('<continuation-reminder>'),
+    'slash gate must precede core reminder (attention position)');
+});
+
+test('slash-command-gate: absent when latest user msg has no command-name tag', () => {
+  const messages = [{ role: 'user', content: 'just a plain question' }];
+  const r = buildContinuationReminder(messages, [{ name: 'Skill' }]);
+  assert(!/<slash-command-gate/.test(r), 'false-positive slash gate');
+});
+
+test('slash-command-gate: absent when the slash-cmd is stale (not the LATEST user msg)', () => {
+  const messages = [
+    { role: 'user', content: '<command-name>/old-cmd</command-name>' },
+    { role: 'assistant', content: [{ type: 'tool_use', id: 't', name: 'Skill', input: { skill: 'old-cmd' } }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: 'done' }] },
+    { role: 'user', content: 'follow-up question, no slash' },
+  ];
+  const r = buildContinuationReminder(messages, [{ name: 'Skill' }]);
+  assert(!/<slash-command-gate/.test(r), 'stale slash-cmd leaked into reminder');
+});
+
+test('slash-command-gate: softer wording when Skill tool is not in the tool list', () => {
+  const messages = [{ role: 'user', content: '<command-name>/x</command-name>' }];
+  const r = buildContinuationReminder(messages, [{ name: 'Bash' }]);
+  assert(/<slash-command-gate/.test(r), 'gate still fires w/o Skill tool');
+  assert(!/Skill\(\{ skill:/.test(r), 'no literal Skill call when tool unavailable');
+});
+
+// ── FM2: no-prior-action (GPT narrated on previous turn without calling tools) ──
+test('no-prior-action: fires when previous assistant turn had text but zero tool_use', () => {
+  const messages = [
+    { role: 'user', content: '/figma-to-code' },
+    { role: 'assistant', content: [{ type: 'text', text: '接下来我会直接拉取两个 Figma 节点…' }] },
+    { role: 'user', content: '好的' },
+  ];
+  const r = buildContinuationReminder(messages, []);
+  assert(/<no-prior-action>/.test(r), 'no-prior-action gate missing');
+  assert(/narration-stop/.test(r), 'gate must reference failure mode name');
+  // Positional: before core reminder
+  assert(r.indexOf('<no-prior-action>') < r.indexOf('<continuation-reminder>'),
+    'no-prior gate must precede core reminder');
+});
+
+test('no-prior-action: absent when previous assistant turn had a tool_use block', () => {
+  const messages = [
+    { role: 'user', content: 'run ls' },
+    { role: 'assistant', content: [{ type: 'text', text: 'OK' }, { type: 'tool_use', id: 't', name: 'Bash', input: { command: 'ls' } }] },
+  ];
+  const r = buildContinuationReminder(messages, []);
+  assert(!/<no-prior-action>/.test(r), 'false-positive: tool_use was present');
+});
+
+test('no-prior-action: absent on first turn (no prior assistant exists)', () => {
+  const messages = [{ role: 'user', content: 'first request' }];
+  const r = buildContinuationReminder(messages, []);
+  assert(!/<no-prior-action>/.test(r), 'false-positive on fresh conversation');
+});
+
+test('no-prior-action: absent when assistant text is empty/whitespace (nothing claimed)', () => {
+  const messages = [{ role: 'assistant', content: [{ type: 'text', text: '   ' }] }];
+  const r = buildContinuationReminder(messages, []);
+  assert(!/<no-prior-action>/.test(r), 'false-positive on empty narration');
+});
+
+test('FM1+FM2 together: both gates fire + preserve ordering (gates → core → tail)', () => {
+  const messages = [
+    { role: 'user', content: '<command-name>/A</command-name>' },
+    { role: 'assistant', content: [{ type: 'text', text: '我会先加载工具…' }] },
+    { role: 'user', content: '<command-name>/B</command-name>' },
+  ];
+  const r = buildContinuationReminder(messages, [{ name: 'Skill' }]);
+  assert(/<slash-command-gate cmd="B">/.test(r), 'slash gate with LATEST cmd');
+  assert(/<no-prior-action>/.test(r), 'no-prior gate present');
+  assert(/<continuation-reminder>/.test(r), 'core reminder present');
+  const iSlash = r.indexOf('<slash-command-gate');
+  const iNoPrior = r.indexOf('<no-prior-action>');
+  const iCore = r.indexOf('<continuation-reminder>');
+  assert(iSlash >= 0 && iNoPrior >= 0 && iCore >= 0, 'all three blocks present');
+  assert(iSlash < iCore && iNoPrior < iCore, 'both gates before core reminder');
+});
+
 // ── findOpenTodos ────────────────────────────────────────────
 test('findOpenTodos: returns pending+in_progress, skips completed', () => {
   const msgs = [{ role: 'assistant', content: [{ type: 'tool_use', name: 'TodoWrite', input: { todos: [

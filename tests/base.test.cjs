@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { mapModel, _cleanToolArgs, msgToOai, msgsToResponsesInput, flattenSystem, oaiToAnthropicResponse, makeSseStream, makeResponsesSseStream, collectResponsesSse, tameSkillPrompts } = require('../pipeline/patches/providers/_base.cjs');
+const { mapModel, _cleanToolArgs, msgToOai, msgsToResponsesInput, flattenSystem, oaiToAnthropicResponse, makeSseStream, makeResponsesSseStream, collectResponsesSse, tameSkillPrompts, buildContinuationReminder, _detectSlashCommand, _detectNoPriorAction } = require('../pipeline/patches/providers/_base.cjs');
 
 // Helper: create a mock Response with SSE body from lines
 function mockSseResponse(lines) {
@@ -482,6 +482,123 @@ async function drainStream(stream) {
       }
     }
     console.log('  tameSkillPrompts extended hook family (C2): PASS');
+  }
+
+  // buildContinuationReminder — structural gates for FM1 (slash command) + FM2 (no prior action)
+  // Reproduces the 2026-04-24 user report: /figma-to-code → GPT narrates without calling Skill.
+  {
+    // ── _detectSlashCommand ────────────────────────────────────────────────
+    assert.strictEqual(_detectSlashCommand(null), null, 'null input → null');
+    assert.strictEqual(_detectSlashCommand([]), null, 'empty → null');
+    assert.strictEqual(_detectSlashCommand([{ role: 'user', content: 'hi' }]), null, 'plain user → null');
+    // Primary case: command-name tag in latest user message (string content)
+    assert.strictEqual(
+      _detectSlashCommand([{ role: 'user', content: '<command-name>/figma-to-code</command-name>\n<command-args>...</command-args>' }]),
+      'figma-to-code',
+      'command-name in string content');
+    // Array-content format (Anthropic v1 multi-part message)
+    assert.strictEqual(
+      _detectSlashCommand([{ role: 'user', content: [{ type: 'text', text: '<command-name>/boost</command-name>' }] }]),
+      'boost',
+      'command-name in array text block');
+    // Must pick the LATEST user message, not the first
+    assert.strictEqual(
+      _detectSlashCommand([
+        { role: 'user', content: '<command-name>/first</command-name>' },
+        { role: 'assistant', content: 'ok' },
+        { role: 'user', content: 'plain followup no tag' },
+      ]),
+      null,
+      'latest user has no tag → null (stale command ignored)');
+    // Tool-result user message (Anthropic tool_result block) → no text → null
+    assert.strictEqual(
+      _detectSlashCommand([{ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x', content: 'out' }] }]),
+      null,
+      'tool_result user content → no text match → null');
+
+    // ── _detectNoPriorAction ───────────────────────────────────────────────
+    assert.strictEqual(_detectNoPriorAction(null), false, 'null → false');
+    assert.strictEqual(_detectNoPriorAction([]), false, 'empty → false');
+    assert.strictEqual(
+      _detectNoPriorAction([{ role: 'user', content: 'hi' }]),
+      false,
+      'no prior assistant → false (fresh conv)');
+    // FM2 primary case: assistant text-only, no tool_use
+    assert.strictEqual(
+      _detectNoPriorAction([
+        { role: 'user', content: '/figma-to-code' },
+        { role: 'assistant', content: [{ type: 'text', text: '接下来我会直接拉取…' }] },
+        { role: 'user', content: '好的' },
+      ]),
+      true,
+      'narration-only assistant → true');
+    // Assistant WITH tool_use → no flag (work was done)
+    assert.strictEqual(
+      _detectNoPriorAction([
+        { role: 'user', content: 'do X' },
+        { role: 'assistant', content: [{ type: 'text', text: 'OK' }, { type: 'tool_use', id: 't1', name: 'Bash', input: {} }] },
+      ]),
+      false,
+      'assistant with tool_use → false');
+    // Assistant with empty text → no flag (nothing claimed)
+    assert.strictEqual(
+      _detectNoPriorAction([{ role: 'assistant', content: [{ type: 'text', text: '   ' }] }]),
+      false,
+      'empty-text assistant → false');
+    // String-form assistant content (older format)
+    assert.strictEqual(
+      _detectNoPriorAction([{ role: 'assistant', content: 'I will do it next turn.' }]),
+      true,
+      'string-content narration → true');
+
+    // ── buildContinuationReminder — gate wiring ─────────────────────────────
+    const _rPlain = buildContinuationReminder([{ role: 'user', content: 'plain task' }], []);
+    assert.ok(!_rPlain.includes('<slash-command-gate'), 'no slash-cmd → no slash gate');
+    assert.ok(!_rPlain.includes('<no-prior-action>'), 'no prior → no no-prior gate');
+    assert.ok(_rPlain.includes('<continuation-reminder>'), 'always emits base reminder');
+
+    const _rSlash = buildContinuationReminder(
+      [{ role: 'user', content: '<command-name>/figma-to-code</command-name>' }],
+      [{ name: 'Skill' }]
+    );
+    assert.ok(_rSlash.includes('<slash-command-gate cmd="figma-to-code">'), 'slash gate with cmd attr');
+    assert.ok(_rSlash.includes('Skill({ skill: "figma-to-code"'), 'slash gate includes literal Skill call');
+    assert.ok(_rSlash.indexOf('<slash-command-gate') < _rSlash.indexOf('<continuation-reminder'),
+      'slash gate comes BEFORE core reminder (top-attention position)');
+
+    const _rSlashNoSkillTool = buildContinuationReminder(
+      [{ role: 'user', content: '<command-name>/foo</command-name>' }],
+      [{ name: 'Bash' }]  // Skill tool not available
+    );
+    assert.ok(_rSlashNoSkillTool.includes('<slash-command-gate'), 'gate still fires w/o Skill tool');
+    assert.ok(!_rSlashNoSkillTool.includes('Skill({ skill:'), 'but no literal Skill call when unavailable');
+
+    const _rNoPrior = buildContinuationReminder(
+      [
+        { role: 'user', content: '/task' },
+        { role: 'assistant', content: [{ type: 'text', text: '接下来我会…' }] },
+        { role: 'user', content: '好的' },
+      ],
+      []
+    );
+    assert.ok(_rNoPrior.includes('<no-prior-action>'), 'no-prior-action gate fires');
+    assert.ok(_rNoPrior.includes('narration-stop'), 'gate references the failure mode by name');
+    assert.ok(_rNoPrior.indexOf('<no-prior-action>') < _rNoPrior.indexOf('<continuation-reminder>'),
+      'no-prior gate comes BEFORE core reminder');
+
+    // Both signals together → both gates present
+    const _rBoth = buildContinuationReminder(
+      [
+        { role: 'user', content: '<command-name>/X</command-name>' },
+        { role: 'assistant', content: [{ type: 'text', text: 'I will…' }] },
+        { role: 'user', content: '<command-name>/Y</command-name>' },
+      ],
+      [{ name: 'Skill' }]
+    );
+    assert.ok(_rBoth.includes('<slash-command-gate cmd="Y">'), 'both: slash gate with LATEST cmd');
+    assert.ok(_rBoth.includes('<no-prior-action>'), 'both: no-prior gate');
+
+    console.log('  buildContinuationReminder FM1+FM2 structural gates: PASS');
   }
 
   console.log('\nAll _base tests passed.');

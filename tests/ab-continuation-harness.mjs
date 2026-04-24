@@ -17,6 +17,10 @@
 //   SILLY_AB_LIVE=1              enable real network calls
 //   SILLY_AB_N=<int>             override N per arm (default 5)
 //   SILLY_AB_MODEL=<slug>        override model (default gpt-5.4)
+//   SILLY_AB_SCENARIO=<slug>     which narration failure mode to replay:
+//                                  loop  (default) — mid-agent-loop continuation
+//                                  slash — FM1: /cmd on first turn, no prior assistant
+//                                  ack   — FM2: prior-narration + "好的" ack
 //
 // OUTPUT
 //   Per arm: tool_use count / narration-only count / error count
@@ -27,10 +31,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+// Import the REAL production buildContinuationReminder so Arm A receives the
+// same tail text GPT sees in production (including the new FM1/FM2 gates).
+const { buildContinuationReminder } = require('../pipeline/patches/providers/_base.cjs');
 
 const N = parseInt(process.env.SILLY_AB_N || '5', 10);
 const MODEL = process.env.SILLY_AB_MODEL || 'gpt-5.4';
 const LIVE = process.env.SILLY_AB_LIVE === '1';
+const SCENARIO = process.env.SILLY_AB_SCENARIO || 'loop';
 
 // ── Multi-step narration-bait prompt ────────────────────────────────────────
 // A task that's decomposable into sequential tool calls. A "lazy" GPT will
@@ -58,42 +68,78 @@ const BASH_TOOL = {
   },
 };
 
-// ── Build request body for each arm ─────────────────────────────────────────
-// Arm A: with <continuation-reminder> tail developer message
-// Arm B: identical but no tail reminder
-const TAIL_REMINDER = {
-  role: 'developer',
-  content: `<continuation-reminder>
-You are in autonomous tool-calling mode. Any acknowledgment ("OK", "好的", "let me continue", "I'll do that") MUST be followed by a concrete tool call in the SAME response. Narration without action = failure. If the user asked for N actions, emit N tool calls now. Do not stop until every action is executed or you hit an unrecoverable error.
-</continuation-reminder>`,
-};
+// ── Scenario builders ───────────────────────────────────────────────────────
+// Each builder returns { inputMessages, tools } where inputMessages is the
+// Responses-API `input` array (already formatted) and `anthropicMessages` is
+// the equivalent Anthropic-format array used to generate the tail reminder.
 
-// Simulate mid-agent-loop state: model already completed step 1 via tool call,
-// now we ask it to continue with steps 2 & 3. This is where narration-stop
-// actually happens — after a tool success, model may say "OK, next I'll do X"
-// and emit finish_reason=stop without actually calling the tool.
-function buildMidAgentInput() {
-  return [
-    { role: 'user', content: USER_TASK },
-    { role: 'assistant', content: 'Running step 1.' },
-    {
-      type: 'function_call',
-      call_id: 'call_step1',
-      name: 'Bash',
-      arguments: JSON.stringify({ command: 'uname -a', description: 'step 1: OS check' }),
-    },
-    {
-      type: 'function_call_output',
-      call_id: 'call_step1',
-      output: 'Darwin macbook.local 24.0.0 Darwin Kernel Version 24.0.0 arm64',
-    },
-    { role: 'user', content: 'Continue with the remaining steps.' },
-  ];
+// Scenario: mid-agent-loop (existing — tests "after tool success, keep going")
+function scenarioLoop() {
+  return {
+    inputMessages: [
+      { role: 'user', content: USER_TASK },
+      { role: 'assistant', content: 'Running step 1.' },
+      {
+        type: 'function_call',
+        call_id: 'call_step1',
+        name: 'Bash',
+        arguments: JSON.stringify({ command: 'uname -a', description: 'step 1: OS check' }),
+      },
+      {
+        type: 'function_call_output',
+        call_id: 'call_step1',
+        output: 'Darwin macbook.local 24.0.0 Darwin Kernel Version 24.0.0 arm64',
+      },
+      { role: 'user', content: 'Continue with the remaining steps.' },
+    ],
+    anthropicMessages: [
+      { role: 'user', content: USER_TASK },
+      { role: 'assistant', content: [{ type: 'text', text: 'Running step 1.' }, { type: 'tool_use', id: 'call_step1', name: 'Bash', input: { command: 'uname -a' } }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call_step1', content: 'Darwin macbook.local 24.0.0 arm64' }] },
+      { role: 'user', content: 'Continue with the remaining steps.' },
+    ],
+  };
+}
+
+// FM1 — slash command on first turn, NO prior assistant
+function scenarioSlash() {
+  const raw = '<command-name>/bashinfo</command-name>\n<command-args>Run: uname -a, date -u, echo ok</command-args>\n' + USER_TASK;
+  return {
+    inputMessages: [{ role: 'user', content: raw }],
+    anthropicMessages: [{ role: 'user', content: raw }],
+  };
+}
+
+// FM2 — previous assistant turn narrated without calling tools, user says "好的"
+function scenarioAck() {
+  return {
+    inputMessages: [
+      { role: 'user', content: USER_TASK },
+      { role: 'assistant', content: '好的，接下来我会依次执行这三个命令。' },
+      { role: 'user', content: '好的' },
+    ],
+    anthropicMessages: [
+      { role: 'user', content: USER_TASK },
+      { role: 'assistant', content: [{ type: 'text', text: '好的，接下来我会依次执行这三个命令。' }] },
+      { role: 'user', content: '好的' },
+    ],
+  };
+}
+
+function buildScenario() {
+  if (SCENARIO === 'slash') return scenarioSlash();
+  if (SCENARIO === 'ack') return scenarioAck();
+  return scenarioLoop();
 }
 
 function buildBody(withReminder) {
-  const input = buildMidAgentInput();
-  if (withReminder) input.push(TAIL_REMINDER);
+  const s = buildScenario();
+  const input = s.inputMessages.slice();
+  if (withReminder) {
+    // Use the REAL production reminder — tests the ACTUAL gates
+    const tailText = buildContinuationReminder(s.anthropicMessages, [{ name: 'Bash' }, { name: 'Skill' }]);
+    if (tailText) input.push({ role: 'developer', content: tailText });
+  }
   return {
     model: MODEL,
     instructions: BASE_INSTRUCTIONS,
@@ -217,16 +263,20 @@ function summarize(arm) {
 
 // ── main ───────────────────────────────────────────────────────────────────
 if (!LIVE) {
-  console.log('# DRY-RUN. Set SILLY_AB_LIVE=1 to make real chatgpt.com calls.\n');
-  console.log('Arm A (with tail reminder):');
-  console.log(JSON.stringify(buildBody(true), null, 2).slice(0, 800) + '...\n');
-  console.log('Arm B (without tail reminder):');
-  console.log(JSON.stringify(buildBody(false), null, 2).slice(0, 800) + '...\n');
+  console.log(`# DRY-RUN. Set SILLY_AB_LIVE=1 to make real chatgpt.com calls.\n# Scenario: ${SCENARIO}\n`);
+  const bodyA = buildBody(true);
+  const tailItem = bodyA.input[bodyA.input.length - 1];
+  const tailText = (tailItem && tailItem.role === 'developer') ? tailItem.content : '(none)';
+  console.log('Arm A tail reminder text:');
+  console.log('--- BEGIN TAIL ---');
+  console.log(tailText);
+  console.log('--- END TAIL ---\n');
+  console.log(`Input item count: A=${bodyA.input.length}, B=${buildBody(false).input.length}`);
   console.log(`Would make ${N * 2} calls against model=${MODEL}.`);
   process.exit(0);
 }
 
-console.error(`# A/B harness — LIVE mode, N=${N} per arm, model=${MODEL}\n`);
+console.error(`# A/B harness — LIVE mode, N=${N} per arm, model=${MODEL}, scenario=${SCENARIO}\n`);
 const token = await loadToken();
 console.error(`# Token loaded, ${token.length} chars\n`);
 console.error(`# --- Arm A: with tail reminder ---`);
@@ -237,6 +287,17 @@ const armB = await runArm('B(-reminder)', false, token);
 console.log('\n== A/B RESULT ==');
 console.log(summarize(armA));
 console.log(summarize(armB));
+
+// Surface error details for diagnosis (critical when one arm errors but not the other)
+const dumpErrors = (arm) => {
+  const errs = arm.details.filter(d => d.kind === 'error');
+  if (errs.length) {
+    console.log(`\n${arm.label} error details:`);
+    for (const e of errs) console.log(`  [${e.i}] ${e.detail?.slice(0, 300) || '(no detail)'}`);
+  }
+};
+dumpErrors(armA);
+dumpErrors(armB);
 
 const lazyA = armA.narration_only / N;
 const lazyB = armB.narration_only / N;

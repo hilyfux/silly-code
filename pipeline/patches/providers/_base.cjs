@@ -745,6 +745,77 @@ function cleanIdentityForProvider(text, providerName) {
 }
 
 /**
+ * Structural detector: did the user's latest message come from a slash command?
+ *
+ * Claude Code wraps slash-command invocations (`/skill-name args…`) in a
+ * `<command-name>/NAME</command-name>` tag alongside the raw user text before
+ * sending to the model. When this tag is present, the correct next action is
+ * ALWAYS a `Skill` tool call — there is no ambiguity. Upstream Claude Code's
+ * system prompt already instructs the model to invoke `Skill`, but GPT-with-
+ * Responses-API has been observed to narrate "我先加载…" / "let me load…" and
+ * emit finish_reason=stop without calling the tool (user's 2026-04-24 log).
+ *
+ * This detector returns the skill name (no leading slash) so the caller can
+ * echo it in a directive tail message, or null when no slash command was used.
+ *
+ * Pure structural signal — no narration-text pattern matching (that approach
+ * was validated ineffective; see pipeline/patches/CLAUDE.md prohibition).
+ *
+ * @param {Array} messages
+ * @returns {string|null}
+ */
+function _detectSlashCommand(messages) {
+  if (!Array.isArray(messages)) return null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!m || m.role !== 'user') continue;
+    let text = '';
+    const c = m.content;
+    if (typeof c === 'string') text = c;
+    else if (Array.isArray(c)) {
+      for (const part of c) {
+        if (part && part.type === 'text' && typeof part.text === 'string') text += part.text + '\n';
+      }
+    }
+    const match = text.match(/<command-name>\/([\w-]+)<\/command-name>/);
+    return match ? match[1] : null;
+  }
+  return null;
+}
+
+/**
+ * Structural detector: did the previous assistant turn emit text without
+ * calling any tool? This is the signature of the "narration-stop" failure —
+ * GPT says "接下来我会直接拉取…" then ends the turn with finish_reason=stop,
+ * producing zero tool_use blocks.
+ *
+ * Returns true only when the most recent assistant message has text content
+ * AND zero tool_use blocks. Returns false when:
+ *   - No prior assistant turn exists (first turn)
+ *   - The assistant turn called at least one tool (work was done)
+ *   - The assistant turn had empty text (no claim was made)
+ *
+ * Pure structural signal — counts block types, does not inspect text content.
+ *
+ * @param {Array} messages
+ * @returns {boolean}
+ */
+function _detectNoPriorAction(messages) {
+  if (!Array.isArray(messages)) return false;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!m || m.role !== 'assistant') continue;
+    const blocks = Array.isArray(m.content)
+      ? m.content
+      : (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : []);
+    const hasToolUse = blocks.some(b => b && b.type === 'tool_use');
+    const hasText = blocks.some(b => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim().length > 0);
+    return !hasToolUse && hasText;
+  }
+  return false;
+}
+
+/**
  * Scan recent messages for the most recent TodoWrite tool_use and return any
  * todos that are still pending or in_progress. These are the canonical "open
  * items" from the model's own planning — far stronger signal than parsing
@@ -834,8 +905,11 @@ function enforceContinuation(text, messages, tools) {
  */
 function buildContinuationReminder(messages, tools) {
   const open = findOpenTodos(messages);
+  const _slashCmd = _detectSlashCommand(messages);
+  const _noPrior = _detectNoPriorAction(messages);
   const _toolNames = Array.isArray(tools) ? tools.map(t => t.name || '') : [];
   const _hasScheduleWakeup = _toolNames.includes('ScheduleWakeup');
+  const _hasSkill = _toolNames.includes('Skill');
   let _isActiveLoop = false;
   if (_hasScheduleWakeup && Array.isArray(messages)) {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -845,9 +919,20 @@ function buildContinuationReminder(messages, tools) {
       if (blocks.some(b => b.type === 'tool_use' && b.name === 'ScheduleWakeup')) { _isActiveLoop = true; break; }
     }
   }
+  // Structural gates come FIRST (top of developer message = highest attention).
+  // These fire only when the corresponding signal is present — null-op otherwise.
+  let _r = '';
+  if (_slashCmd) {
+    const _hint = _hasSkill
+      ? 'Invoke the Skill tool NOW in THIS response: Skill({ skill: "' + _slashCmd + '", args: "<args from the user message>" }). Do NOT reply with descriptive text first ("我先加载…" / "let me load…" / "接下来我会…") — invoke the tool, then narrate on the next turn after the tool returns.'
+      : 'The user invoked a slash command. Call the matching tool in THIS response without prefacing with narration. If the tool schema is not loaded, call ToolSearch first, then the tool.';
+    _r += '<slash-command-gate cmd="' + _slashCmd + '">\n' + _hint + '\n</slash-command-gate>\n';
+  }
+  if (_noPrior) {
+    _r += '<no-prior-action>\nYour previous assistant turn emitted text but called ZERO tools. That exact pattern is the "narration-stop" failure the user has flagged. In THIS response you MUST call at least one tool. If the user\'s latest message is just an acknowledgment ("好的" / "OK" / "yes"), treat it as permission to proceed with the work you described — execute it now, do not re-describe it. If the task is genuinely already complete, say so in one sentence with NO promise of further action.\n</no-prior-action>\n';
+  }
   // Core reminder is UNCONDITIONAL — tail attention is the whole point.
-  // Keep it short, imperative, and action-oriented. No essay.
-  let _r = '<continuation-reminder>\nBefore ending this turn: if you plan to do more work ("I will continue", "next batch", "继续"), call the tool NOW in this same response. Narration is not action. End the turn only when all work is done or an unrecoverable error blocks you.\n</continuation-reminder>';
+  _r += '<continuation-reminder>\nBefore ending this turn: if you plan to do more work ("I will continue", "next batch", "继续"), call the tool NOW in this same response. Narration is not action. End the turn only when all work is done or an unrecoverable error blocks you.\n</continuation-reminder>';
   if (open.length) {
     const lines = open.slice(0, 5).map(t => '- [' + (t.status || '?') + '] ' + (t.activeForm || t.content || '')).join('\n');
     _r += '\n<open-todos count="' + open.length + '">\n' + lines + '\n</open-todos>';
@@ -926,4 +1011,4 @@ async function collectResponsesSse(oaiResp, model) {
   return new Response(JSON.stringify({ id: _msgId, type: 'message', role: 'assistant', content: _ct, model, stop_reason: _stopReason, stop_sequence: null, usage: { input_tokens: _inTokens, output_tokens: _outTokens } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
-module.exports = { mapModel, _cleanToolArgs, mapOaiStopReason, sillyFastTier, agentBudgetTrack, agentBudgetLog, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, buildContinuationReminder, findOpenTodos };
+module.exports = { mapModel, _cleanToolArgs, mapOaiStopReason, sillyFastTier, agentBudgetTrack, agentBudgetLog, msgToOai, msgsToResponsesInput, makeSseStream, makeResponsesSseStream, collectResponsesSse, flattenSystem, oaiToAnthropicResponse, tameSkillPrompts, cleanIdentityForProvider, enforceContinuation, buildContinuationReminder, findOpenTodos, _detectSlashCommand, _detectNoPriorAction };
